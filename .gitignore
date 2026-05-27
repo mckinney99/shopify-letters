@@ -1,0 +1,19 @@
+node_modules/
+.env
+build/
+.cache/
+.DS_Store
+.shopify/
+
+# SQLite dev database
+*.db
+*.db-shm
+*.db-wal
+prisma/dev.db*
+
+# Shopify CLI
+.shopify-cli.yml
+
+# Editor
+.vscode/
+.idea/
