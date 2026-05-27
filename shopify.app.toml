@@ -1,0 +1,36 @@
+# Shopify app configuration
+# Run `shopify app config link` after creating your app in the Partners dashboard
+# to populate client_id and update this file automatically.
+#
+# Learn more: https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "shopify-letters"
+client_id = "YOUR_CLIENT_ID_FROM_PARTNERS_DASHBOARD"
+application_url = "https://YOUR_APP_URL"
+embedded = true
+
+[access_scopes]
+# Adjust scopes as needed. Full list: https://shopify.dev/docs/api/usage/access-scopes
+scopes = "read_products,write_products,read_orders,write_orders"
+
+[auth]
+redirect_urls = [
+  "https://YOUR_APP_URL/auth/callback",
+  "https://YOUR_APP_URL/auth/shopify/callback",
+  "http://localhost/auth/callback",
+  "http://localhost/auth/shopify/callback"
+]
+
+[webhooks]
+api_version = "2024-10"
+
+[[webhooks.subscriptions]]
+topics = ["app/uninstalled"]
+uri = "/webhooks"
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true
