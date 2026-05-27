@@ -22,11 +22,6 @@ api_version = "2026-07"
 topics = ["app/uninstalled"]
 uri = "/webhooks"
 
-[privacy_compliance]
-customer_data_request_url = "/webhooks"
-customer_deletion_url = "/webhooks"
-shop_deletion_url = "/webhooks"
-
 [build]
 include_config_on_deploy = true
 automatically_update_urls_on_dev = true
