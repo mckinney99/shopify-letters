@@ -17,3 +17,6 @@ prisma/dev.db*
 # Editor
 .vscode/
 .idea/
+
+# Claude Code local config (developer-specific)
+.claude/

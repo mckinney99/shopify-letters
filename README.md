@@ -43,14 +43,29 @@ Fill in `.env`:
 
 > `SHOPIFY_APP_URL` is set automatically by `shopify app dev` — leave it blank.
 
-### 3. Register your app in Partners
+### 3. Register your app in Shopify Partners
 
-If you haven't already:
+> **One-time setup — requires a browser.**
 
-1. Go to [partners.shopify.com](https://partners.shopify.com) → **Apps** → **Create app**
-2. Choose **Create app manually**
-3. Copy the **API key** and **API secret** into your `.env`
-4. Run `shopify app config link` to sync `shopify.app.toml` with your registered app
+1. Go to [partners.shopify.com](https://partners.shopify.com) and sign in (free account)
+2. In the sidebar: **Apps** → **Create app** → **Create app manually**
+3. Give it a name (e.g. "shopify-letters dev")
+4. Copy the **API key** → paste into `SHOPIFY_API_KEY` in `.env`
+5. Copy the **API secret key** → paste into `SHOPIFY_API_SECRET` in `.env`
+6. Back in the terminal, run: `shopify app config link`
+   - This links `shopify.app.toml` to your Partners app and fills in `client_id`
+   - You'll be prompted to log in with Shopify CLI the first time
+
+### 3a. Create a development store
+
+> **One-time setup — requires Partners dashboard.**
+
+1. In Partners: **Stores** → **Add store** → **Create development store**
+2. Choose **Start with test data** for a pre-populated catalog
+3. Give it a name (e.g. "shopify-letters-dev")
+4. Click **Create development store**
+
+You'll select this store when `shopify app dev` asks which store to use.
 
 ### 4. Set up the database
 
