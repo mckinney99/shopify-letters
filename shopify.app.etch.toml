@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "5904cf9b73a4faab36946d484c5b5feb"
-application_url = "https://etch.direct/"
+application_url = "https://shopify.dev/apps/default-app-home"
 embedded = true
 name = "Etch"
 
@@ -11,8 +11,6 @@ scopes = "read_orders,read_products,write_orders,write_products"
 
 [auth]
 redirect_urls = [
-  "https://etch.direct/auth/callback",
-  "https://etch.direct/auth/shopify/callback",
   "http://localhost:3000/auth/callback",
   "http://localhost:3000/auth/shopify/callback"
 ]
