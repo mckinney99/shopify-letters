@@ -22,17 +22,10 @@ api_version = "2026-07"
 topics = ["app/uninstalled"]
 uri = "/webhooks"
 
-[[webhooks.subscriptions]]
-topics = ["customers/data_request"]
-uri = "/webhooks"
-
-[[webhooks.subscriptions]]
-topics = ["customers/redact"]
-uri = "/webhooks"
-
-[[webhooks.subscriptions]]
-topics = ["shop/redact"]
-uri = "/webhooks"
+[privacy_compliance]
+customer_data_request_url = "/webhooks"
+customer_deletion_url = "/webhooks"
+shop_deletion_url = "/webhooks"
 
 [build]
 include_config_on_deploy = true
