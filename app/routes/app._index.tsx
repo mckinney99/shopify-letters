@@ -20,11 +20,11 @@ export default function Index() {
   const { shop } = useLoaderData<typeof loader>();
 
   return (
-    <Page title="shopify-letters">
+    <Page title="Etch">
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
-            <Banner title="Welcome to shopify-letters" tone="info">
+            <Banner title="Welcome to Etch" tone="info">
               <Text as="p">
                 Configure input-based pricing for your customizable products.
               </Text>
