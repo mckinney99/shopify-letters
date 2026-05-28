@@ -15,11 +15,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Skip the billing check on the billing page itself to avoid redirect loops
   const url = new URL(request.url);
   if (url.pathname !== "/app/billing") {
-    const { hasActivePayment } = await billing.check({
-      plans: [MONTHLY_PLAN],
-      isTest: process.env.NODE_ENV !== "production",
-    });
-    if (!hasActivePayment) {
+    try {
+      const { hasActivePayment } = await billing.check({
+        plans: [MONTHLY_PLAN],
+        isTest: process.env.NODE_ENV !== "production",
+      });
+      if (!hasActivePayment) {
+        return redirect("/app/billing");
+      }
+    } catch (error) {
+      // billing.check() can throw a raw Shopify API Response (JSON) on auth
+      // errors, rate limits, etc. Never propagate it to the browser — redirect
+      // to the billing page so the merchant sees a recoverable UI.
+      console.error("[billing] check failed:", error);
       return redirect("/app/billing");
     }
   }
