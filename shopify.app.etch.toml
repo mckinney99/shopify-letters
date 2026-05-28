@@ -18,9 +18,6 @@ redirect_urls = [
 [webhooks]
 api_version = "2026-07"
 
-[[webhooks.subscriptions]]
-topics = ["app/uninstalled"]
-uri = "/webhooks"
 
 [build]
 include_config_on_deploy = true
