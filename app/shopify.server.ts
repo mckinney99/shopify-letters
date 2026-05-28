@@ -40,7 +40,9 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ session }) => {
-      shopify.registerWebhooks({ session });
+      shopify.registerWebhooks({ session }).catch((err) => {
+        console.error("[afterAuth] webhook registration failed (non-fatal):", err.message);
+      });
     },
   },
   future: {},
