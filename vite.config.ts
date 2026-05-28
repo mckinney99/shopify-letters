@@ -1,10 +1,15 @@
 import { vitePlugin as remix } from "@remix-run/dev";
 import { defineConfig, type UserConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
+import { resolve } from "path";
 
 // Related: https://github.com/remix-run/remix/issues/2835#issuecomment-1144584017
 // Replace the HOST env var with the actual hostname in URLs
 export default defineConfig({
+  resolve: {
+    alias: {
+      "~": resolve(__dirname, "app"),
+    },
+  },
   server: {
     port: Number(process.env.PORT || 3000),
     hmr: process.env.SHOPIFY_APP_URL
@@ -20,7 +25,6 @@ export default defineConfig({
     remix({
       ignoredRouteFiles: ["**/.*"],
     }),
-    tsconfigPaths(),
   ],
   build: {
     assetsInlineLimit: 0,
