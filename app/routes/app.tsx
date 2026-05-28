@@ -10,28 +10,34 @@ import { authenticate, MONTHLY_PLAN } from "../shopify.server";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  console.log(`[app.tsx] loader: ${request.method} ${url.pathname}`);
+
   const { billing } = await authenticate.admin(request);
+  console.log("[app.tsx] auth ok");
 
   // Skip the billing check on the billing page itself to avoid redirect loops
-  const url = new URL(request.url);
   if (url.pathname !== "/app/billing") {
+    console.log("[billing] calling check...");
     try {
-      const { hasActivePayment } = await billing.check({
+      const result = await billing.check({
         plans: [MONTHLY_PLAN],
         isTest: process.env.NODE_ENV !== "production",
       });
-      if (!hasActivePayment) {
+      console.log("[billing] hasActivePayment:", result.hasActivePayment);
+      if (!result.hasActivePayment) {
+        console.log("[billing] redirecting to /app/billing");
         return redirect("/app/billing");
       }
     } catch (error) {
-      // billing.check() can throw a raw Shopify API Response (JSON) on auth
-      // errors, rate limits, etc. Never propagate it to the browser — redirect
-      // to the billing page so the merchant sees a recoverable UI.
-      console.error("[billing] check failed:", error);
+      console.error("[billing] check threw:", error);
       return redirect("/app/billing");
     }
+  } else {
+    console.log("[billing] skipped (billing page)");
   }
 
+  console.log("[app.tsx] returning apiKey");
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
