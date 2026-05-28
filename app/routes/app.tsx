@@ -27,11 +27,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       console.log("[billing] hasActivePayment:", result.hasActivePayment);
       if (!result.hasActivePayment) {
         console.log("[billing] redirecting to /app/billing");
-        return redirect("/app/billing");
+        return redirect(`/app/billing?${url.searchParams.toString()}`);
       }
     } catch (error) {
       console.error("[billing] check threw:", error);
-      return redirect("/app/billing");
+      return redirect(`/app/billing?${url.searchParams.toString()}`);
     }
   } else {
     console.log("[billing] skipped (billing page)");
