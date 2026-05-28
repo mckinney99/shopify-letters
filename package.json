@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "remix vite:build",
-    "dev": "node scripts/check-env.mjs && npm-run-all --parallel dev:vite dev:shopify",
+    "dev": "node scripts/check-env.mjs && node scripts/dev.mjs",
     "dev:vite": "vite",
     "dev:shopify": "shopify app dev",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
@@ -33,6 +33,7 @@
   "devDependencies": {
     "@remix-run/dev": "^2.13.1",
     "@shopify/cli": "^3.66.2",
+    "@vitejs/plugin-basic-ssl": "^1.1.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "npm-run-all2": "^8.0.4",

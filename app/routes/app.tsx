@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { Outlet, useLoaderData } from "@remix-run/react";
+import { Outlet, useLoaderData, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
@@ -35,9 +35,3 @@ export function ErrorBoundary() {
 export const headers = (headersArgs: { loaderHeaders: Headers }) => {
   return boundary.headers(headersArgs);
 };
-
-function useRouteError() {
-  // Imported lazily to avoid circular dependency
-  const { useRouteError: useRouteErrorImpl } = require("@remix-run/react");
-  return useRouteErrorImpl();
-}
