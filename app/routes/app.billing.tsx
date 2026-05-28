@@ -19,10 +19,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { billing } = await authenticate.admin(request);
+
+  // Decode the Shopify host param (base64 → "admin.shopify.com/store/STORE") so
+  // after billing consent Shopify returns the merchant to the embedded app URL
+  // instead of a bare localhost URL that has no embedded context.
+  const url = new URL(request.url);
+  const host = url.searchParams.get("host");
+  const decodedHost = host
+    ? Buffer.from(host.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString()
+    : null;
+  const appHandle = process.env.SHOPIFY_APP_HANDLE || "etch";
+  const returnUrl = decodedHost
+    ? `https://${decodedHost}/apps/${appHandle}`
+    : `${process.env.SHOPIFY_APP_URL || "https://localhost:3000"}/app`;
+
   await billing.request({
     plan: MONTHLY_PLAN,
     isTest: process.env.NODE_ENV !== "production",
-    returnUrl: `${process.env.SHOPIFY_APP_URL || "https://localhost:3000"}/app`,
+    returnUrl,
   });
 };
 
