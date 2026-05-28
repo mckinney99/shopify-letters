@@ -15,11 +15,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Skip the billing check on the billing page itself to avoid redirect loops
   const url = new URL(request.url);
   if (url.pathname !== "/app/billing") {
-    await billing.require({
+    const { hasActivePayment } = await billing.check({
       plans: [MONTHLY_PLAN],
       isTest: process.env.NODE_ENV !== "production",
-      onFailure: async () => redirect("/app/billing"),
     });
+    if (!hasActivePayment) {
+      return redirect("/app/billing");
+    }
   }
 
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
