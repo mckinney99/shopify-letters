@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 /**
- * Dev launcher: Vite on port 3000, Shopify CLI manages its own tunnel and
- * proxy (random high port) which forwards to localhost:3000.
- *
- * When etch.direct is fully delegated to Cloudflare, add cloudflared back:
- *   const tunnel = spawn("cloudflared", ["tunnel", "run", "shopify-dev"], ...)
- * and set application_url in shopify.app.etch.toml.
+ * Dev launcher: Shopify CLI starts Vite, creates the proxy, and manages the
+ * tunnel. Do NOT spawn a separate `vite` process — that causes a port conflict
+ * where CLI starts its Vite on port 3001 while the standalone one sits on 3000
+ * unreachable through the tunnel.
  *
  * stdin is piped (not inherited) to avoid the CLI's readline interface
  * causing EIO errors in the parent process when the TTY closes.
@@ -17,12 +15,6 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
-
-const vite = spawn("npx", ["vite"], {
-  env: process.env,
-  stdio: "inherit",
-  cwd: ROOT,
-});
 
 const shopify = spawn(
   "npx",
@@ -36,11 +28,9 @@ process.stdin.on("error", () => {});
 shopify.stdin.on("error", () => {});
 
 const kill = () => {
-  vite?.kill();
   shopify?.kill();
 };
 
 process.on("SIGINT", kill);
 process.on("SIGTERM", kill);
-vite.on("exit", (code) => { if (code) process.exit(code); });
 shopify.on("exit", (code) => { if (code) process.exit(code); });
