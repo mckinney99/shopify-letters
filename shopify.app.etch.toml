@@ -2,9 +2,7 @@
 
 client_id = "5904cf9b73a4faab36946d484c5b5feb"
 name = "Etch"
-# application_url is set dynamically by `shopify app dev` during local development.
-# Uncomment and set this when deploying to production.
-# application_url = "https://etch.direct/"
+application_url = "https://etch.direct/"
 embedded = true
 
 [build]
