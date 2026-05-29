@@ -9,6 +9,56 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 
+// Shopify deprecated non-expiring shpat_ tokens in Dec 2025. Any fresh OAuth
+// install still gets one; this exchanges it for an expiring token immediately.
+async function migrateShpat(session: any): Promise<void> {
+  const params = new URLSearchParams({
+    client_id: process.env.SHOPIFY_API_KEY!,
+    client_secret: process.env.SHOPIFY_API_SECRET!,
+    grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+    subject_token: session.accessToken,
+    subject_token_type:
+      "urn:shopify:params:oauth:token-type:offline-access-token",
+    requested_token_type:
+      "urn:shopify:params:oauth:token-type:offline-access-token",
+    expiring: "1",
+  });
+
+  const res = await fetch(
+    `https://${session.shop}/admin/oauth/access_token`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: params.toString(),
+    }
+  );
+
+  const body = await res.json();
+  if (!res.ok || !body.access_token) {
+    throw new Error(`shpat_ migration failed: ${JSON.stringify(body)}`);
+  }
+
+  const expires = body.expires_in
+    ? new Date(Date.now() + body.expires_in * 1000)
+    : null;
+
+  // Mutate so registerWebhooks (called right after) uses the new token.
+  session.accessToken = body.access_token;
+  session.expires = expires;
+
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { accessToken: body.access_token, expires },
+  });
+
+  console.log(
+    `[afterAuth] shpat_ migrated — expires ${expires?.toISOString() ?? "never"}`
+  );
+}
+
 export const MONTHLY_PLAN = "Monthly subscription";
 
 const shopify = shopifyApp({
@@ -40,6 +90,11 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ session }) => {
+      if (session.accessToken?.startsWith("shpat_")) {
+        await migrateShpat(session).catch((err) => {
+          console.error("[afterAuth] token migration failed:", err.message);
+        });
+      }
       shopify.registerWebhooks({ session }).catch((err) => {
         console.error("[afterAuth] webhook registration failed (non-fatal):", err.message);
       });

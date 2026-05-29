@@ -41,6 +41,7 @@ export default function App() {
         <a href="/app" rel="home">
           Home
         </a>
+        <a href="/app/products">Products</a>
       </NavMenu>
       <Outlet />
     </AppProvider>
