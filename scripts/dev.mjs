@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Dev launcher: Shopify CLI starts Vite, creates the proxy, and manages the
- * tunnel. Do NOT spawn a separate `vite` process — that causes a port conflict
- * where CLI starts its Vite on port 3001 while the standalone one sits on 3000
- * unreachable through the tunnel.
+ * Dev launcher: Vite on port 3000 (HTTP), Shopify CLI creates the tunnel and
+ * proxy. The tunnel routes directly to http://localhost:3000 — Shopify CLI does
+ * NOT start Vite itself, it only manages the cloudflared tunnel and GraphQL proxy.
+ *
+ * basicSsl must NOT be used — cloudflared can only forward to HTTP origins.
  *
  * stdin is piped (not inherited) to avoid the CLI's readline interface
  * causing EIO errors in the parent process when the TTY closes.
@@ -15,6 +16,12 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
+
+const vite = spawn("npx", ["vite"], {
+  env: process.env,
+  stdio: "inherit",
+  cwd: ROOT,
+});
 
 const shopify = spawn(
   "npx",
@@ -28,9 +35,11 @@ process.stdin.on("error", () => {});
 shopify.stdin.on("error", () => {});
 
 const kill = () => {
+  vite?.kill();
   shopify?.kill();
 };
 
 process.on("SIGINT", kill);
 process.on("SIGTERM", kill);
+vite.on("exit", (code) => { if (code) process.exit(code); });
 shopify.on("exit", (code) => { if (code) process.exit(code); });
