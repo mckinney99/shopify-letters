@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     port: Number(process.env.PORT || 3000),
     hmr: { port: 8002 },
-    allowedHosts: process.env.HOST?.split(",") || [],
+    allowedHosts: true,
   },
   plugins: [
     remix({
