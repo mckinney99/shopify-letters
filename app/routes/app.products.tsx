@@ -8,6 +8,7 @@ import {
   Text,
   Thumbnail,
   Badge,
+  Link,
   useIndexResourceState,
   EmptyState,
   Pagination,
@@ -98,6 +99,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const products = edges.map(({ node }: { node: any }) => ({
     id: node.id,
+    numericId: node.id.split("/").pop() as string,
     title: node.title,
     handle: node.handle,
     status: node.status,
@@ -177,6 +179,7 @@ export default function ProductsPage() {
               { title: "Product" },
               { title: "Status" },
               { title: "Customization" },
+              { title: "Fields" },
             ]}
             selectable={false}
           >
@@ -206,6 +209,11 @@ export default function ProductsPage() {
                     productId={product.id}
                     enabled={product.enabled}
                   />
+                </IndexTable.Cell>
+                <IndexTable.Cell>
+                  <Link url={`/app/products/${product.numericId}`} removeUnderline>
+                    Configure
+                  </Link>
                 </IndexTable.Cell>
               </IndexTable.Row>
             ))}
