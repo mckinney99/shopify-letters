@@ -33,19 +33,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ? `https://${decodedHost}/apps/${appHandle}`
     : `${process.env.SHOPIFY_APP_URL || "https://localhost:3000"}/app`;
 
-  console.log("[billing action] returnUrl:", returnUrl);
-  console.log("[billing action] isTest:", process.env.NODE_ENV !== "production");
-  try {
-    await billing.request({
-      plan: MONTHLY_PLAN,
-      isTest: process.env.NODE_ENV !== "production",
-      returnUrl,
-    });
-  } catch (err: unknown) {
-    const e = err as { errorMessage?: string; errors?: unknown };
-    console.error("[billing action] billing.request threw:", e?.errorMessage, JSON.stringify(e?.errors));
-    throw err;
-  }
+  // billing.request() throws a Response (redirect) on success — let Remix handle it.
+  // Only catch actual errors.
+  await billing.request({
+    plan: MONTHLY_PLAN,
+    isTest: process.env.NODE_ENV !== "production",
+    returnUrl,
+  });
 };
 
 export default function BillingPage() {
