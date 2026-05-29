@@ -29,3 +29,12 @@ model Session {
   collaborator Boolean? @default(false)
   emailVerified Boolean? @default(false)
 }
+
+model ProductConfig {
+  id        String  @id @default(cuid())
+  shop      String
+  productId String
+  enabled   Boolean @default(false)
+
+  @@unique([shop, productId])
+}
