@@ -1,9 +1,18 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "5904cf9b73a4faab36946d484c5b5feb"
-application_url = "https://localhost:3000"
-embedded = true
 name = "Etch"
+# application_url is set dynamically by `shopify app dev` during local development.
+# Uncomment and set this when deploying to production.
+# application_url = "https://etch.direct/"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true
+
+[webhooks]
+api_version = "2026-07"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -11,14 +20,8 @@ scopes = "read_orders,read_products,write_orders,write_products"
 
 [auth]
 redirect_urls = [
-  "https://localhost:3000/auth/callback",
-  "https://localhost:3000/auth/shopify/callback"
+  "https://etch.direct/auth/callback",
+  "https://etch.direct/auth/shopify/callback",
+  "http://localhost:3000/auth/callback",
+  "http://localhost:3000/auth/shopify/callback"
 ]
-
-[webhooks]
-api_version = "2026-07"
-
-
-[build]
-include_config_on_deploy = true
-automatically_update_urls_on_dev = true
