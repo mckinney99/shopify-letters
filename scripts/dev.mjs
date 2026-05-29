@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * Dev launcher: Vite on port 3000 (HTTP), Shopify CLI creates the tunnel and
- * proxy. The tunnel routes directly to http://localhost:3000 — Shopify CLI does
- * NOT start Vite itself, it only manages the cloudflared tunnel and GraphQL proxy.
- *
- * basicSsl must NOT be used — cloudflared can only forward to HTTP origins.
+ * Dev launcher:
+ *   1. Vite on port 3000 (HTTP — no basicSsl)
+ *   2. cloudflared named tunnel "shopify-dev" routes etch.direct → localhost:3000
+ *   3. Shopify CLI manages GraphQL proxy and Partner Dashboard sync
  *
  * stdin is piped (not inherited) to avoid the CLI's readline interface
  * causing EIO errors in the parent process when the TTY closes.
@@ -23,6 +22,12 @@ const vite = spawn("npx", ["vite"], {
   cwd: ROOT,
 });
 
+const tunnel = spawn("cloudflared", ["tunnel", "run", "shopify-dev"], {
+  env: process.env,
+  stdio: "inherit",
+  cwd: ROOT,
+});
+
 const shopify = spawn(
   "npx",
   ["shopify", "app", "dev", "-c", "etch"],
@@ -36,10 +41,12 @@ shopify.stdin.on("error", () => {});
 
 const kill = () => {
   vite?.kill();
+  tunnel?.kill();
   shopify?.kill();
 };
 
 process.on("SIGINT", kill);
 process.on("SIGTERM", kill);
 vite.on("exit", (code) => { if (code) process.exit(code); });
+tunnel.on("exit", (code) => { if (code) process.exit(code); });
 shopify.on("exit", (code) => { if (code) process.exit(code); });
