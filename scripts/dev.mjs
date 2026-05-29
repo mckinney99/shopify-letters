@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
- * Dev launcher: Vite on port 3000, Shopify CLI manages its own tunnel and
- * proxy (random high port) which forwards to localhost:3000.
+ * Dev launcher: starts three processes together:
+ *   1. cloudflared tunnel (etch.direct → localhost:3000)
+ *   2. Vite dev server on port 3000
+ *   3. Shopify CLI (manages its own internal proxy/tunnel for dev tooling)
  *
  * stdin is piped (not inherited) to avoid the CLI's readline interface
  * causing EIO errors in the parent process when the TTY closes.
@@ -13,6 +15,12 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
+
+const tunnel = spawn("cloudflared", ["tunnel", "run", "shopify-dev"], {
+  env: process.env,
+  stdio: "inherit",
+  cwd: ROOT,
+});
 
 const vite = spawn("npx", ["vite"], {
   env: process.env,
@@ -32,11 +40,13 @@ process.stdin.on("error", () => {});
 shopify.stdin.on("error", () => {});
 
 const kill = () => {
+  tunnel?.kill();
   vite?.kill();
   shopify?.kill();
 };
 
 process.on("SIGINT", kill);
 process.on("SIGTERM", kill);
+tunnel.on("exit", (code) => { if (code) { console.error("[tunnel] cloudflared exited with code", code); process.exit(code); } });
 vite.on("exit", (code) => { if (code) process.exit(code); });
 shopify.on("exit", (code) => { if (code) process.exit(code); });
