@@ -23,8 +23,43 @@ function checkRateLimit(shop: string): boolean {
   return true;
 }
 
-export const loader = async (_: LoaderFunctionArgs) =>
-  json({ error: "Method not allowed" }, { status: 405 });
+// GET /api/preview?shop=...&productId=...
+// Returns field definitions for a published product so the storefront
+// can render the form before the shopper has typed anything.
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop") ?? "";
+  const productId = url.searchParams.get("productId") ?? "";
+
+  if (!shop || !productId) {
+    return json({ error: "Missing shop or productId" }, { status: 400 });
+  }
+
+  if (!checkRateLimit(shop)) {
+    return json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  const productGid = `gid://shopify/Product/${productId}`;
+  const [config, dbFields] = await Promise.all([
+    prisma.productConfig.findUnique({
+      where: { shop_productId: { shop, productId: productGid } },
+      select: { published: true },
+    }),
+    prisma.customizationField.findMany({
+      where: { shop, productId: productGid },
+      orderBy: { position: "asc" },
+      select: { id: true, label: true, minChars: true, maxChars: true, allowedChars: true, disallowedChars: true },
+    }),
+  ]);
+
+  if (!config?.published) {
+    return json({ error: "Not found" }, { status: 404 });
+  }
+
+  return json({ fields: dbFields }, {
+    headers: { "Access-Control-Allow-Origin": "*" },
+  });
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
@@ -118,11 +153,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const result = calculateProductPrice(fieldInputs, ruleInputs);
   for (const e of result.validationErrors) allErrors.push(e);
 
-  return json({
-    valid: allErrors.length === 0,
-    errors: allErrors,
-    price: result.priceMinor,
-    priceFormatted: `$${(result.priceMinor / 100).toFixed(2)}`,
-    breakdown: result.breakdown,
-  });
+  return json(
+    {
+      valid: allErrors.length === 0,
+      errors: allErrors,
+      price: result.priceMinor,
+      priceFormatted: `$${(result.priceMinor / 100).toFixed(2)}`,
+      breakdown: result.breakdown,
+    },
+    { headers: { "Access-Control-Allow-Origin": "*" } }
+  );
 };

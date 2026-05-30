@@ -20,6 +20,7 @@ export default defineWorkspace([
       environment: "node",
       globalSetup: ["app/__tests__/integration/global-setup.ts"],
       setupFiles: ["app/__tests__/integration/setup.ts"],
+      fileParallelism: false,
       env: {
         DATABASE_URL: "file:./test.db",
       },
