@@ -38,3 +38,18 @@ model ProductConfig {
 
   @@unique([shop, productId])
 }
+
+model CustomizationField {
+  id              String  @id @default(cuid())
+  shop            String
+  productId       String
+  label           String
+  type            String  @default("text")
+  minChars        Int?
+  maxChars        Int?
+  allowedChars    String?
+  disallowedChars String?
+  position        Int     @default(0)
+
+  @@index([shop, productId])
+}
