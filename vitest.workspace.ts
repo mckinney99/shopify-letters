@@ -18,6 +18,7 @@ export default defineWorkspace([
       name: "integration",
       include: ["app/__tests__/integration/**/*.test.ts"],
       environment: "node",
+      globalSetup: ["app/__tests__/integration/global-setup.ts"],
       setupFiles: ["app/__tests__/integration/setup.ts"],
       env: {
         DATABASE_URL: "file:./test.db",
