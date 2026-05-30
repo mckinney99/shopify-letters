@@ -42,16 +42,18 @@ model ProductConfig {
 }
 
 model CustomizationField {
-  id              String  @id @default(cuid())
+  id              String   @id @default(cuid())
   shop            String
   productId       String
   label           String
-  type            String  @default("text")
+  type            String   @default("text")
   minChars        Int?
   maxChars        Int?
   allowedChars    String?
   disallowedChars String?
-  position        Int     @default(0)
+  position        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([shop, productId])
 }
@@ -65,6 +67,8 @@ model PricingRule {
   basePrice    Float          @default(0)
   perCharPrice Float          @default(0)
   charGroups   CharPriceGroup[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   @@unique([shop, productId, fieldId])
   @@index([shop, productId])
@@ -76,6 +80,8 @@ model CharPriceGroup {
   label         String
   characters    String
   pricePerChar  Float       @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   rule          PricingRule @relation(fields: [pricingRuleId], references: [id], onDelete: Cascade)
 }
