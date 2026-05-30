@@ -89,12 +89,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const configs = await prisma.productConfig.findMany({
     where: { shop: session.shop, productId: { in: productIds } },
-    select: { productId: true, enabled: true },
+    select: { productId: true, enabled: true, published: true },
   });
 
-  const enabledSet = new Set(
-    configs.filter((c) => c.enabled).map((c) => c.productId)
-  );
+  const configMap = new Map(configs.map((c) => [c.productId, c]));
 
   const products = edges.map(({ node }: { node: any }) => ({
     id: node.id,
@@ -104,7 +102,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     status: node.status,
     imageUrl: node.featuredImage?.url ?? null,
     imageAlt: node.featuredImage?.altText ?? node.title,
-    enabled: enabledSet.has(node.id),
+    enabled: configMap.get(node.id)?.enabled ?? false,
+    published: configMap.get(node.id)?.published ?? false,
   }));
 
   return json({ products, pageInfo });
@@ -178,6 +177,7 @@ export default function ProductsPage() {
               { title: "Product" },
               { title: "Status" },
               { title: "Customization" },
+              { title: "Published" },
               { title: "Fields" },
             ]}
             selectable={false}
@@ -208,6 +208,11 @@ export default function ProductsPage() {
                     productId={product.id}
                     enabled={product.enabled}
                   />
+                </IndexTable.Cell>
+                <IndexTable.Cell>
+                  <Badge tone={product.published ? "success" : "new"}>
+                    {product.published ? "Published" : "Draft"}
+                  </Badge>
                 </IndexTable.Cell>
                 <IndexTable.Cell>
                   <Link to={`/app/products/${product.numericId}`}>Configure</Link>

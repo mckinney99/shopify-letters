@@ -31,10 +31,12 @@ model Session {
 }
 
 model ProductConfig {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   shop      String
   productId String
-  enabled   Boolean @default(false)
+  enabled   Boolean  @default(false)
+  published Boolean  @default(false)
+  updatedAt DateTime @updatedAt
 
   @@unique([shop, productId])
 }
