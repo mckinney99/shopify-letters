@@ -53,3 +53,27 @@ model CustomizationField {
 
   @@index([shop, productId])
 }
+
+// fieldId = "" means product-level base price; fieldId = <CustomizationField.id> means per-field pricing
+model PricingRule {
+  id           String         @id @default(cuid())
+  shop         String
+  productId    String
+  fieldId      String
+  basePrice    Float          @default(0)
+  perCharPrice Float          @default(0)
+  charGroups   CharPriceGroup[]
+
+  @@unique([shop, productId, fieldId])
+  @@index([shop, productId])
+}
+
+model CharPriceGroup {
+  id            String      @id @default(cuid())
+  pricingRuleId String
+  label         String
+  characters    String
+  pricePerChar  Float       @default(0)
+
+  rule          PricingRule @relation(fields: [pricingRuleId], references: [id], onDelete: Cascade)
+}
