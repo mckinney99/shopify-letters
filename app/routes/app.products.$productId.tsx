@@ -15,6 +15,7 @@ import {
   Box,
   Tabs,
   Divider,
+  Badge,
 } from "@shopify/polaris";
 import { useEffect, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -74,7 +75,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const productGid = `gid://shopify/Product/${params.productId}`;
 
-  const [productRes, fields, pricingRules] = await Promise.all([
+  const [productRes, fields, pricingRules, config] = await Promise.all([
     admin.graphql(PRODUCT_QUERY, { variables: { id: productGid } }),
     prisma.customizationField.findMany({
       where: { shop: session.shop, productId: productGid },
@@ -83,6 +84,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     prisma.pricingRule.findMany({
       where: { shop: session.shop, productId: productGid },
       include: { charGroups: true },
+    }),
+    prisma.productConfig.findUnique({
+      where: { shop_productId: { shop: session.shop, productId: productGid } },
+      select: { published: true },
     }),
   ]);
 
@@ -93,6 +98,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   return json({
     product: data.product as { id: string; title: string },
+    published: config?.published ?? false,
     fields,
     pricingRules,
   });
@@ -240,6 +246,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     });
     await prisma.charPriceGroup.create({
       data: { pricingRuleId: rule.id, label, characters, pricePerChar },
+    });
+    return json({ ok: true });
+  }
+
+  if (_action === "set_published") {
+    const published = form.get("published") === "true";
+    await prisma.productConfig.upsert({
+      where: { shop_productId: { shop, productId: productGid } },
+      update: { published },
+      create: { shop, productId: productGid, published },
     });
     return json({ ok: true });
   }
@@ -637,10 +653,17 @@ function PricingTab({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProductDetailPage() {
-  const { product, fields, pricingRules } = useLoaderData<typeof loader>();
+  const { product, published, fields, pricingRules } = useLoaderData<typeof loader>();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  const publishFetcher = useFetcher<{ ok?: boolean }>();
+  const isPublishing = publishFetcher.state !== "idle";
+  const optimisticPublished =
+    isPublishing
+      ? publishFetcher.formData?.get("published") === "true"
+      : published;
 
   const handleEdit = useCallback((id: string) => {
     setShowAddForm(false);
@@ -661,7 +684,21 @@ export default function ProductDetailPage() {
   return (
     <Page
       title={product.title}
+      titleMetadata={
+        <Badge tone={optimisticPublished ? "success" : "new"}>
+          {optimisticPublished ? "Published" : "Draft"}
+        </Badge>
+      }
       backAction={{ content: "Products", url: "/app/products" }}
+      primaryAction={{
+        content: optimisticPublished ? "Unpublish" : "Publish",
+        loading: isPublishing,
+        onAction: () =>
+          publishFetcher.submit(
+            { _action: "set_published", published: String(!optimisticPublished) },
+            { method: "post" }
+          ),
+      }}
     >
       <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
         <Box paddingBlockStart="400">
