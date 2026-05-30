@@ -195,6 +195,11 @@ function FieldForm({
   onClose: () => void;
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  const [label, setLabel] = useState(field?.label ?? "");
+  const [minChars, setMinChars] = useState(field?.minChars?.toString() ?? "");
+  const [maxChars, setMaxChars] = useState(field?.maxChars?.toString() ?? "");
+  const [allowedChars, setAllowedChars] = useState(field?.allowedChars ?? "");
+  const [disallowedChars, setDisallowedChars] = useState(field?.disallowedChars ?? "");
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) {
@@ -207,46 +212,51 @@ function FieldForm({
       <BlockStack gap="400">
         <input type="hidden" name="_action" value={actionType} />
         {field && <input type="hidden" name="fieldId" value={field.id} />}
+        <input type="hidden" name="label" value={label} />
+        <input type="hidden" name="minChars" value={minChars} />
+        <input type="hidden" name="maxChars" value={maxChars} />
+        <input type="hidden" name="allowedChars" value={allowedChars} />
+        <input type="hidden" name="disallowedChars" value={disallowedChars} />
         {fetcher.data?.error && (
           <Banner tone="critical">{fetcher.data.error}</Banner>
         )}
         <FormLayout>
           <TextField
             label="Label"
-            name="label"
-            defaultValue={field?.label ?? ""}
+            value={label}
+            onChange={setLabel}
             autoComplete="off"
             requiredIndicator
           />
           <FormLayout.Group>
             <TextField
               label="Min characters"
-              name="minChars"
               type="number"
-              defaultValue={field?.minChars?.toString() ?? ""}
+              value={minChars}
+              onChange={setMinChars}
               autoComplete="off"
             />
             <TextField
               label="Max characters"
-              name="maxChars"
               type="number"
-              defaultValue={field?.maxChars?.toString() ?? ""}
+              value={maxChars}
+              onChange={setMaxChars}
               autoComplete="off"
             />
           </FormLayout.Group>
           <FormLayout.Group>
             <TextField
               label="Allowed characters"
-              name="allowedChars"
               helpText="Only these characters will be accepted (leave blank for all)"
-              defaultValue={field?.allowedChars ?? ""}
+              value={allowedChars}
+              onChange={setAllowedChars}
               autoComplete="off"
             />
             <TextField
               label="Disallowed characters"
-              name="disallowedChars"
               helpText="These characters will be rejected (leave blank to allow all)"
-              defaultValue={field?.disallowedChars ?? ""}
+              value={disallowedChars}
+              onChange={setDisallowedChars}
               autoComplete="off"
             />
           </FormLayout.Group>
