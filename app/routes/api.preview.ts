@@ -6,6 +6,12 @@ import { calculateProductPrice } from "../utils/pricing";
 import type { FieldInput, FieldPricingRule } from "../utils/pricing";
 import type { FieldRules } from "../utils/normalize";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 // In-memory sliding-window rate limiter: 30 req / shop / 60s.
 // Per-process only — sufficient for abuse prevention at this scale.
 const rateLimitWindows = new Map<string, number[]>();
@@ -56,12 +62,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return json({ error: "Not found" }, { status: 404 });
   }
 
-  return json({ fields: dbFields }, {
-    headers: { "Access-Control-Allow-Origin": "*" },
-  });
+  return json({ fields: dbFields }, { headers: CORS_HEADERS });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  // Respond to CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405 });
   }
@@ -161,6 +170,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       priceFormatted: `$${(result.priceMinor / 100).toFixed(2)}`,
       breakdown: result.breakdown,
     },
-    { headers: { "Access-Control-Allow-Origin": "*" } }
+    { headers: CORS_HEADERS }
   );
 };

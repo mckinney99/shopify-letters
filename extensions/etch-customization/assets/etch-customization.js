@@ -60,6 +60,12 @@
       fieldsEl.appendChild(h);
     }
 
+    var breakdownEl = document.createElement('div');
+    breakdownEl.className = 'etch-customization__breakdown';
+    breakdownEl.setAttribute('aria-live', 'polite');
+    breakdownEl.hidden = true;
+    container.appendChild(breakdownEl);
+
     var inputMap = {};
 
     fields.forEach(function (field) {
@@ -97,7 +103,7 @@
         var len = Array.from(input.value).length; // codepoint count
         if (field.maxChars) hint.textContent = len + ' / ' + field.maxChars + ' characters';
         inputMap[field.id] = input.value;
-        schedulePreview(shop, productId, appUrl, inputMap, priceEl, errorEl);
+        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl);
       });
 
       wrapper.appendChild(label);
@@ -109,18 +115,22 @@
     });
 
     // Show base price immediately
-    fetchPreview(shop, productId, appUrl, inputMap, priceEl, errorEl);
+    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl);
   }
 
   var debounceTimer;
-  function schedulePreview(shop, productId, appUrl, inputMap, priceEl, errorEl) {
+  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl) {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
-      fetchPreview(shop, productId, appUrl, inputMap, priceEl, errorEl);
+      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl);
     }, 350);
   }
 
-  function fetchPreview(shop, productId, appUrl, inputMap, priceEl, errorEl) {
+  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl) {
+    // Loading state
+    priceEl.textContent = 'Calculating…';
+    priceEl.hidden = false;
+
     fetch(appUrl + '/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -128,9 +138,16 @@
     })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
-        if (!data) return;
+        if (!data) {
+          priceEl.hidden = true;
+          breakdownEl.hidden = true;
+          return;
+        }
         priceEl.textContent = 'Customization: ' + data.priceFormatted;
         priceEl.hidden = false;
+        if (data.breakdown) {
+          renderBreakdown(data.breakdown, fields, breakdownEl);
+        }
         if (!data.valid && data.errors.length > 0) {
           errorEl.textContent = data.errors.join(' ');
           errorEl.hidden = false;
@@ -139,7 +156,58 @@
           errorEl.textContent = '';
         }
       })
-      .catch(function () { /* non-fatal */ });
+      .catch(function () {
+        priceEl.hidden = true;
+        breakdownEl.hidden = true;
+      });
+  }
+
+  function renderBreakdown(breakdown, fields, breakdownEl) {
+    breakdownEl.innerHTML = '';
+    var items = [];
+
+    if (breakdown.baseMinor > 0) {
+      items.push('Base: ' + formatMinor(breakdown.baseMinor));
+    }
+
+    for (var i = 0; i < breakdown.fields.length; i++) {
+      var fb = breakdown.fields[i];
+      if (fb.subtotalMinor === 0) continue;
+
+      var fieldDef = null;
+      for (var k = 0; k < fields.length; k++) {
+        if (fields[k].id === fb.fieldId) { fieldDef = fields[k]; break; }
+      }
+      var fieldLabel = fieldDef ? fieldDef.label : 'Field';
+
+      for (var j = 0; j < fb.groups.length; j++) {
+        var g = fb.groups[j];
+        if (g.charCount > 0) {
+          items.push(fieldLabel + ' — ' + g.label + ' (' + g.charCount + '): ' + formatMinor(g.subtotalMinor));
+        }
+      }
+      if (fb.unmatchedCount > 0) {
+        items.push(fieldLabel + ' — standard (' + fb.unmatchedCount + '): ' + formatMinor(fb.unmatchedSubtotalMinor));
+      }
+    }
+
+    // Only show if there are at least two line items — a single price line adds no info
+    if (items.length <= 1) {
+      breakdownEl.hidden = true;
+      return;
+    }
+
+    items.forEach(function (text) {
+      var p = document.createElement('p');
+      p.className = 'etch-customization__breakdown-item';
+      p.textContent = text;
+      breakdownEl.appendChild(p);
+    });
+    breakdownEl.hidden = false;
+  }
+
+  function formatMinor(minor) {
+    return '$' + (minor / 100).toFixed(2);
   }
 
   // Boot all blocks on the page
