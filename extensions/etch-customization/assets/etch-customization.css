@@ -1,0 +1,61 @@
+.etch-customization {
+  margin-block: 1.5rem;
+}
+
+.etch-customization__heading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-block-end: 0.75rem;
+}
+
+.etch-customization__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-block-end: 1rem;
+}
+
+.etch-customization__label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.etch-customization__input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 1rem;
+  line-height: 1.5;
+  /* Inherit theme font so it blends with Dawn and other themes */
+  font-family: inherit;
+  color: inherit;
+  background: transparent;
+}
+
+.etch-customization__input:focus {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.etch-customization__hint {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.etch-customization__loading {
+  font-size: 0.875rem;
+  opacity: 0.7;
+}
+
+.etch-customization__error {
+  font-size: 0.875rem;
+  color: #c00;
+  margin-block-start: 0.25rem;
+}
+
+.etch-customization__price {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-block-start: 0.5rem;
+}
