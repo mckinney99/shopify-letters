@@ -1,0 +1,16 @@
+{
+  "blocks": {
+    "customization": {
+      "name": "Etch Customization",
+      "settings": {
+        "heading": {
+          "label": "Heading"
+        },
+        "app_url": {
+          "label": "App URL",
+          "info": "The URL of your Etch app. Do not change unless instructed."
+        }
+      }
+    }
+  }
+}
