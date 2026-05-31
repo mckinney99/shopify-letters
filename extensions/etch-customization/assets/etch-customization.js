@@ -66,10 +66,16 @@
     breakdownEl.hidden = true;
     container.appendChild(breakdownEl);
 
+    // Per-field validity. Start all valid so the cart button begins enabled.
+    var validityMap = {};
+    fields.forEach(function (f) { validityMap[f.id] = true; });
+
+    var cartBtn = findCartButton();
     var inputMap = {};
 
     fields.forEach(function (field) {
       var uid = 'etch-' + blockId + '-' + field.id;
+      var errorId = uid + '-error';
       var wrapper = document.createElement('div');
       wrapper.className = 'etch-customization__field';
 
@@ -87,7 +93,7 @@
       input.name = 'properties[' + field.label + ']';
       input.className = 'etch-customization__input';
       if (field.maxChars) input.maxLength = field.maxChars;
-      if (field.minChars) input.required = true;
+      var describedBy = errorId;
 
       // Character-count hint
       var hint = document.createElement('span');
@@ -96,12 +102,36 @@
       hint.setAttribute('aria-live', 'polite');
       if (field.maxChars) {
         hint.textContent = '0 / ' + field.maxChars + ' characters';
-        input.setAttribute('aria-describedby', hint.id);
+        describedBy = hint.id + ' ' + errorId;
       }
+      input.setAttribute('aria-describedby', describedBy);
+
+      // Per-field validation error element
+      var fieldError = document.createElement('span');
+      fieldError.id = errorId;
+      fieldError.className = 'etch-customization__field-error';
+      fieldError.setAttribute('role', 'alert');
+      fieldError.hidden = true;
 
       input.addEventListener('input', function () {
         var len = Array.from(input.value).length; // codepoint count
         if (field.maxChars) hint.textContent = len + ' / ' + field.maxChars + ' characters';
+
+        // Client-side validation — mirrors server-side normalizeInput exactly
+        var errors = validateField(input.value, field);
+        if (errors.length > 0) {
+          fieldError.textContent = errors[0];
+          fieldError.hidden = false;
+          input.setAttribute('aria-invalid', 'true');
+          validityMap[field.id] = false;
+        } else {
+          fieldError.hidden = true;
+          fieldError.textContent = '';
+          input.removeAttribute('aria-invalid');
+          validityMap[field.id] = true;
+        }
+        updateCartButton(validityMap, cartBtn);
+
         inputMap[field.id] = input.value;
         schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl);
       });
@@ -109,13 +139,62 @@
       wrapper.appendChild(label);
       wrapper.appendChild(input);
       wrapper.appendChild(hint);
+      wrapper.appendChild(fieldError);
       fieldsEl.appendChild(wrapper);
 
       inputMap[field.id] = '';
     });
 
-    // Show base price immediately
     fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl);
+  }
+
+  // Tries common Dawn and theme selectors in order
+  function findCartButton() {
+    return (
+      document.querySelector('[name="add"]') ||
+      document.querySelector('.product-form__submit') ||
+      document.querySelector('form[action*="cart/add"] button[type="submit"]')
+    );
+  }
+
+  function updateCartButton(validityMap, cartBtn) {
+    if (!cartBtn) return;
+    var hasErrors = Object.keys(validityMap).some(function (id) { return !validityMap[id]; });
+    cartBtn.disabled = hasErrors;
+    cartBtn.setAttribute('aria-disabled', String(hasErrors));
+  }
+
+  // Mirrors server-side normalizeInput: trim, collapse whitespace, then validate.
+  // Must stay in sync with app/utils/normalize.ts.
+  function validateField(value, field) {
+    var normalized = value.trim().replace(/\s+/g, ' ');
+    var chars = Array.from(normalized); // codepoint-aware — correct for emoji
+    var count = chars.length;
+    var errors = [];
+
+    if (field.minChars && count < field.minChars) {
+      errors.push('Enter at least ' + field.minChars + ' character' + (field.minChars === 1 ? '' : 's') + '.');
+    }
+    if (field.maxChars && count > field.maxChars) {
+      errors.push('Maximum ' + field.maxChars + ' characters allowed.');
+    }
+    if (field.allowedChars) {
+      var allowed = new Set(Array.from(field.allowedChars));
+      var bad = new Set();
+      chars.forEach(function (c) { if (c !== ' ' && !allowed.has(c)) bad.add(c); });
+      if (bad.size > 0) {
+        errors.push('Characters not allowed: ' + Array.from(bad).join(''));
+      }
+    }
+    if (field.disallowedChars) {
+      var disallowedSet = new Set(Array.from(field.disallowedChars));
+      var found = new Set();
+      chars.forEach(function (c) { if (disallowedSet.has(c)) found.add(c); });
+      if (found.size > 0) {
+        errors.push('Characters not allowed: ' + Array.from(found).join(''));
+      }
+    }
+    return errors;
   }
 
   var debounceTimer;
@@ -127,7 +206,6 @@
   }
 
   function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl) {
-    // Loading state
     priceEl.textContent = 'Calculating…';
     priceEl.hidden = false;
 
@@ -145,9 +223,8 @@
         }
         priceEl.textContent = 'Customization: ' + data.priceFormatted;
         priceEl.hidden = false;
-        if (data.breakdown) {
-          renderBreakdown(data.breakdown, fields, breakdownEl);
-        }
+        if (data.breakdown) renderBreakdown(data.breakdown, fields, breakdownEl);
+        // API-level errors (e.g. server-side normalization edge cases) go in errorEl
         if (!data.valid && data.errors.length > 0) {
           errorEl.textContent = data.errors.join(' ');
           errorEl.hidden = false;
@@ -191,7 +268,7 @@
       }
     }
 
-    // Only show if there are at least two line items — a single price line adds no info
+    // Only show when there are at least two line items — a single line adds no info
     if (items.length <= 1) {
       breakdownEl.hidden = true;
       return;
