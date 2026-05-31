@@ -14,6 +14,7 @@ export default defineConfig({
     port: Number(process.env.PORT || 3000),
     hmr: { port: 8002 },
     allowedHosts: true,
+    cors: true,
   },
   plugins: [
     remix({
