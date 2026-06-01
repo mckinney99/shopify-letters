@@ -66,11 +66,55 @@
     breakdownEl.hidden = true;
     container.appendChild(breakdownEl);
 
-    // Per-field validity. Start all valid so the cart button begins enabled.
+    // Pricing snapshot — underscore prefix hides from customer-facing UI
+    // but remains visible in the merchant's admin order view.
+    // The Cart Transform function reads these to enforce the correct price.
+    var snapMinorInput = makeHiddenInput('properties[_etch_price_minor]', '');
+    var snapPriceInput = makeHiddenInput('properties[_etch_price]', '');
+    var snapAtInput = makeHiddenInput('properties[_etch_calculated_at]', '');
+    container.appendChild(snapMinorInput);
+    container.appendChild(snapPriceInput);
+    container.appendChild(snapAtInput);
+
+    // null until first successful price response — cart button stays disabled until set
+    var latestPriceData = null;
+
+    // Per-field validity. All start true; button disabled because latestPriceData is null.
     var validityMap = {};
     fields.forEach(function (f) { validityMap[f.id] = true; });
 
     var cartBtn = findCartButton();
+    var productForm = cartBtn ? cartBtn.closest('form') : null;
+
+    function updateBtn() {
+      if (!cartBtn) return;
+      var hasFieldErrors = Object.keys(validityMap).some(function (id) { return !validityMap[id]; });
+      // Keep disabled until we have a price — avoids submitting without a snapshot
+      var disable = hasFieldErrors || latestPriceData === null;
+      cartBtn.disabled = disable;
+      cartBtn.setAttribute('aria-disabled', String(disable));
+    }
+
+    // Called by fetchPreview on every successful price response
+    function onPriceUpdate(data) {
+      latestPriceData = data;
+      snapMinorInput.value = String(data.price);
+      snapPriceInput.value = data.priceFormatted;
+      snapAtInput.value = new Date().toISOString();
+      updateBtn();
+    }
+
+    // Guard against edge cases where the button somehow submits without a snapshot
+    if (productForm) {
+      productForm.addEventListener('submit', function (e) {
+        if (latestPriceData === null) {
+          e.preventDefault();
+          errorEl.textContent = 'Pricing is still loading — please wait a moment before adding to cart.';
+          errorEl.hidden = false;
+        }
+      });
+    }
+
     var inputMap = {};
 
     fields.forEach(function (field) {
@@ -89,7 +133,7 @@
       var input = document.createElement('input');
       input.type = 'text';
       input.id = uid;
-      // Shopify line item property — carries text through to the order
+      // Shopify line item property — carries the shopper's text through to the order
       input.name = 'properties[' + field.label + ']';
       input.className = 'etch-customization__input';
       if (field.maxChars) input.maxLength = field.maxChars;
@@ -130,10 +174,10 @@
           input.removeAttribute('aria-invalid');
           validityMap[field.id] = true;
         }
-        updateCartButton(validityMap, cartBtn);
+        updateBtn();
 
         inputMap[field.id] = input.value;
-        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl);
+        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate);
       });
 
       wrapper.appendChild(label);
@@ -145,7 +189,18 @@
       inputMap[field.id] = '';
     });
 
-    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl);
+    // Initial button state: disabled until price loads
+    updateBtn();
+
+    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate);
+  }
+
+  function makeHiddenInput(name, value) {
+    var el = document.createElement('input');
+    el.type = 'hidden';
+    el.name = name;
+    el.value = value;
+    return el;
   }
 
   // Tries common Dawn and theme selectors in order
@@ -155,13 +210,6 @@
       document.querySelector('.product-form__submit') ||
       document.querySelector('form[action*="cart/add"] button[type="submit"]')
     );
-  }
-
-  function updateCartButton(validityMap, cartBtn) {
-    if (!cartBtn) return;
-    var hasErrors = Object.keys(validityMap).some(function (id) { return !validityMap[id]; });
-    cartBtn.disabled = hasErrors;
-    cartBtn.setAttribute('aria-disabled', String(hasErrors));
   }
 
   // Mirrors server-side normalizeInput: trim, collapse whitespace, then validate.
@@ -198,14 +246,14 @@
   }
 
   var debounceTimer;
-  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl) {
+  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate) {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
-      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl);
+      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate);
     }, 350);
   }
 
-  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl) {
+  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate) {
     priceEl.textContent = 'Calculating…';
     priceEl.hidden = false;
 
@@ -224,7 +272,7 @@
         priceEl.textContent = 'Customization: ' + data.priceFormatted;
         priceEl.hidden = false;
         if (data.breakdown) renderBreakdown(data.breakdown, fields, breakdownEl);
-        // API-level errors (e.g. server-side normalization edge cases) go in errorEl
+        // API-level errors (server-side normalization edge cases) surface in errorEl
         if (!data.valid && data.errors.length > 0) {
           errorEl.textContent = data.errors.join(' ');
           errorEl.hidden = false;
@@ -232,6 +280,7 @@
           errorEl.hidden = true;
           errorEl.textContent = '';
         }
+        if (onPriceUpdate) onPriceUpdate(data);
       })
       .catch(function () {
         priceEl.hidden = true;
