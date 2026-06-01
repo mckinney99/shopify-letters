@@ -177,6 +177,9 @@
         updateBtn();
 
         inputMap[field.id] = input.value;
+        // Keep the bundled JSON attribute in sync so the Cart Transform function
+        // can read all field values via a single attribute(key: "_etch_inputs") query.
+        etchInputsEl.value = JSON.stringify(inputMap);
         schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate);
       });
 
@@ -188,6 +191,12 @@
 
       inputMap[field.id] = '';
     });
+
+    // Bundled JSON attribute read by the Cart Transform function via
+    // attribute(key: "_etch_inputs"). Created after forEach so inputMap has
+    // all initial empty values. The input event handler above keeps it in sync.
+    var etchInputsEl = makeHiddenInput('properties[_etch_inputs]', JSON.stringify(inputMap));
+    container.appendChild(etchInputsEl);
 
     // Initial button state: disabled until price loads
     updateBtn();

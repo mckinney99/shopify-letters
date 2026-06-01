@@ -3,12 +3,6 @@ query RunInput {
     lines {
       id
       quantity
-      cost {
-        totalAmount {
-          amount
-          currencyCode
-        }
-      }
       merchandise {
         __typename
         ... on ProductVariant {
@@ -20,8 +14,7 @@ query RunInput {
           }
         }
       }
-      attributes {
-        key
+      attribute(key: "_etch_inputs") {
         value
       }
     }

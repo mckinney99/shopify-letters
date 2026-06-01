@@ -1,6 +1,8 @@
 // Cart Transform function — enforces Etch per-character pricing at checkout.
 // Cannot make network calls (Shopify Function constraint); pricing rules travel
 // via the product metafield "etch / pricing_rules" written on every admin save.
+// Field inputs travel via the "_etch_inputs" cart line attribute, written by
+// the storefront extension as a JSON map of { [fieldId]: rawText }.
 
 // ── Types for the metafield payload ──────────────────────────────────────────
 
@@ -28,10 +30,8 @@ type MetafieldPayload = {
 };
 
 // ── Types for the Shopify Function input (mirrors input.graphql) ──────────────
-
-type Attribute = { key: string; value: string };
-
-type Money = { amount: string; currencyCode: string };
+// CartLine exposes attribute(key:) singular only — no attributes array.
+// ProductVariant has no price field; currency is inferred by the runtime.
 
 type Metafield = { value: string } | null;
 
@@ -46,17 +46,12 @@ type UnknownMerchandise = { __typename: string };
 type CartLine = {
   id: string;
   quantity: number;
-  cost: { totalAmount: Money };
   merchandise: ProductVariant | UnknownMerchandise;
-  attributes: Attribute[];
+  attribute: { value: string } | null; // attribute(key: "_etch_inputs")
 };
 
 type Input = {
   cart: { lines: CartLine[] };
-};
-
-type FunctionResult = {
-  operations: unknown[];
 };
 
 // ── Pricing engine — verbatim port of app/utils/normalize.ts ─────────────────
@@ -99,7 +94,7 @@ function calculatePrice(
 
 // ── Function entry point ──────────────────────────────────────────────────────
 
-export default function run(input: Input): FunctionResult {
+export default function run(input: Input): unknown {
   const operations: unknown[] = [];
 
   for (const line of input.cart.lines) {
@@ -119,22 +114,31 @@ export default function run(input: Input): FunctionResult {
     if (!Array.isArray(payload.fields) || !Array.isArray(payload.rules)) continue;
     if (payload.fields.length === 0 && payload.rules.length === 0) continue;
 
-    // Match each field definition to the corresponding line attribute by label.
-    // Attributes are keyed by field label (set by the storefront extension in SL-26).
-    const fieldInputs = payload.fields.map((fieldDef) => {
-      const attr = line.attributes.find((a) => a.key === fieldDef.label);
-      return {
-        fieldId: fieldDef.id,
-        normalizedText: normalizeText(attr?.value ?? ""),
-      };
-    });
+    // Read the bundled field inputs written by the storefront extension.
+    // Format: { [fieldId]: rawText } — keyed by field ID, not label.
+    const etchRaw = line.attribute?.value;
+    if (!etchRaw) continue;
+
+    let etchInputs: Record<string, string>;
+    try {
+      etchInputs = JSON.parse(etchRaw) as Record<string, string>;
+    } catch {
+      continue;
+    }
+
+    const fieldInputs = payload.fields.map((fieldDef) => ({
+      fieldId: fieldDef.id,
+      normalizedText: normalizeText(etchInputs[fieldDef.id] ?? ""),
+    }));
 
     const enforcedMinor = calculatePrice(fieldInputs, payload.rules);
     const enforcedAmount = (enforcedMinor / 100).toFixed(2);
-    const currencyCode = line.cost.totalAmount.currencyCode;
 
+    // Operation structure per CartTransformRunResult schema (2025-10):
+    // lineExpand > expandedCartItems[].price.adjustment.fixedPricePerUnit.amount
+    // Currency is inferred from the cart's presentment currency — not specified here.
     operations.push({
-      expand: {
+      lineExpand: {
         cartLineId: line.id,
         expandedCartItems: [
           {
@@ -144,7 +148,6 @@ export default function run(input: Input): FunctionResult {
               adjustment: {
                 fixedPricePerUnit: {
                   amount: enforcedAmount,
-                  currencyCode,
                 },
               },
             },
