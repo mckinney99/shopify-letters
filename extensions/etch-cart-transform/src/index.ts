@@ -38,7 +38,6 @@ type Metafield = { value: string } | null;
 type ProductVariant = {
   __typename: "ProductVariant";
   id: string;
-  price: Money;
   product: { metafield: Metafield };
 };
 
@@ -47,6 +46,7 @@ type UnknownMerchandise = { __typename: string };
 type CartLine = {
   id: string;
   quantity: number;
+  cost: { totalAmount: Money };
   merchandise: ProductVariant | UnknownMerchandise;
   attributes: Attribute[];
 };
@@ -131,7 +131,7 @@ export default function run(input: Input): FunctionResult {
 
     const enforcedMinor = calculatePrice(fieldInputs, payload.rules);
     const enforcedAmount = (enforcedMinor / 100).toFixed(2);
-    const currencyCode = variant.price.currencyCode;
+    const currencyCode = line.cost.totalAmount.currencyCode;
 
     operations.push({
       expand: {
