@@ -1,0 +1,26 @@
+query RunInput {
+  cart {
+    lines {
+      id
+      quantity
+      merchandise {
+        ... on ProductVariant {
+          id
+          price {
+            amount
+            currencyCode
+          }
+          product {
+            metafield(namespace: "etch", key: "pricing_rules") {
+              value
+            }
+          }
+        }
+      }
+      attributes {
+        key
+        value
+      }
+    }
+  }
+}

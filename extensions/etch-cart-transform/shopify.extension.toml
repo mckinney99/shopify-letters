@@ -1,0 +1,7 @@
+api_version = "2025-10"
+
+[[extensions]]
+name = "Etch Cart Transform"
+handle = "etch-cart-transform"
+type = "function"
+targeting = [{ target = "cart.transform.run" }]
