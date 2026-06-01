@@ -54,6 +54,17 @@
   margin-block-start: 0.25rem;
 }
 
+.etch-customization__field-error {
+  font-size: 0.75rem;
+  color: #c00;
+  margin-block-start: 0.125rem;
+}
+
+.etch-customization__input[aria-invalid="true"] {
+  border-color: #c00;
+  outline-color: #c00;
+}
+
 .etch-customization__price {
   font-size: 0.875rem;
   font-weight: 500;
