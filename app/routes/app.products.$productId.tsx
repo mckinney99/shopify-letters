@@ -73,13 +73,18 @@ async function syncPricingMetafield(
   });
 
   try {
-    await admin.graphql(METAFIELDS_SET_MUTATION, {
+    const res = await admin.graphql(METAFIELDS_SET_MUTATION, {
       variables: {
         metafields: [{ ownerId: productGid, namespace: "etch", key: "pricing_rules", type: "json", value }],
       },
     });
-  } catch {
-    // Non-fatal — next admin save will retry. Function falls back to no-op for this product.
+    const { data } = await res.json();
+    const errs = data?.metafieldsSet?.userErrors ?? [];
+    if (errs.length > 0) {
+      console.error("[syncPricingMetafield] userErrors:", JSON.stringify(errs));
+    }
+  } catch (err) {
+    console.error("[syncPricingMetafield] exception:", err);
   }
 }
 

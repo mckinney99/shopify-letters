@@ -27,7 +27,7 @@ type MetafieldPayload = {
   rules: FieldPricingRule[];
 };
 
-// ── Types for the Shopify Function input (mirrors run.graphql) ────────────────
+// ── Types for the Shopify Function input (mirrors input.graphql) ──────────────
 
 type Attribute = { key: string; value: string };
 
@@ -99,7 +99,7 @@ function calculatePrice(
 
 // ── Function entry point ──────────────────────────────────────────────────────
 
-export function run(input: Input): FunctionResult {
+export default function run(input: Input): FunctionResult {
   const operations: unknown[] = [];
 
   for (const line of input.cart.lines) {

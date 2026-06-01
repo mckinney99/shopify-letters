@@ -1,4 +1,5 @@
 api_version = "2025-10"
+uid = "4794e321-25ec-4e02-a5e6-fcca5df701debf79b913"
 
 [[extensions]]
 name = "Etch Cart Transform"
