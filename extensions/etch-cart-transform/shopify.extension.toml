@@ -6,3 +6,6 @@ name = "Etch Cart Transform"
 handle = "etch-cart-transform"
 type = "function"
 targeting = [{ target = "cart.transform.run" }]
+
+[extensions.build]
+typegen_command = "true"

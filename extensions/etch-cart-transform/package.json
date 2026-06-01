@@ -5,17 +5,5 @@
   "private": true,
   "dependencies": {
     "@shopify/shopify_function": "^2.0.1"
-  },
-  "codegen": {
-    "generates": {
-      "src/run.types.d.ts": {
-        "schema": "input.graphql",
-        "documents": ["src/*.ts"],
-        "plugins": [
-          "typescript",
-          "typescript-operations"
-        ]
-      }
-    }
   }
 }
