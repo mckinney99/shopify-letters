@@ -66,16 +66,6 @@
     breakdownEl.hidden = true;
     container.appendChild(breakdownEl);
 
-    // Pricing snapshot — underscore prefix hides from customer-facing UI
-    // but remains visible in the merchant's admin order view.
-    // The Cart Transform function reads these to enforce the correct price.
-    var snapMinorInput = makeHiddenInput('properties[_etch_price_minor]', '');
-    var snapPriceInput = makeHiddenInput('properties[_etch_price]', '');
-    var snapAtInput = makeHiddenInput('properties[_etch_calculated_at]', '');
-    container.appendChild(snapMinorInput);
-    container.appendChild(snapPriceInput);
-    container.appendChild(snapAtInput);
-
     // null until first successful price response — cart button stays disabled until set
     var latestPriceData = null;
 
@@ -85,6 +75,20 @@
 
     var cartBtn = findCartButton();
     var productForm = cartBtn ? cartBtn.closest('form') : null;
+
+    // Inject hidden inputs into the product form directly — the block element may be
+    // rendered outside the <form> tag in the theme, so inputs inside it won't submit.
+    var formTarget = productForm || container;
+
+    // Pricing snapshot — underscore prefix hides from customer-facing UI
+    // but remains visible in the merchant's admin order view.
+    // The Cart Transform function reads these to enforce the correct price.
+    var snapMinorInput = makeHiddenInput('properties[_etch_price_minor]', '');
+    var snapPriceInput = makeHiddenInput('properties[_etch_price]', '');
+    var snapAtInput = makeHiddenInput('properties[_etch_calculated_at]', '');
+    formTarget.appendChild(snapMinorInput);
+    formTarget.appendChild(snapPriceInput);
+    formTarget.appendChild(snapAtInput);
 
     function updateBtn() {
       if (!cartBtn) return;
@@ -133,9 +137,10 @@
       var input = document.createElement('input');
       input.type = 'text';
       input.id = uid;
-      // Shopify line item property — carries the shopper's text through to the order
-      input.name = 'properties[' + field.label + ']';
       input.className = 'etch-customization__input';
+      // Hidden mirror inside the product form — submits the value even if the block is outside <form>
+      var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+      formTarget.appendChild(hiddenFieldInput);
       if (field.maxChars) input.maxLength = field.maxChars;
       var describedBy = errorId;
 
@@ -176,6 +181,7 @@
         }
         updateBtn();
 
+        hiddenFieldInput.value = input.value;
         inputMap[field.id] = input.value;
         // Keep the bundled JSON attribute in sync so the Cart Transform function
         // can read all field values via a single attribute(key: "_etch_inputs") query.
@@ -196,7 +202,7 @@
     // attribute(key: "_etch_inputs"). Created after forEach so inputMap has
     // all initial empty values. The input event handler above keeps it in sync.
     var etchInputsEl = makeHiddenInput('properties[_etch_inputs]', JSON.stringify(inputMap));
-    container.appendChild(etchInputsEl);
+    formTarget.appendChild(etchInputsEl);
 
     // Initial button state: disabled until price loads
     updateBtn();
