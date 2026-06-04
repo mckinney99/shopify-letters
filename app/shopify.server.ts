@@ -113,7 +113,7 @@ const shopify = shopifyApp({
           console.warn("[afterAuth] no cart_transform function found — is shopify app deploy done?");
         } else {
           const createRes = await admin.graphql(
-            `mutation CartTransformCreate($functionId: String!) {
+            `mutation CartTransformCreate($functionId: ID!) {
               cartTransformCreate(functionId: $functionId) {
                 cartTransform { id }
                 userErrors { field message }
