@@ -89,7 +89,7 @@ const shopify = shopifyApp({
     },
   },
   hooks: {
-    afterAuth: async ({ session }) => {
+    afterAuth: async ({ session, admin }) => {
       if (session.accessToken?.startsWith("shpat_")) {
         await migrateShpat(session).catch((err) => {
           console.error("[afterAuth] token migration failed:", err.message);
@@ -98,6 +98,41 @@ const shopify = shopifyApp({
       shopify.registerWebhooks({ session }).catch((err) => {
         console.error("[afterAuth] webhook registration failed (non-fatal):", err.message);
       });
+
+      // Cart Transform functions are not auto-activated on install — cartTransformCreate
+      // must be called once per shop to register the function with checkout.
+      try {
+        const fnsRes = await admin.graphql(
+          `{ shopifyFunctions(first: 25) { nodes { id apiType } } }`
+        );
+        const { data: fnsData } = await fnsRes.json();
+        const fn = ((fnsData?.shopifyFunctions?.nodes ?? []) as { id: string; apiType: string }[]).find(
+          (f) => f.apiType === "cart_transform"
+        );
+        if (!fn) {
+          console.warn("[afterAuth] no cart_transform function found — is shopify app deploy done?");
+        } else {
+          const createRes = await admin.graphql(
+            `mutation CartTransformCreate($functionId: String!) {
+              cartTransformCreate(functionId: $functionId) {
+                cartTransform { id }
+                userErrors { field message }
+              }
+            }`,
+            { variables: { functionId: fn.id } }
+          );
+          const { data: createData } = await createRes.json();
+          const errs: { field: string[]; message: string }[] = createData?.cartTransformCreate?.userErrors ?? [];
+          if (errs.length > 0) {
+            // "already exists" is fine — function was already activated for this shop
+            console.log("[afterAuth] cartTransformCreate:", JSON.stringify(errs));
+          } else {
+            console.log("[afterAuth] cartTransformCreate activated:", createData?.cartTransformCreate?.cartTransform?.id);
+          }
+        }
+      } catch (err) {
+        console.error("[afterAuth] cartTransformCreate failed:", err);
+      }
     },
   },
   future: {

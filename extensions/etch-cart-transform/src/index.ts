@@ -97,11 +97,17 @@ function calculatePrice(
 export default function run(input: Input): unknown {
   const operations: unknown[] = [];
 
+  console.error("[etch] run — lines:", input.cart.lines.length);
+
   for (const line of input.cart.lines) {
     if (line.merchandise.__typename !== "ProductVariant") continue;
 
     const variant = line.merchandise as ProductVariant;
     const metafieldRaw = variant.product.metafield?.value;
+    const attributeRaw = line.attribute?.value;
+
+    console.error("[etch] line", line.id, "| metafield:", metafieldRaw ? "present(" + metafieldRaw.length + ")" : "NULL", "| attribute:", attributeRaw ? "present" : "NULL");
+
     if (!metafieldRaw) continue;
 
     let payload: MetafieldPayload;

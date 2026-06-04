@@ -82,6 +82,8 @@ async function syncPricingMetafield(
     const errs = data?.metafieldsSet?.userErrors ?? [];
     if (errs.length > 0) {
       console.error("[syncPricingMetafield] userErrors:", JSON.stringify(errs));
+    } else {
+      console.log("[syncPricingMetafield] wrote metafield for", productGid, "value length:", value.length);
     }
   } catch (err) {
     console.error("[syncPricingMetafield] exception:", err);
