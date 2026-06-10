@@ -112,8 +112,9 @@ const shopify = shopifyApp({
         if (!fn) {
           console.warn("[afterAuth] no cart_transform function found — is shopify app deploy done?");
         } else {
+          console.log("[afterAuth] calling cartTransformCreate with functionId:", fn.id);
           const createRes = await admin.graphql(
-            `mutation CartTransformCreate($functionId: ID!) {
+            `mutation CartTransformCreate($functionId: String!) {
               cartTransformCreate(functionId: $functionId) {
                 cartTransform { id }
                 userErrors { field message }
@@ -124,8 +125,7 @@ const shopify = shopifyApp({
           const { data: createData } = await createRes.json();
           const errs: { field: string[]; message: string }[] = createData?.cartTransformCreate?.userErrors ?? [];
           if (errs.length > 0) {
-            // "already exists" is fine — function was already activated for this shop
-            console.log("[afterAuth] cartTransformCreate:", JSON.stringify(errs));
+            console.log("[afterAuth] cartTransformCreate userErrors:", JSON.stringify(errs));
           } else {
             console.log("[afterAuth] cartTransformCreate activated:", createData?.cartTransformCreate?.cartTransform?.id);
           }

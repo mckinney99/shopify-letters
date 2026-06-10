@@ -94,7 +94,7 @@ function calculatePrice(
 
 // ── Function entry point ──────────────────────────────────────────────────────
 
-export default function run(input: Input): unknown {
+export function run(input: Input): unknown {
   const operations: unknown[] = [];
 
   console.error("[etch] run — lines:", input.cart.lines.length);

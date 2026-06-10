@@ -5,7 +5,11 @@ uid = "4794e321-25ec-4e02-a5e6-fcca5df701debf79b913"
 name = "Etch Cart Transform"
 handle = "etch-cart-transform"
 type = "function"
-targeting = [{ target = "cart.transform.run" }]
+
+  [[extensions.targeting]]
+  target = "cart.transform.run"
+  input_query = "input.graphql"
+  export = "run"
 
 [extensions.build]
 typegen_command = "true"
