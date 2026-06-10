@@ -15,6 +15,9 @@ type FieldDefinition = {
 };
 
 type MetafieldPayload = {
+  // Shop domain — Input.shop only exposes localTime/metafield, not an
+  // identifier, so it travels via this payload instead (see SL-31).
+  shop?: string;
   fields: FieldDefinition[];
 };
 
@@ -25,7 +28,7 @@ type Metafield = { value: string } | null;
 type ProductVariant = {
   __typename: "ProductVariant";
   id: string;
-  product: { title: string; metafield: Metafield };
+  product: { id: string; title: string; metafield: Metafield };
 };
 
 type UnknownMerchandise = { __typename: string };
@@ -35,6 +38,7 @@ type CartLine = {
   quantity: number;
   merchandise: ProductVariant | UnknownMerchandise;
   attribute: { value: string } | null; // attribute(key: "_etch_inputs")
+  correlationAttribute: { value: string } | null; // attribute(key: "_etch_correlation_id")
 };
 
 type Input = {
@@ -88,19 +92,32 @@ function validateField(rawInput: string, field: FieldDefinition): string[] {
   return errors;
 }
 
+// ── Structured logging — see SL-31 ────────────────────────────────────────────
+// Every line that carries an Etch pricing metafield gets exactly one JSON log
+// line, regardless of outcome, so support can query by correlationId across
+// preview, add-to-cart, and checkout validation.
+
+function logValidation(fields: {
+  shop: string | null;
+  productId: string;
+  correlationId: string | null;
+  pass: boolean;
+  errorCount: number;
+}): void {
+  console.log(JSON.stringify({ event: "checkout_validation", ...fields }));
+}
+
 // ── Function entry point ──────────────────────────────────────────────────────
 
 export function cartValidationsGenerateRun(input: Input): CartValidationsGenerateRunResult {
   const errors: ValidationError[] = [];
-
-  console.error("[etch-validation] run — lines:", input.cart.lines.length);
 
   for (const line of input.cart.lines) {
     if (line.merchandise.__typename !== "ProductVariant") continue;
 
     const variant = line.merchandise as ProductVariant;
     const metafieldRaw = variant.product.metafield?.value;
-    if (!metafieldRaw) continue;
+    if (!metafieldRaw) continue; // not an Etch-configured product
 
     let payload: MetafieldPayload;
     try {
@@ -111,39 +128,36 @@ export function cartValidationsGenerateRun(input: Input): CartValidationsGenerat
 
     if (!Array.isArray(payload.fields) || payload.fields.length === 0) continue;
 
+    const productId = variant.product.id;
+    const correlationId = line.correlationAttribute?.value ?? null;
+    const shop = payload.shop ?? null;
     const productTitle = variant.product.title;
     const attributeRaw = line.attribute?.value;
+    const lineErrors: string[] = [];
 
     if (!attributeRaw) {
-      console.error("[etch-validation] line", line.id, "missing _etch_inputs for", productTitle);
-      errors.push({
-        message: `We couldn't find your customization details for "${productTitle}". Please go back to the product page and re-enter them.`,
-        target: "$.cart",
-      });
-      continue;
-    }
-
-    let etchInputs: Record<string, string>;
-    try {
-      etchInputs = JSON.parse(attributeRaw) as Record<string, string>;
-    } catch {
-      console.error("[etch-validation] line", line.id, "corrupt _etch_inputs for", productTitle);
-      errors.push({
-        message: `We couldn't read your customization details for "${productTitle}". Please go back to the product page and re-enter them.`,
-        target: "$.cart",
-      });
-      continue;
-    }
-
-    for (const field of payload.fields) {
-      const fieldErrors = validateField(etchInputs[field.id] ?? "", field);
-      for (const message of fieldErrors) {
-        console.error("[etch-validation] line", line.id, "field", field.label, "error:", message);
-        errors.push({
-          message: `"${productTitle}" — ${field.label}: ${message}`,
-          target: "$.cart",
-        });
+      lineErrors.push(
+        `We couldn't find your customization details for "${productTitle}". Please go back to the product page and re-enter them.`
+      );
+    } else {
+      try {
+        const etchInputs = JSON.parse(attributeRaw) as Record<string, string>;
+        for (const field of payload.fields) {
+          for (const message of validateField(etchInputs[field.id] ?? "", field)) {
+            lineErrors.push(`"${productTitle}" — ${field.label}: ${message}`);
+          }
+        }
+      } catch {
+        lineErrors.push(
+          `We couldn't read your customization details for "${productTitle}". Please go back to the product page and re-enter them.`
+        );
       }
+    }
+
+    logValidation({ shop, productId, correlationId, pass: lineErrors.length === 0, errorCount: lineErrors.length });
+
+    for (const message of lineErrors) {
+      errors.push({ message, target: "$.cart" });
     }
   }
 

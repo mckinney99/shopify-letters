@@ -11,7 +11,8 @@
             "merchandise": {
               "__typename": "CustomProduct"
             },
-            "attribute": null
+            "attribute": null,
+            "correlationAttribute": null
           }
         ]
       }

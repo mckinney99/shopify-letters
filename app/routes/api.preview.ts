@@ -6,6 +6,8 @@ import { calculateProductPrice } from "../utils/pricing";
 import type { FieldInput, FieldPricingRule } from "../utils/pricing";
 import type { FieldRules } from "../utils/normalize";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
+import { logEvent, shortHash } from "../utils/log";
+import { makeRateLimiter } from "../utils/rateLimit";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -13,22 +15,8 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-// In-memory sliding-window rate limiter: 30 req / shop / 60s.
-// Per-process only — sufficient for abuse prevention at this scale.
-const rateLimitWindows = new Map<string, number[]>();
-const RATE_LIMIT_MAX = 30;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-
-function checkRateLimit(shop: string): boolean {
-  const now = Date.now();
-  const timestamps = (rateLimitWindows.get(shop) ?? []).filter(
-    (t) => now - t < RATE_LIMIT_WINDOW_MS
-  );
-  if (timestamps.length >= RATE_LIMIT_MAX) return false;
-  timestamps.push(now);
-  rateLimitWindows.set(shop, timestamps);
-  return true;
-}
+// 30 req / shop / 60s.
+const checkRateLimit = makeRateLimiter(30, 60_000);
 
 // GET /api/preview?shop=...&productId=...
 // Returns field definitions for a published product so the storefront
@@ -76,14 +64,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Method not allowed" }, { status: 405 });
   }
 
-  let body: { shop?: unknown; productId?: unknown; fields?: unknown };
+  const startedAt = Date.now();
+
+  let body: { shop?: unknown; productId?: unknown; fields?: unknown; correlationId?: unknown };
   try {
     body = await request.json();
   } catch {
     return json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { shop, productId, fields } = body;
+  const { shop, productId, fields, correlationId } = body;
 
   if (typeof shop !== "string" || !shop) {
     return json({ error: "Missing or invalid shop" }, { status: 400 });
@@ -167,6 +157,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // cart line item so support can later verify which config version produced
   // a given price (see SL-30).
   const configVersion = computeConfigVersion(buildPricingConfig(dbFields, pricingRules));
+
+  // Hash of the customer's raw input — lets support correlate a disputed
+  // price with what was actually typed, without logging the input itself.
+  const sortedFieldValues = Object.keys(fieldValues)
+    .sort()
+    .reduce<Record<string, string>>((acc, key) => {
+      acc[key] = fieldValues[key];
+      return acc;
+    }, {});
+  const inputHash = shortHash(JSON.stringify(sortedFieldValues));
+
+  logEvent("preview_request", {
+    shop,
+    productId: productGid,
+    correlationId: typeof correlationId === "string" ? correlationId : null,
+    inputHash,
+    valid: allErrors.length === 0,
+    priceMinor: result.priceMinor,
+    latencyMs: Date.now() - startedAt,
+  });
 
   return json(
     {

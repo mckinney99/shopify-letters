@@ -8,6 +8,7 @@ query RunInput {
         ... on ProductVariant {
           id
           product {
+            id
             metafield(namespace: "etch", key: "pricing_rules") {
               value
             }
@@ -15,6 +16,9 @@ query RunInput {
         }
       }
       attribute(key: "_etch_inputs") {
+        value
+      }
+      correlationAttribute: attribute(key: "_etch_correlation_id") {
         value
       }
     }
