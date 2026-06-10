@@ -22,7 +22,6 @@ const ORDER_QUERY = `
       createdAt
       displayFinancialStatus
       displayFulfillmentStatus
-      customer { displayName }
       lineItems(first: 250) {
         edges {
           node {
@@ -32,6 +31,7 @@ const ORDER_QUERY = `
             variant { title }
             originalUnitPriceSet { shopMoney { amount currencyCode } }
             customAttributes { key value }
+            lineItemGroup { customAttributes { key value } }
           }
         }
       }
@@ -57,7 +57,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     quantity: node.quantity,
     variantTitle: node.variant?.title ?? null,
     unitPrice: node.originalUnitPriceSet?.shopMoney ?? null,
-    customization: parseLineItemCustomization(node.customAttributes),
+    customization: parseLineItemCustomization([
+      ...node.customAttributes,
+      ...(node.lineItemGroup?.customAttributes ?? []),
+    ]),
   }));
 
   return json({
@@ -66,7 +69,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       createdAt: order.createdAt as string,
       financialStatus: order.displayFinancialStatus as string,
       fulfillmentStatus: order.displayFulfillmentStatus as string,
-      customerName: (order.customer?.displayName as string | undefined) ?? "—",
     },
     lineItems: lineItems as Array<{
       id: string;
@@ -177,9 +179,6 @@ export default function OrderDetailPage() {
           <InlineStack gap="400" wrap>
             <Text as="span" variant="bodyMd">
               <Text as="span" fontWeight="semibold">Date:</Text> {order.createdAt.slice(0, 10)}
-            </Text>
-            <Text as="span" variant="bodyMd">
-              <Text as="span" fontWeight="semibold">Customer:</Text> {order.customerName}
             </Text>
             <Badge>{formatStatus(order.financialStatus)}</Badge>
             <Badge>{formatStatus(order.fulfillmentStatus)}</Badge>

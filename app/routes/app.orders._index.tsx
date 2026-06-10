@@ -12,8 +12,14 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { parseLineItemCustomization } from "../utils/orderCustomization";
+import type { LineItemAttribute } from "../utils/orderCustomization";
 
 const PAGE_SIZE = 20;
+
+type LineItemAttributesNode = {
+  customAttributes: LineItemAttribute[];
+  lineItemGroup: { customAttributes: LineItemAttribute[] } | null;
+};
 
 const ORDERS_QUERY = `
   query GetOrders($first: Int!, $after: String) {
@@ -25,9 +31,13 @@ const ORDERS_QUERY = `
           createdAt
           displayFinancialStatus
           displayFulfillmentStatus
-          customer { displayName }
           lineItems(first: 50) {
-            edges { node { customAttributes { key value } } }
+            edges {
+              node {
+                customAttributes { key value }
+                lineItemGroup { customAttributes { key value } }
+              }
+            }
           }
         }
       }
@@ -51,9 +61,13 @@ const ORDERS_PREV_QUERY = `
           createdAt
           displayFinancialStatus
           displayFulfillmentStatus
-          customer { displayName }
           lineItems(first: 50) {
-            edges { node { customAttributes { key value } } }
+            edges {
+              node {
+                customAttributes { key value }
+                lineItemGroup { customAttributes { key value } }
+              }
+            }
           }
         }
       }
@@ -84,8 +98,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const orders = edges.map(({ node }: { node: any }) => {
     const hasCustomization = node.lineItems.edges.some(
-      ({ node: li }: { node: { customAttributes: { key: string; value: string }[] } }) =>
-        parseLineItemCustomization(li.customAttributes) !== null
+      ({ node: li }: { node: LineItemAttributesNode }) =>
+        parseLineItemCustomization([
+          ...li.customAttributes,
+          ...(li.lineItemGroup?.customAttributes ?? []),
+        ]) !== null
     );
 
     return {
@@ -95,7 +112,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       createdAt: node.createdAt,
       financialStatus: node.displayFinancialStatus,
       fulfillmentStatus: node.displayFulfillmentStatus,
-      customerName: node.customer?.displayName ?? "—",
       hasCustomization,
     };
   });
@@ -145,7 +161,6 @@ export default function OrdersPage() {
             headings={[
               { title: "Order" },
               { title: "Date" },
-              { title: "Customer" },
               { title: "Payment" },
               { title: "Fulfillment" },
               { title: "Customization" },
@@ -162,7 +177,6 @@ export default function OrdersPage() {
                   </Link>
                 </IndexTable.Cell>
                 <IndexTable.Cell>{order.createdAt.slice(0, 10)}</IndexTable.Cell>
-                <IndexTable.Cell>{order.customerName}</IndexTable.Cell>
                 <IndexTable.Cell>
                   <Badge tone={statusTone(order.financialStatus)}>
                     {formatStatus(order.financialStatus)}
