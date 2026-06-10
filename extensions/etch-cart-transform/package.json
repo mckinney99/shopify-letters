@@ -1,0 +1,9 @@
+{
+  "name": "etch-cart-transform",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@shopify/shopify_function": "^2.0.1"
+  }
+}

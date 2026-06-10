@@ -30,6 +30,66 @@ const PRODUCT_QUERY = `
   }
 `;
 
+const METAFIELDS_SET_MUTATION = `
+  mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+    metafieldsSet(metafields: $metafields) {
+      metafields { id }
+      userErrors { field message }
+    }
+  }
+`;
+
+// Serializes current fields + pricing rules to a product metafield so the
+// Cart Transform function can enforce the correct price at checkout without
+// network calls (Shopify Functions constraint — see docs/spike-sl25-shopify-functions.md).
+async function syncPricingMetafield(
+  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"],
+  shop: string,
+  productGid: string
+): Promise<void> {
+  const [fields, pricingRules] = await Promise.all([
+    prisma.customizationField.findMany({
+      where: { shop, productId: productGid },
+      orderBy: { position: "asc" },
+    }),
+    prisma.pricingRule.findMany({
+      where: { shop, productId: productGid },
+      include: { charGroups: true },
+    }),
+  ]);
+
+  const value = JSON.stringify({
+    fields: fields.map((f) => ({ id: f.id, label: f.label })),
+    rules: pricingRules.map((r) => ({
+      fieldId: r.fieldId,
+      basePrice: r.basePrice,
+      perCharPrice: r.perCharPrice,
+      charGroups: r.charGroups.map((g) => ({
+        label: g.label,
+        characters: g.characters,
+        pricePerChar: g.pricePerChar,
+      })),
+    })),
+  });
+
+  try {
+    const res = await admin.graphql(METAFIELDS_SET_MUTATION, {
+      variables: {
+        metafields: [{ ownerId: productGid, namespace: "etch", key: "pricing_rules", type: "json", value }],
+      },
+    });
+    const { data } = await res.json();
+    const errs = data?.metafieldsSet?.userErrors ?? [];
+    if (errs.length > 0) {
+      console.error("[syncPricingMetafield] userErrors:", JSON.stringify(errs));
+    } else {
+      console.log("[syncPricingMetafield] wrote metafield for", productGid, "value length:", value.length);
+    }
+  } catch (err) {
+    console.error("[syncPricingMetafield] exception:", err);
+  }
+}
+
 type FieldData = {
   id: string;
   label: string;
@@ -105,7 +165,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const form = await request.formData();
   const _action = form.get("_action") as string;
   const productGid = `gid://shopify/Product/${params.productId}`;
@@ -139,6 +199,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         position: count,
       },
     });
+    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -163,6 +224,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         disallowedChars: disallowedChars.trim() || null,
       },
     });
+    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -181,6 +243,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         });
       }
     }
+    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -204,6 +267,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         data: { position: idx },
       }),
     ]);
+    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -216,6 +280,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       update: { basePrice },
       create: { shop, productId: productGid, fieldId: "", basePrice },
     });
+    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -227,6 +292,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       update: { perCharPrice },
       create: { shop, productId: productGid, fieldId, perCharPrice },
     });
+    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -247,6 +313,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     await prisma.charPriceGroup.create({
       data: { pricingRuleId: rule.id, label, characters, pricePerChar },
     });
+    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -267,6 +334,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       where: { id: groupId, rule: { shop } },
     });
     if (group) await prisma.charPriceGroup.delete({ where: { id: groupId } });
+    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 

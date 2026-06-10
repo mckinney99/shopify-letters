@@ -20,3 +20,8 @@ prisma/dev.db*
 
 # Claude Code local config (developer-specific)
 .claude/
+.mcp.json
+.playwright-mcp/
+
+# Function build artifacts
+extensions/*/dist/
