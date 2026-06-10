@@ -86,9 +86,14 @@
     var snapMinorInput = makeHiddenInput('properties[_etch_price_minor]', '');
     var snapPriceInput = makeHiddenInput('properties[_etch_price]', '');
     var snapAtInput = makeHiddenInput('properties[_etch_calculated_at]', '');
+    // Per-field/per-group pricing breakdown, with field labels resolved at
+    // submit time so the admin order view can render it without looking up
+    // customization fields that may since have changed or been deleted.
+    var snapBreakdownInput = makeHiddenInput('properties[_etch_breakdown]', '');
     formTarget.appendChild(snapMinorInput);
     formTarget.appendChild(snapPriceInput);
     formTarget.appendChild(snapAtInput);
+    formTarget.appendChild(snapBreakdownInput);
 
     function updateBtn() {
       if (!cartBtn) return;
@@ -105,6 +110,9 @@
       snapMinorInput.value = String(data.price);
       snapPriceInput.value = data.priceFormatted;
       snapAtInput.value = new Date().toISOString();
+      snapBreakdownInput.value = data.breakdown
+        ? JSON.stringify(resolveBreakdownLabels(data.breakdown, fields))
+        : '';
       updateBtn();
     }
 
@@ -301,6 +309,28 @@
         priceEl.hidden = true;
         breakdownEl.hidden = true;
       });
+  }
+
+  // Replaces each field breakdown's fieldId with the field's label, so the
+  // snapshot stored on the order line item is self-contained.
+  function resolveBreakdownLabels(breakdown, fields) {
+    return {
+      baseMinor: breakdown.baseMinor,
+      fields: breakdown.fields.map(function (fb) {
+        var fieldDef = null;
+        for (var i = 0; i < fields.length; i++) {
+          if (fields[i].id === fb.fieldId) { fieldDef = fields[i]; break; }
+        }
+        return {
+          fieldLabel: fieldDef ? fieldDef.label : fb.fieldId,
+          unmatchedCount: fb.unmatchedCount,
+          unmatchedPricePerCharMinor: fb.unmatchedPricePerCharMinor,
+          unmatchedSubtotalMinor: fb.unmatchedSubtotalMinor,
+          groups: fb.groups,
+          subtotalMinor: fb.subtotalMinor,
+        };
+      }),
+    };
   }
 
   function renderBreakdown(breakdown, fields, breakdownEl) {
