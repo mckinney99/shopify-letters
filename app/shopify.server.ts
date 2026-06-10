@@ -133,6 +133,38 @@ const shopify = shopifyApp({
       } catch (err) {
         console.error("[afterAuth] cartTransformCreate failed:", err);
       }
+
+      // Cart and Checkout Validation functions are also not auto-activated —
+      // validationCreate must be called once per shop to enable it at checkout.
+      try {
+        const validationRes = await admin.graphql(
+          `mutation ValidationCreate($validation: ValidationCreateInput!) {
+            validationCreate(validation: $validation) {
+              validation { id }
+              userErrors { field message }
+            }
+          }`,
+          {
+            variables: {
+              validation: {
+                functionHandle: "etch-cart-validation",
+                enable: true,
+                blockOnFailure: false,
+              },
+            },
+          }
+        );
+        const { data: validationData } = await validationRes.json();
+        const validationErrs: { field: string[]; message: string }[] =
+          validationData?.validationCreate?.userErrors ?? [];
+        if (validationErrs.length > 0) {
+          console.log("[afterAuth] validationCreate userErrors:", JSON.stringify(validationErrs));
+        } else {
+          console.log("[afterAuth] validationCreate activated:", validationData?.validationCreate?.validation?.id);
+        }
+      } catch (err) {
+        console.error("[afterAuth] validationCreate failed:", err);
+      }
     },
   },
   future: {

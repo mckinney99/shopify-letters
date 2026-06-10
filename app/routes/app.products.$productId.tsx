@@ -59,7 +59,14 @@ async function syncPricingMetafield(
   ]);
 
   const value = JSON.stringify({
-    fields: fields.map((f) => ({ id: f.id, label: f.label })),
+    fields: fields.map((f) => ({
+      id: f.id,
+      label: f.label,
+      minChars: f.minChars,
+      maxChars: f.maxChars,
+      allowedChars: f.allowedChars,
+      disallowedChars: f.disallowedChars,
+    })),
     rules: pricingRules.map((r) => ({
       fieldId: r.fieldId,
       basePrice: r.basePrice,
