@@ -90,10 +90,15 @@
     // submit time so the admin order view can render it without looking up
     // customization fields that may since have changed or been deleted.
     var snapBreakdownInput = makeHiddenInput('properties[_etch_breakdown]', '');
+    // Snapshot ID identifying which pricing config (fields + rules) produced
+    // this price — lets support trace a disputed price back to the rules
+    // that were live at purchase time, even if they've since changed.
+    var snapVersionInput = makeHiddenInput('properties[_etch_rule_version]', '');
     formTarget.appendChild(snapMinorInput);
     formTarget.appendChild(snapPriceInput);
     formTarget.appendChild(snapAtInput);
     formTarget.appendChild(snapBreakdownInput);
+    formTarget.appendChild(snapVersionInput);
 
     function updateBtn() {
       if (!cartBtn) return;
@@ -113,6 +118,7 @@
       snapBreakdownInput.value = data.breakdown
         ? JSON.stringify(resolveBreakdownLabels(data.breakdown, fields))
         : '';
+      snapVersionInput.value = data.configVersion || '';
       updateBtn();
     }
 
