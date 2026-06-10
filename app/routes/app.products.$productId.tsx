@@ -20,6 +20,7 @@ import {
 import { useEffect, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -58,25 +59,10 @@ async function syncPricingMetafield(
     }),
   ]);
 
+  const config = buildPricingConfig(fields, pricingRules);
   const value = JSON.stringify({
-    fields: fields.map((f) => ({
-      id: f.id,
-      label: f.label,
-      minChars: f.minChars,
-      maxChars: f.maxChars,
-      allowedChars: f.allowedChars,
-      disallowedChars: f.disallowedChars,
-    })),
-    rules: pricingRules.map((r) => ({
-      fieldId: r.fieldId,
-      basePrice: r.basePrice,
-      perCharPrice: r.perCharPrice,
-      charGroups: r.charGroups.map((g) => ({
-        label: g.label,
-        characters: g.characters,
-        pricePerChar: g.pricePerChar,
-      })),
-    })),
+    version: computeConfigVersion(config),
+    ...config,
   });
 
   try {

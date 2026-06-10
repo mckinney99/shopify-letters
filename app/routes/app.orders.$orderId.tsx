@@ -161,6 +161,12 @@ function CustomizationDetails({ customization }: { customization: LineItemCustom
             Pricing breakdown not available for orders placed before this feature shipped.
           </Text>
         )}
+
+        {customization.ruleVersion && (
+          <Text as="span" variant="bodySm" tone="subdued">
+            Config version: {customization.ruleVersion}
+          </Text>
+        )}
       </BlockStack>
     </Box>
   );

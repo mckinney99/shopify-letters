@@ -31,6 +31,7 @@ export type LineItemCustomization = {
   priceFormatted: string | null;
   breakdown: LineItemBreakdown | null;
   calculatedAt: string | null;
+  ruleVersion: string | null;
 };
 
 // Returns null when the line item has no etch customization attached.
@@ -62,6 +63,7 @@ export function parseLineItemCustomization(
     priceFormatted: get("_etch_price"),
     breakdown,
     calculatedAt: get("_etch_calculated_at"),
+    ruleVersion: get("_etch_rule_version"),
   };
 }
 

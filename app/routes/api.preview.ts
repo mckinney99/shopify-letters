@@ -5,6 +5,7 @@ import { normalizeInput } from "../utils/normalize";
 import { calculateProductPrice } from "../utils/pricing";
 import type { FieldInput, FieldPricingRule } from "../utils/pricing";
 import type { FieldRules } from "../utils/normalize";
+import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -162,6 +163,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const result = calculateProductPrice(fieldInputs, ruleInputs);
   for (const e of result.validationErrors) allErrors.push(e);
 
+  // Snapshot ID for the rules used to calculate this price — attached to the
+  // cart line item so support can later verify which config version produced
+  // a given price (see SL-30).
+  const configVersion = computeConfigVersion(buildPricingConfig(dbFields, pricingRules));
+
   return json(
     {
       valid: allErrors.length === 0,
@@ -169,6 +175,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       price: result.priceMinor,
       priceFormatted: `$${(result.priceMinor / 100).toFixed(2)}`,
       breakdown: result.breakdown,
+      configVersion,
     },
     { headers: CORS_HEADERS }
   );
