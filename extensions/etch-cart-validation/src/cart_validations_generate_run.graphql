@@ -1,0 +1,23 @@
+query CartValidationsGenerateRunInput {
+  cart {
+    lines {
+      id
+      quantity
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            title
+            metafield(namespace: "etch", key: "pricing_rules") {
+              value
+            }
+          }
+        }
+      }
+      attribute(key: "_etch_inputs") {
+        value
+      }
+    }
+  }
+}

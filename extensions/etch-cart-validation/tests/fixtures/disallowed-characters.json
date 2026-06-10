@@ -1,0 +1,43 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/1",
+              "product": {
+                "title": "Custom Engraved Bracelet",
+                "metafield": {
+                  "value": "{\"fields\":[{\"id\":\"field1\",\"label\":\"Engraving Text\",\"minChars\":1,\"maxChars\":20,\"allowedChars\":null,\"disallowedChars\":\"!@#$%\"}]}"
+                }
+              }
+            },
+            "attribute": {
+              "value": "{\"field1\":\"Hello!\"}"
+            }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "validationAdd": {
+            "errors": [
+              {
+                "message": "\"Custom Engraved Bracelet\" — Engraving Text: Contains disallowed characters: \"!\"",
+                "target": "$.cart"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

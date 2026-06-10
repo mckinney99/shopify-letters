@@ -1,0 +1,28 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 2,
+            "merchandise": {
+              "__typename": "ProductVariant",
+              "id": "gid://shopify/ProductVariant/2",
+              "product": {
+                "title": "Plain T-Shirt",
+                "metafield": null
+              }
+            },
+            "attribute": null
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}
