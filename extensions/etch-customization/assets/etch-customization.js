@@ -142,6 +142,7 @@
     }
 
     var inputMap = {};
+    var fieldErrorEls = {};
 
     fields.forEach(function (field) {
       var uid = 'etch-' + blockId + '-' + field.id;
@@ -183,6 +184,7 @@
       fieldError.className = 'etch-customization__field-error';
       fieldError.setAttribute('role', 'alert');
       fieldError.hidden = true;
+      fieldErrorEls[field.id] = fieldError;
 
       input.addEventListener('input', function () {
         var len = Array.from(input.value).length; // codepoint count
@@ -208,7 +210,7 @@
         // Keep the bundled JSON attribute in sync so the Cart Transform function
         // can read all field values via a single attribute(key: "_etch_inputs") query.
         etchInputsEl.value = JSON.stringify(inputMap);
-        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId);
+        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId);
       });
 
       wrapper.appendChild(label);
@@ -229,7 +231,7 @@
     // Initial button state: disabled until price loads
     updateBtn();
 
-    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId);
+    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId);
   }
 
   // RFC 4122-ish v4 UUID, with a non-crypto fallback for older browsers.
@@ -323,14 +325,14 @@
   }
 
   var debounceTimer;
-  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId) {
+  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId) {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
-      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId);
+      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId);
     }, 350);
   }
 
-  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId) {
+  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId) {
     priceEl.textContent = 'Calculating…';
     priceEl.hidden = false;
 
@@ -349,10 +351,24 @@
         priceEl.textContent = 'Customization: ' + data.priceFormatted;
         priceEl.hidden = false;
         if (data.breakdown) renderBreakdown(data.breakdown, fields, breakdownEl);
-        // API-level errors (server-side normalization edge cases) surface in errorEl
+        // Server-side validation errors surface in errorEl. With a single
+        // field, the "<label>: " prefix is redundant — strip it so the
+        // message isn't shown twice (once here, once in fieldError).
         if (!data.valid && data.errors.length > 0) {
-          errorEl.textContent = data.errors.join(' ');
+          var displayErrors = data.errors;
+          if (fields.length === 1) {
+            var prefix = fields[0].label + ': ';
+            displayErrors = displayErrors.map(function (e) {
+              return e.indexOf(prefix) === 0 ? e.slice(prefix.length) : e;
+            });
+          }
+          errorEl.textContent = displayErrors.join(' ');
           errorEl.hidden = false;
+          // Avoid showing the same validation error twice — once in the
+          // larger shared errorEl and again in each field's inline alert.
+          Object.keys(fieldErrorEls).forEach(function (id) {
+            fieldErrorEls[id].hidden = true;
+          });
         } else {
           errorEl.hidden = true;
           errorEl.textContent = '';
