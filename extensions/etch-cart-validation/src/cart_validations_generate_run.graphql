@@ -8,6 +8,7 @@ query CartValidationsGenerateRunInput {
         ... on ProductVariant {
           id
           product {
+            id
             title
             metafield(namespace: "etch", key: "pricing_rules") {
               value
@@ -16,6 +17,9 @@ query CartValidationsGenerateRunInput {
         }
       }
       attribute(key: "_etch_inputs") {
+        value
+      }
+      correlationAttribute: attribute(key: "_etch_correlation_id") {
         value
       }
     }

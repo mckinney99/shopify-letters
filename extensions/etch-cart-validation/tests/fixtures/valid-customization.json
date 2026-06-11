@@ -12,14 +12,18 @@
               "__typename": "ProductVariant",
               "id": "gid://shopify/ProductVariant/1",
               "product": {
+                "id": "gid://shopify/Product/1",
                 "title": "Custom Engraved Bracelet",
                 "metafield": {
-                  "value": "{\"fields\":[{\"id\":\"field1\",\"label\":\"Engraving Text\",\"minChars\":1,\"maxChars\":20,\"allowedChars\":null,\"disallowedChars\":null}]}"
+                  "value": "{\"shop\":\"etch-test.myshopify.com\",\"fields\":[{\"id\":\"field1\",\"label\":\"Engraving Text\",\"minChars\":1,\"maxChars\":20,\"allowedChars\":null,\"disallowedChars\":null}]}"
                 }
               }
             },
             "attribute": {
               "value": "{\"field1\":\"Hello\"}"
+            },
+            "correlationAttribute": {
+              "value": "corr-valid-customization"
             }
           }
         ]

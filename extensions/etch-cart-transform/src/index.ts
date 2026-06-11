@@ -25,12 +25,16 @@ type FieldDefinition = {
 };
 
 type MetafieldPayload = {
+  // Shop domain — Input.shop only exposes localTime/metafield, not an
+  // identifier, so it travels via this payload instead (see SL-31).
+  shop?: string;
   fields: FieldDefinition[];
   rules: FieldPricingRule[];
 };
 
 // ── Types for the Shopify Function input (mirrors input.graphql) ──────────────
-// CartLine exposes attribute(key:) singular only — no attributes array.
+// CartLine exposes attribute(key:) singular only — no attributes array, so
+// each distinct attribute needs its own (optionally aliased) query field.
 // ProductVariant has no price field; currency is inferred by the runtime.
 
 type Metafield = { value: string } | null;
@@ -38,7 +42,7 @@ type Metafield = { value: string } | null;
 type ProductVariant = {
   __typename: "ProductVariant";
   id: string;
-  product: { metafield: Metafield };
+  product: { id: string; metafield: Metafield };
 };
 
 type UnknownMerchandise = { __typename: string };
@@ -48,6 +52,7 @@ type CartLine = {
   quantity: number;
   merchandise: ProductVariant | UnknownMerchandise;
   attribute: { value: string } | null; // attribute(key: "_etch_inputs")
+  correlationAttribute: { value: string } | null; // attribute(key: "_etch_correlation_id")
 };
 
 type Input = {
@@ -92,43 +97,66 @@ function calculatePrice(
   return total;
 }
 
+// ── Structured logging — see SL-31 ────────────────────────────────────────────
+// Every line that carries an Etch pricing metafield gets exactly one JSON log
+// line, regardless of outcome, so support can query by correlationId across
+// preview, add-to-cart, and checkout enforcement.
+
+type EnforcementLog = {
+  event: "checkout_price_enforcement";
+  shop: string | null;
+  productId: string;
+  correlationId: string | null;
+  enforcedPriceMinor: number | null;
+  pass: boolean;
+  reason?: string;
+};
+
+function logEnforcement(fields: EnforcementLog): void {
+  console.log(JSON.stringify(fields));
+}
+
 // ── Function entry point ──────────────────────────────────────────────────────
 
 export function run(input: Input): unknown {
   const operations: unknown[] = [];
-
-  console.error("[etch] run — lines:", input.cart.lines.length);
 
   for (const line of input.cart.lines) {
     if (line.merchandise.__typename !== "ProductVariant") continue;
 
     const variant = line.merchandise as ProductVariant;
     const metafieldRaw = variant.product.metafield?.value;
-    const attributeRaw = line.attribute?.value;
+    if (!metafieldRaw) continue; // not an Etch-configured product
 
-    console.error("[etch] line", line.id, "| metafield:", metafieldRaw ? "present(" + metafieldRaw.length + ")" : "NULL", "| attribute:", attributeRaw ? "present" : "NULL");
-
-    if (!metafieldRaw) continue;
+    const productId = variant.product.id;
+    const correlationId = line.correlationAttribute?.value ?? null;
 
     let payload: MetafieldPayload;
     try {
       payload = JSON.parse(metafieldRaw) as MetafieldPayload;
     } catch {
+      logEnforcement({ event: "checkout_price_enforcement", shop: null, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "invalid_metafield" });
       continue;
     }
 
     if (!Array.isArray(payload.fields) || !Array.isArray(payload.rules)) continue;
     if (payload.fields.length === 0 && payload.rules.length === 0) continue;
 
+    const shop = payload.shop ?? null;
+
     // Read the bundled field inputs written by the storefront extension.
     // Format: { [fieldId]: rawText } — keyed by field ID, not label.
     const etchRaw = line.attribute?.value;
-    if (!etchRaw) continue;
+    if (!etchRaw) {
+      logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "missing_inputs" });
+      continue;
+    }
 
     let etchInputs: Record<string, string>;
     try {
       etchInputs = JSON.parse(etchRaw) as Record<string, string>;
     } catch {
+      logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "corrupt_inputs" });
       continue;
     }
 
@@ -139,6 +167,8 @@ export function run(input: Input): unknown {
 
     const enforcedMinor = calculatePrice(fieldInputs, payload.rules);
     const enforcedAmount = (enforcedMinor / 100).toFixed(2);
+
+    logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: enforcedMinor, pass: true });
 
     // Operation structure per CartTransformRunResult schema (2025-10):
     // lineExpand > expandedCartItems[].price.adjustment.fixedPricePerUnit.amount

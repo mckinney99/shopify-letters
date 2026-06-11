@@ -62,6 +62,9 @@ async function syncPricingMetafield(
   const config = buildPricingConfig(fields, pricingRules);
   const value = JSON.stringify({
     version: computeConfigVersion(config),
+    // Lets the checkout functions include a shop identifier in their
+    // structured logs without a Shop.id field being queryable — see SL-31.
+    shop,
     ...config,
   });
 

@@ -94,11 +94,17 @@
     // this price — lets support trace a disputed price back to the rules
     // that were live at purchase time, even if they've since changed.
     var snapVersionInput = makeHiddenInput('properties[_etch_rule_version]', '');
+    // Correlation ID generated once per customization session — threaded
+    // through /api/preview, /api/log, and the checkout functions so support
+    // can follow a single customer's journey across all four logs (SL-31).
+    var correlationId = generateCorrelationId();
+    var snapCorrelationInput = makeHiddenInput('properties[_etch_correlation_id]', correlationId);
     formTarget.appendChild(snapMinorInput);
     formTarget.appendChild(snapPriceInput);
     formTarget.appendChild(snapAtInput);
     formTarget.appendChild(snapBreakdownInput);
     formTarget.appendChild(snapVersionInput);
+    formTarget.appendChild(snapCorrelationInput);
 
     function updateBtn() {
       if (!cartBtn) return;
@@ -129,7 +135,9 @@
           e.preventDefault();
           errorEl.textContent = 'Pricing is still loading — please wait a moment before adding to cart.';
           errorEl.hidden = false;
+          return;
         }
+        logAddToCart(shop, productId, appUrl, correlationId, inputMap);
       });
     }
 
@@ -200,7 +208,7 @@
         // Keep the bundled JSON attribute in sync so the Cart Transform function
         // can read all field values via a single attribute(key: "_etch_inputs") query.
         etchInputsEl.value = JSON.stringify(inputMap);
-        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate);
+        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId);
       });
 
       wrapper.appendChild(label);
@@ -221,7 +229,45 @@
     // Initial button state: disabled until price loads
     updateBtn();
 
-    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate);
+    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId);
+  }
+
+  // RFC 4122-ish v4 UUID, with a non-crypto fallback for older browsers.
+  function generateCorrelationId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      var v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  // Fire-and-forget log of an add-to-cart event for an Etch-customized line —
+  // lets support trace this customer's journey via correlationId across
+  // /api/preview, this event, and the checkout function logs (SL-31).
+  function logAddToCart(shop, productId, appUrl, correlationId, inputMap) {
+    var payloadSize = 0;
+    Object.keys(inputMap).forEach(function (key) {
+      payloadSize += (inputMap[key] || '').length;
+    });
+    var body = JSON.stringify({
+      shop: shop,
+      productId: productId,
+      correlationId: correlationId,
+      payloadSize: payloadSize,
+    });
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(appUrl + '/api/log', new Blob([body], { type: 'application/json' }));
+    } else {
+      fetch(appUrl + '/api/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body,
+        keepalive: true,
+      }).catch(function () {});
+    }
   }
 
   function makeHiddenInput(name, value) {
@@ -275,21 +321,21 @@
   }
 
   var debounceTimer;
-  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate) {
+  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId) {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
-      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate);
+      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId);
     }, 350);
   }
 
-  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate) {
+  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, breakdownEl, onPriceUpdate, correlationId) {
     priceEl.textContent = 'Calculating…';
     priceEl.hidden = false;
 
     fetch(appUrl + '/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shop: shop, productId: productId, fields: inputMap }),
+      body: JSON.stringify({ shop: shop, productId: productId, fields: inputMap, correlationId: correlationId }),
     })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
