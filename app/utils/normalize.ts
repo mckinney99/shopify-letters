@@ -37,13 +37,13 @@ export function normalizeInput(rawInput: string, rules: FieldRules): NormalizeRe
     const allowed = new Set([...rules.allowedChars]);
     const bad = [...new Set(chars.filter((c) => c !== " " && !allowed.has(c)))];
     if (bad.length > 0) {
-      errors.push(`Contains characters not allowed: "${bad.join("")}"`);
+      errors.push(`${bad.join(", ")} character${bad.length === 1 ? "" : "s"} not allowed`);
     }
   } else if (rules.disallowedChars != null && rules.disallowedChars.length > 0) {
     const disallowed = new Set([...rules.disallowedChars]);
     const bad = [...new Set(chars.filter((c) => disallowed.has(c)))];
     if (bad.length > 0) {
-      errors.push(`Contains disallowed characters: "${bad.join("")}"`);
+      errors.push(`${bad.join(", ")} character${bad.length === 1 ? "" : "s"} not allowed`);
     }
   }
 

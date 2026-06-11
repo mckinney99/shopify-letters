@@ -116,7 +116,7 @@ describe("normalizeInput", () => {
   it("errors when input contains disallowed characters", () => {
     const { errors } = normalizeInput("hello!", { disallowedChars: "!@#" });
     expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatch(/disallowed/);
+    expect(errors[0]).toMatch(/not allowed/);
     expect(errors[0]).toContain("!");
   });
 

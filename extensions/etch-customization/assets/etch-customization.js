@@ -306,7 +306,8 @@
       var bad = new Set();
       chars.forEach(function (c) { if (c !== ' ' && !allowed.has(c)) bad.add(c); });
       if (bad.size > 0) {
-        errors.push('Characters not allowed: ' + Array.from(bad).join(''));
+        var badArr = Array.from(bad);
+        errors.push(badArr.join(', ') + ' character' + (badArr.length === 1 ? '' : 's') + ' not allowed');
       }
     }
     if (field.disallowedChars) {
@@ -314,7 +315,8 @@
       var found = new Set();
       chars.forEach(function (c) { if (disallowedSet.has(c)) found.add(c); });
       if (found.size > 0) {
-        errors.push('Characters not allowed: ' + Array.from(found).join(''));
+        var foundArr = Array.from(found);
+        errors.push(foundArr.join(', ') + ' character' + (foundArr.length === 1 ? '' : 's') + ' not allowed');
       }
     }
     return errors;

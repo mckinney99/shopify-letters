@@ -38,11 +38,11 @@ function functionValidateField(
   if (field.allowedChars) {
     const allowed = new Set([...field.allowedChars]);
     const bad = [...new Set(chars.filter((c) => c !== " " && !allowed.has(c)))];
-    if (bad.length > 0) errors.push(`Contains characters not allowed: "${bad.join("")}"`);
+    if (bad.length > 0) errors.push(`${bad.join(", ")} character${bad.length === 1 ? "" : "s"} not allowed`);
   } else if (field.disallowedChars) {
     const disallowed = new Set([...field.disallowedChars]);
     const bad = [...new Set(chars.filter((c) => disallowed.has(c)))];
-    if (bad.length > 0) errors.push(`Contains disallowed characters: "${bad.join("")}"`);
+    if (bad.length > 0) errors.push(`${bad.join(", ")} character${bad.length === 1 ? "" : "s"} not allowed`);
   }
 
   if (field.minChars != null && chars.length < field.minChars) {
@@ -75,14 +75,14 @@ describe("Cart Validation rule parity (in-memory)", () => {
     const rules: FieldRules = { allowedChars: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" };
 
     expect(functionValidateField("Hello123", rules)).toEqual(normalizeInput("Hello123", rules).errors);
-    expect(functionValidateField("Hello123", rules)).toEqual([`Contains characters not allowed: "elo"`]);
+    expect(functionValidateField("Hello123", rules)).toEqual(["e, l, o characters not allowed"]);
   });
 
   it("disallowedChars: function matches normalizeInput", () => {
     const rules: FieldRules = { disallowedChars: "!@#$%" };
 
     expect(functionValidateField("Hello!", rules)).toEqual(normalizeInput("Hello!", rules).errors);
-    expect(functionValidateField("Hello!", rules)).toEqual([`Contains disallowed characters: "!"`]);
+    expect(functionValidateField("Hello!", rules)).toEqual(["! character not allowed"]);
   });
 
   it("normalizes whitespace before validating, like normalizeInput", () => {
@@ -137,7 +137,7 @@ describe("Cart Validation metafield roundtrip", () => {
     // Too short and contains a disallowed character
     expect(functionValidateField("!", fieldDef)).toEqual(normalizeInput("!", fieldDef).errors);
     expect(functionValidateField("!", fieldDef)).toEqual([
-      `Contains disallowed characters: "!"`,
+      "! character not allowed",
       "Must be at least 2 characters.",
     ]);
 

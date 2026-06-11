@@ -72,13 +72,13 @@ function validateField(rawInput: string, field: FieldDefinition): string[] {
     const allowed = new Set([...field.allowedChars]);
     const bad = [...new Set(chars.filter((c) => c !== " " && !allowed.has(c)))];
     if (bad.length > 0) {
-      errors.push(`Contains characters not allowed: "${bad.join("")}"`);
+      errors.push(`${bad.join(", ")} character${bad.length === 1 ? "" : "s"} not allowed`);
     }
   } else if (field.disallowedChars) {
     const disallowed = new Set([...field.disallowedChars]);
     const bad = [...new Set(chars.filter((c) => disallowed.has(c)))];
     if (bad.length > 0) {
-      errors.push(`Contains disallowed characters: "${bad.join("")}"`);
+      errors.push(`${bad.join(", ")} character${bad.length === 1 ? "" : "s"} not allowed`);
     }
   }
 

@@ -35,7 +35,7 @@
           "validationAdd": {
             "errors": [
               {
-                "message": "\"Custom Engraved Bracelet\" — Engraving Text: Contains disallowed characters: \"!\"",
+                "message": "\"Custom Engraved Bracelet\" — Engraving Text: ! character not allowed",
                 "target": "$.cart"
               }
             ]
