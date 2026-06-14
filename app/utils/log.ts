@@ -11,3 +11,9 @@ export function shortHash(input: string): string {
 export function logEvent(event: string, fields: Record<string, unknown>): void {
   console.log(JSON.stringify({ event, ts: new Date().toISOString(), ...fields }));
 }
+
+// Like logEvent, but on stderr with severity: "alert" — for conditions that
+// should page/notify someone, e.g. a metric crossing an alert threshold.
+export function logAlert(event: string, fields: Record<string, unknown>): void {
+  console.error(JSON.stringify({ event, ts: new Date().toISOString(), severity: "alert", ...fields }));
+}

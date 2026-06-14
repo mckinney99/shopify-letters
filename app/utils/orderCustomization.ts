@@ -29,9 +29,11 @@ export type LineItemBreakdown = {
 export type LineItemCustomization = {
   fieldValues: { label: string; value: string }[];
   priceFormatted: string | null;
+  previewPriceMinor: number | null;
   breakdown: LineItemBreakdown | null;
   calculatedAt: string | null;
   ruleVersion: string | null;
+  correlationId: string | null;
 };
 
 // Returns null when the line item has no etch customization attached.
@@ -58,15 +60,29 @@ export function parseLineItemCustomization(
     }
   }
 
+  const rawPreviewPriceMinor = get("_etch_price_minor");
+  const previewPriceMinor =
+    rawPreviewPriceMinor != null && Number.isFinite(Number(rawPreviewPriceMinor))
+      ? Number(rawPreviewPriceMinor)
+      : null;
+
   return {
     fieldValues,
     priceFormatted: get("_etch_price"),
+    previewPriceMinor,
     breakdown,
     calculatedAt: get("_etch_calculated_at"),
     ruleVersion: get("_etch_rule_version"),
+    correlationId: get("_etch_correlation_id"),
   };
 }
 
 export function formatMinor(minor: number): string {
   return `$${(minor / 100).toFixed(2)}`;
+}
+
+// Converts a decimal money amount (e.g. "17.00") to integer minor units
+// (1700), matching the format of _etch_price_minor for mismatch comparison.
+export function dollarsToMinor(amount: string): number {
+  return Math.round(parseFloat(amount) * 100);
 }

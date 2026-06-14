@@ -11,8 +11,9 @@ import {
   Box,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
-import { parseLineItemCustomization, formatMinor } from "../utils/orderCustomization";
+import { parseLineItemCustomization, formatMinor, dollarsToMinor } from "../utils/orderCustomization";
 import type { LineItemBreakdown, LineItemCustomization } from "../utils/orderCustomization";
+import { recordPriceMismatch } from "../utils/metrics";
 
 const ORDER_QUERY = `
   query GetOrder($id: ID!) {
@@ -28,7 +29,7 @@ const ORDER_QUERY = `
             id
             title
             quantity
-            variant { title }
+            variant { title product { id } }
             originalUnitPriceSet { shopMoney { amount currencyCode } }
             customAttributes { key value }
             lineItemGroup { customAttributes { key value } }
@@ -40,7 +41,7 @@ const ORDER_QUERY = `
 `;
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const orderGid = `gid://shopify/Order/${params.orderId}`;
 
   const response = await admin.graphql(ORDER_QUERY, { variables: { id: orderGid } });
@@ -51,17 +52,36 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   const order = data.order;
-  const lineItems = order.lineItems.edges.map(({ node }: any) => ({
-    id: node.id,
-    title: node.title,
-    quantity: node.quantity,
-    variantTitle: node.variant?.title ?? null,
-    unitPrice: node.originalUnitPriceSet?.shopMoney ?? null,
-    customization: parseLineItemCustomization([
+  const lineItems = order.lineItems.edges.map(({ node }: any) => {
+    const customization = parseLineItemCustomization([
       ...node.customAttributes,
       ...(node.lineItemGroup?.customAttributes ?? []),
-    ]),
-  }));
+    ]);
+
+    // AC4/AC6 (SL-32): compare the last preview price against the price
+    // actually charged at checkout and record the result.
+    let priceMismatch = false;
+    if (customization?.previewPriceMinor != null && node.originalUnitPriceSet?.shopMoney?.amount) {
+      const chargedPriceMinor = dollarsToMinor(node.originalUnitPriceSet.shopMoney.amount);
+      priceMismatch = customization.previewPriceMinor !== chargedPriceMinor;
+      recordPriceMismatch(session.shop, {
+        productId: node.variant?.product?.id ?? null,
+        correlationId: customization.correlationId,
+        previewPriceMinor: customization.previewPriceMinor,
+        chargedPriceMinor,
+      });
+    }
+
+    return {
+      id: node.id,
+      title: node.title,
+      quantity: node.quantity,
+      variantTitle: node.variant?.title ?? null,
+      unitPrice: node.originalUnitPriceSet?.shopMoney ?? null,
+      customization,
+      priceMismatch,
+    };
+  });
 
   return json({
     order: {
@@ -77,6 +97,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       variantTitle: string | null;
       unitPrice: { amount: string; currencyCode: string } | null;
       customization: LineItemCustomization | null;
+      priceMismatch: boolean;
     }>,
   });
 };
@@ -126,7 +147,13 @@ function BreakdownList({ breakdown }: { breakdown: LineItemBreakdown }) {
   );
 }
 
-function CustomizationDetails({ customization }: { customization: LineItemCustomization }) {
+function CustomizationDetails({
+  customization,
+  priceMismatch,
+}: {
+  customization: LineItemCustomization;
+  priceMismatch: boolean;
+}) {
   return (
     <Box
       paddingBlockStart="300"
@@ -137,6 +164,7 @@ function CustomizationDetails({ customization }: { customization: LineItemCustom
       <BlockStack gap="200">
         <InlineStack gap="200" blockAlign="center">
           <Badge tone="success">Customized</Badge>
+          {priceMismatch && <Badge tone="critical">Price mismatch</Badge>}
           {customization.priceFormatted && (
             <Text as="span" variant="bodySm" fontWeight="semibold">
               Customization price: {customization.priceFormatted}
@@ -225,7 +253,10 @@ export default function OrderDetailPage() {
                   </InlineStack>
 
                   {item.customization && (
-                    <CustomizationDetails customization={item.customization} />
+                    <CustomizationDetails
+                      customization={item.customization}
+                      priceMismatch={item.priceMismatch}
+                    />
                   )}
                 </BlockStack>
               </Box>

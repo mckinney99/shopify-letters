@@ -103,6 +103,7 @@ function logValidation(fields: {
   correlationId: string | null;
   pass: boolean;
   errorCount: number;
+  reason?: string;
 }): void {
   console.log(JSON.stringify({ event: "checkout_validation", ...fields }));
 }
@@ -134,8 +135,10 @@ export function cartValidationsGenerateRun(input: Input): CartValidationsGenerat
     const productTitle = variant.product.title;
     const attributeRaw = line.attribute?.value;
     const lineErrors: string[] = [];
+    let reason: string | undefined;
 
     if (!attributeRaw) {
+      reason = "missing_payload";
       lineErrors.push(
         `We couldn't find your customization details for "${productTitle}". Please go back to the product page and re-enter them.`
       );
@@ -147,14 +150,16 @@ export function cartValidationsGenerateRun(input: Input): CartValidationsGenerat
             lineErrors.push(`"${productTitle}" — ${field.label}: ${message}`);
           }
         }
+        if (lineErrors.length > 0) reason = "validation_error";
       } catch {
+        reason = "corrupt_payload";
         lineErrors.push(
           `We couldn't read your customization details for "${productTitle}". Please go back to the product page and re-enter them.`
         );
       }
     }
 
-    logValidation({ shop, productId, correlationId, pass: lineErrors.length === 0, errorCount: lineErrors.length });
+    logValidation({ shop, productId, correlationId, pass: lineErrors.length === 0, errorCount: lineErrors.length, reason });
 
     for (const message of lineErrors) {
       errors.push({ message, target: "$.cart" });

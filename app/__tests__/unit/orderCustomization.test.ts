@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseLineItemCustomization, formatMinor } from "~/utils/orderCustomization";
+import { parseLineItemCustomization, formatMinor, dollarsToMinor } from "~/utils/orderCustomization";
 
 describe("parseLineItemCustomization", () => {
   it("returns null for line items without etch customization", () => {
@@ -19,7 +19,34 @@ describe("parseLineItemCustomization", () => {
     expect(result).not.toBeNull();
     expect(result?.fieldValues).toEqual([{ label: "Engraving Text", value: "Happy Birthday" }]);
     expect(result?.priceFormatted).toBe("$3.50");
+    expect(result?.previewPriceMinor).toBe(350);
     expect(result?.calculatedAt).toBe("2026-06-01T00:00:00.000Z");
+  });
+
+  it("returns null previewPriceMinor when _etch_price_minor is absent", () => {
+    const result = parseLineItemCustomization([
+      { key: "_etch_inputs", value: '{"f1":"Hi"}' },
+      { key: "_etch_price", value: "$2.00" },
+    ]);
+
+    expect(result?.previewPriceMinor).toBeNull();
+  });
+
+  it("extracts the correlation ID from _etch_correlation_id", () => {
+    const result = parseLineItemCustomization([
+      { key: "_etch_inputs", value: '{"f1":"Hi"}' },
+      { key: "_etch_correlation_id", value: "corr-123" },
+    ]);
+
+    expect(result?.correlationId).toBe("corr-123");
+  });
+
+  it("returns null correlationId when _etch_correlation_id is absent", () => {
+    const result = parseLineItemCustomization([
+      { key: "_etch_inputs", value: '{"f1":"Hi"}' },
+    ]);
+
+    expect(result?.correlationId).toBeNull();
   });
 
   it("parses the pricing breakdown when present", () => {
@@ -122,6 +149,7 @@ describe("simulated support scenario (FR25)", () => {
     expect(result?.fieldValues).toEqual([{ label: "Custom message", value: "Happy Birthday 😀😎" }]);
     // Enforced price
     expect(result?.priceFormatted).toBe("$17.00");
+    expect(result?.previewPriceMinor).toBe(1700);
     // Breakdown, including per-group character counts
     expect(result?.breakdown?.baseMinor).toBe(900);
     expect(result?.breakdown?.fields[0].groups[0]).toEqual({
@@ -143,5 +171,17 @@ describe("formatMinor", () => {
     expect(formatMinor(0)).toBe("$0.00");
     expect(formatMinor(150)).toBe("$1.50");
     expect(formatMinor(99999)).toBe("$999.99");
+  });
+});
+
+describe("dollarsToMinor", () => {
+  it("converts a decimal amount string to integer minor units", () => {
+    expect(dollarsToMinor("17.00")).toBe(1700);
+    expect(dollarsToMinor("3.50")).toBe(350);
+    expect(dollarsToMinor("0.00")).toBe(0);
+  });
+
+  it("rounds to the nearest cent", () => {
+    expect(dollarsToMinor("2.999")).toBe(300);
   });
 });

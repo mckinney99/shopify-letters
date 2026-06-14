@@ -11,12 +11,15 @@ import {
   Pagination,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
-import { parseLineItemCustomization } from "../utils/orderCustomization";
+import { parseLineItemCustomization, dollarsToMinor } from "../utils/orderCustomization";
 import type { LineItemAttribute } from "../utils/orderCustomization";
+import { recordPriceMismatch } from "../utils/metrics";
 
 const PAGE_SIZE = 20;
 
 type LineItemAttributesNode = {
+  originalUnitPriceSet: { shopMoney: { amount: string } } | null;
+  variant: { product: { id: string } | null } | null;
   customAttributes: LineItemAttribute[];
   lineItemGroup: { customAttributes: LineItemAttribute[] } | null;
 };
@@ -34,6 +37,8 @@ const ORDERS_QUERY = `
           lineItems(first: 50) {
             edges {
               node {
+                originalUnitPriceSet { shopMoney { amount } }
+                variant { product { id } }
                 customAttributes { key value }
                 lineItemGroup { customAttributes { key value } }
               }
@@ -64,6 +69,8 @@ const ORDERS_PREV_QUERY = `
           lineItems(first: 50) {
             edges {
               node {
+                originalUnitPriceSet { shopMoney { amount } }
+                variant { product { id } }
                 customAttributes { key value }
                 lineItemGroup { customAttributes { key value } }
               }
@@ -82,7 +89,7 @@ const ORDERS_PREV_QUERY = `
 `;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const after = url.searchParams.get("after") ?? undefined;
   const before = url.searchParams.get("before") ?? undefined;
@@ -97,13 +104,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { edges, pageInfo } = data.orders;
 
   const orders = edges.map(({ node }: { node: any }) => {
-    const hasCustomization = node.lineItems.edges.some(
-      ({ node: li }: { node: LineItemAttributesNode }) =>
-        parseLineItemCustomization([
-          ...li.customAttributes,
-          ...(li.lineItemGroup?.customAttributes ?? []),
-        ]) !== null
-    );
+    let hasCustomization = false;
+    let hasPriceMismatch = false;
+
+    for (const { node: li } of node.lineItems.edges as { node: LineItemAttributesNode }[]) {
+      const customization = parseLineItemCustomization([
+        ...li.customAttributes,
+        ...(li.lineItemGroup?.customAttributes ?? []),
+      ]);
+      if (!customization) continue;
+      hasCustomization = true;
+
+      // AC4/AC6 (SL-32): compare the last preview price against the price
+      // actually charged at checkout and record the result.
+      if (customization.previewPriceMinor != null && li.originalUnitPriceSet?.shopMoney?.amount) {
+        const chargedPriceMinor = dollarsToMinor(li.originalUnitPriceSet.shopMoney.amount);
+        if (customization.previewPriceMinor !== chargedPriceMinor) hasPriceMismatch = true;
+        recordPriceMismatch(session.shop, {
+          productId: li.variant?.product?.id ?? null,
+          correlationId: customization.correlationId,
+          previewPriceMinor: customization.previewPriceMinor,
+          chargedPriceMinor,
+        });
+      }
+    }
 
     return {
       id: node.id,
@@ -113,6 +137,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       financialStatus: node.displayFinancialStatus,
       fulfillmentStatus: node.displayFulfillmentStatus,
       hasCustomization,
+      hasPriceMismatch,
     };
   });
 
@@ -188,7 +213,9 @@ export default function OrdersPage() {
                   </Badge>
                 </IndexTable.Cell>
                 <IndexTable.Cell>
-                  {order.hasCustomization ? (
+                  {order.hasPriceMismatch ? (
+                    <Badge tone="critical">Price mismatch</Badge>
+                  ) : order.hasCustomization ? (
                     <Badge tone="success">Customized</Badge>
                   ) : (
                     <Text as="span" tone="subdued">—</Text>
