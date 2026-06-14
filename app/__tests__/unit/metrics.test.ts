@@ -144,6 +144,57 @@ describe("recordPriceMismatch", () => {
     expect(logged.rate).toBe(1);
   });
 
+  it("does not re-alert while the mismatch rate remains exceeded, but does on a new incident", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const shop = "mismatch-test-edge-trigger.myshopify.com";
+
+    // First 10 calls all mismatch -> rate exceeds threshold, alert fires once.
+    for (let i = 0; i < 10; i++) {
+      recordPriceMismatch(shop, {
+        productId: "gid://shopify/Product/1",
+        correlationId: `corr-a-${i}`,
+        previewPriceMinor: 1700,
+        chargedPriceMinor: 1500,
+      });
+    }
+    expect(errorSpy).toHaveBeenCalledOnce();
+
+    // Rate stays exceeded (still all mismatches) -> no additional alerts.
+    for (let i = 0; i < 10; i++) {
+      recordPriceMismatch(shop, {
+        productId: "gid://shopify/Product/1",
+        correlationId: `corr-b-${i}`,
+        previewPriceMinor: 1700,
+        chargedPriceMinor: 1500,
+      });
+    }
+    expect(errorSpy).toHaveBeenCalledOnce();
+
+    // Flood with matches to bring the rolling rate back under threshold
+    // (50 = the mismatch window size, so this fully displaces prior samples).
+    for (let i = 0; i < 50; i++) {
+      recordPriceMismatch(shop, {
+        productId: "gid://shopify/Product/1",
+        correlationId: `corr-c-${i}`,
+        previewPriceMinor: 1700,
+        chargedPriceMinor: 1700,
+      });
+    }
+    expect(errorSpy).toHaveBeenCalledOnce();
+
+    // New incident: exceed the threshold again -> alert fires a second time.
+    for (let i = 0; i < 10; i++) {
+      recordPriceMismatch(shop, {
+        productId: "gid://shopify/Product/1",
+        correlationId: `corr-d-${i}`,
+        previewPriceMinor: 1700,
+        chargedPriceMinor: 1500,
+      });
+    }
+    expect(errorSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("does not alert when the mismatch rate stays under the threshold", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "log").mockImplementation(() => {});

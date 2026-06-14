@@ -48,6 +48,7 @@ const MISMATCH_MIN_SAMPLE = 10;
 const MISMATCH_THRESHOLD = 0.05; // 5%
 
 const mismatchWindows = new Map<string, boolean[]>();
+const mismatchAlerting = new Map<string, boolean>();
 
 export function recordPriceMismatch(
   shop: string,
@@ -72,8 +73,13 @@ export function recordPriceMismatch(
 
   const sampleSize = window.length;
   const rate = window.filter(Boolean).length / sampleSize;
+  const exceeded = sampleSize >= MISMATCH_MIN_SAMPLE && rate > MISMATCH_THRESHOLD;
 
-  if (sampleSize >= MISMATCH_MIN_SAMPLE && rate > MISMATCH_THRESHOLD) {
+  // Edge-triggered: only alert on the transition into "exceeded", so a
+  // sustained high rate (e.g. across repeated admin page loads) pages once
+  // per incident rather than once per sample.
+  if (exceeded && !mismatchAlerting.get(shop)) {
     logAlert("price_mismatch_rate_exceeded", { shop, rate, sampleSize, threshold: MISMATCH_THRESHOLD });
   }
+  mismatchAlerting.set(shop, exceeded);
 }
