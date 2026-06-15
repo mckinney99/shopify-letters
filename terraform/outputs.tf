@@ -26,6 +26,16 @@ output "db_secret_arn" {
   value       = aws_secretsmanager_secret.db.arn
 }
 
+output "shopify_secret_arn" {
+  description = "Secrets Manager secret holding the Shopify API credentials."
+  value       = aws_secretsmanager_secret.shopify.arn
+}
+
+output "ecs_task_id" {
+  description = "Running task ID, for `aws ecs execute-command` (see README)."
+  value       = "Run: aws ecs list-tasks --cluster ${aws_ecs_cluster.main.name} --service-name ${aws_ecs_service.app.name}"
+}
+
 output "production_url" {
   description = "Production HTTPS URL for the app, once DNS has propagated."
   value       = "https://${var.domain_name}"

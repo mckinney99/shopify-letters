@@ -58,16 +58,16 @@ variable "db_allocated_storage" {
   default     = 20
 }
 
-variable "shopify_api_key_placeholder" {
-  description = "Placeholder SHOPIFY_API_KEY so the container can boot and check-env.mjs passes. Real value wired up in SL-41."
+variable "shopify_api_key" {
+  description = "Shopify app API key (client_id from shopify.app.etch.toml). Set via secrets.auto.tfvars (gitignored)."
   type        = string
-  default     = "placeholder-pending-sl-41"
+  sensitive   = true
 }
 
-variable "shopify_api_secret_placeholder" {
-  description = "Placeholder SHOPIFY_API_SECRET so the container can boot and check-env.mjs passes. Real value wired up in SL-41."
+variable "shopify_api_secret" {
+  description = "Shopify app API secret. Set via secrets.auto.tfvars (gitignored)."
   type        = string
-  default     = "placeholder-pending-sl-41"
+  sensitive   = true
 }
 
 variable "shopify_scopes" {

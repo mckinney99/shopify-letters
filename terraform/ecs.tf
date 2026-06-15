@@ -34,15 +34,44 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_managed" {
 
 data "aws_iam_policy_document" "ecs_execution_secrets" {
   statement {
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.db.arn]
+    actions = ["secretsmanager:GetSecretValue"]
+    resources = [
+      aws_secretsmanager_secret.db.arn,
+      aws_secretsmanager_secret.shopify.arn,
+    ]
   }
 }
 
 resource "aws_iam_role_policy" "ecs_execution_secrets" {
-  name   = "${var.app_name}-read-db-secret"
+  name   = "${var.app_name}-read-secrets"
   role   = aws_iam_role.ecs_execution.id
   policy = data.aws_iam_policy_document.ecs_execution_secrets.json
+}
+
+# Task role (assumed by the running container, distinct from the execution
+# role above) — only used here to grant ECS Exec (SSM Session Manager)
+# access for debugging and for verifying the task's environment.
+resource "aws_iam_role" "ecs_task" {
+  name               = "${var.app_name}-ecs-task-role"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
+}
+
+data "aws_iam_policy_document" "ecs_exec" {
+  statement {
+    actions = [
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task_exec" {
+  name   = "${var.app_name}-ecs-exec"
+  role   = aws_iam_role.ecs_task.id
+  policy = data.aws_iam_policy_document.ecs_exec.json
 }
 
 resource "aws_ecs_task_definition" "app" {
@@ -52,6 +81,7 @@ resource "aws_ecs_task_definition" "app" {
   cpu                      = 256
   memory                   = 512
   execution_role_arn       = aws_iam_role.ecs_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task.arn
 
   container_definitions = jsonencode([
     {
@@ -68,17 +98,22 @@ resource "aws_ecs_task_definition" "app" {
 
       environment = [
         { name = "SCOPES", value = var.shopify_scopes },
-        # Placeholders so check-env.mjs passes and the app boots. Replaced
-        # with real Shopify credentials in SL-41.
-        { name = "SHOPIFY_API_KEY", value = var.shopify_api_key_placeholder },
-        { name = "SHOPIFY_API_SECRET", value = var.shopify_api_secret_placeholder },
+        { name = "SHOPIFY_APP_URL", value = "https://${var.domain_name}" },
       ]
 
       secrets = [
         {
           name      = "DATABASE_URL"
           valueFrom = "${aws_secretsmanager_secret.db.arn}:DATABASE_URL::"
-        }
+        },
+        {
+          name      = "SHOPIFY_API_KEY"
+          valueFrom = "${aws_secretsmanager_secret.shopify.arn}:SHOPIFY_API_KEY::"
+        },
+        {
+          name      = "SHOPIFY_API_SECRET"
+          valueFrom = "${aws_secretsmanager_secret.shopify.arn}:SHOPIFY_API_SECRET::"
+        },
       ]
 
       logConfiguration = {
@@ -98,11 +133,12 @@ resource "aws_ecs_task_definition" "app" {
 }
 
 resource "aws_ecs_service" "app" {
-  name            = var.app_name
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
+  name                   = var.app_name
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.app.arn
+  desired_count          = 1
+  launch_type            = "FARGATE"
+  enable_execute_command = true
 
   network_configuration {
     subnets          = local.public_subnet_ids
