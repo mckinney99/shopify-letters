@@ -126,7 +126,7 @@ npm run test:integration
 shopify app deploy
 ```
 
-The production AWS infrastructure (RDS, ECR, ECS Fargate, ALB) is defined as Terraform in [`terraform/`](./terraform/README.md). For the broader hosting architecture, see `docs/architecture-outline.md`.
+The production AWS infrastructure (RDS, ECR, ECS Fargate, ALB) is defined as Terraform in [`terraform/`](./terraform/README.md). The app is live at [https://etch.direct](https://etch.direct), with a TLS certificate issued via ACM and DNS managed in Cloudflare. For the broader hosting architecture, see `docs/architecture-outline.md`.
 
 ---
 

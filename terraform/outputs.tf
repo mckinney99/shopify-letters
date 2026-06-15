@@ -25,3 +25,13 @@ output "db_secret_arn" {
   description = "Secrets Manager secret holding the RDS credentials and DATABASE_URL."
   value       = aws_secretsmanager_secret.db.arn
 }
+
+output "production_url" {
+  description = "Production HTTPS URL for the app, once DNS has propagated."
+  value       = "https://${var.domain_name}"
+}
+
+output "acm_certificate_arn" {
+  description = "Validated ACM certificate used by the ALB's HTTPS listener."
+  value       = aws_acm_certificate_validation.app.certificate_arn
+}
