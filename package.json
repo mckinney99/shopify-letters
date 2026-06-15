@@ -1,6 +1,7 @@
 {
   "name": "shopify-letters",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "remix vite:build",
     "dev": "node scripts/check-env.mjs && node scripts/dev.mjs",
