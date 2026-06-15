@@ -75,3 +75,15 @@ variable "shopify_scopes" {
   type        = string
   default     = "read_products,write_products,read_orders,write_orders,write_cart_transforms,write_validations"
 }
+
+variable "domain_name" {
+  description = "Production hostname for the app (matches application_url in shopify.app.etch.toml)."
+  type        = string
+  default     = "etch.direct"
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token (Zone:DNS:Edit on the domain_name zone). Set via secrets.auto.tfvars (gitignored)."
+  type        = string
+  sensitive   = true
+}

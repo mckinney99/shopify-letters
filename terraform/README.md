@@ -5,18 +5,28 @@ Provisions the AWS resources Etch runs on in production:
 - **RDS PostgreSQL** (`etch-postgres`) in the private subnets of the shared `modvent-vpc`, credentials in Secrets Manager
 - **ECR repository** (`etch`) for the app's Docker image
 - **ECS Fargate cluster/service** (`etch-cluster` / `etch`) running the app, in the VPC's public subnets with public IPs (no NAT gateway)
-- **Application Load Balancer** (`etch-alb`) routing HTTP traffic to the service and health-checking `/healthz`
+- **Application Load Balancer** (`etch-alb`) routing HTTP and HTTPS traffic to the service and health-checking `/healthz`
+- **ACM certificate** for `etch.direct`, DNS-validated via Cloudflare (the domain's authoritative DNS provider)
+- **Cloudflare DNS record** pointing `etch.direct` at the ALB (DNS-only, not proxied — the browser connects directly to the ALB and terminates TLS with the ACM cert)
 
 This reuses the existing `modvent-vpc` (shared with another project) rather than creating a new VPC, and skips a NAT gateway by placing the Fargate task in a public subnet with a locked-down security group. RDS stays in the private subnets and is only reachable from the ECS task's security group.
 
-## Scope note: HTTP only for now
+## Cloudflare provider setup
 
-The ALB currently has only an HTTP (port 80) listener. The ACM certificate, custom domain DNS, and HTTPS listener are covered by **SL-40** (Configure the custom domain and TLS certificate for production) — adding them here would mean standing up a self-signed cert that SL-40 immediately replaces.
+`etch.direct` is registered in this AWS account's Route 53, but its nameservers are delegated to Cloudflare, so DNS records (ACM validation + the apex record pointing at the ALB) are managed via the Cloudflare Terraform provider.
+
+Copy `secrets.auto.tfvars.example` to `secrets.auto.tfvars` (gitignored) and fill in a Cloudflare API token scoped to **Zone:DNS:Edit** on the `etch.direct` zone:
+
+```bash
+cp secrets.auto.tfvars.example secrets.auto.tfvars
+# edit secrets.auto.tfvars and set cloudflare_api_token
+```
 
 ## Prerequisites
 
 - Terraform >= 1.5
-- AWS CLI configured with credentials that can manage VPC/RDS/ECR/ECS/ALB/IAM/Secrets Manager in the target account
+- AWS CLI configured with credentials that can manage VPC/RDS/ECR/ECS/ALB/ACM/IAM/Secrets Manager in the target account
+- A Cloudflare API token (see above)
 - Docker (to build and push the app image)
 
 ## Usage
@@ -54,8 +64,14 @@ terraform output
 ```
 
 - `alb_dns_name` — `http://<this>/healthz` should return `{"status":"ok"}` once the service is healthy
+- `production_url` — `https://etch.direct` — the production hostname, once DNS has propagated
 - `ecr_repository_url` — push images here
 - `rds_endpoint` / `db_secret_arn` — RDS connection info (the full `DATABASE_URL` is in the Secrets Manager secret)
+- `acm_certificate_arn` — the validated ACM certificate used by the ALB's HTTPS listener
+
+## Custom domain & TLS
+
+`etch.direct` previously had a CNAME at the zone apex pointing to a Cloudflare Tunnel (the old local-dev-based production setup). Terraform now manages that record (`allow_overwrite = true`) as a CNAME to the ALB, DNS-only (not proxied), so browsers connect directly to the ALB and terminate TLS with the ACM certificate.
 
 ## Placeholder Shopify credentials
 
