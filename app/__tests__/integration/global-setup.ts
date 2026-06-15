@@ -5,7 +5,7 @@ export function setup() {
     env: {
       ...process.env,
       DATABASE_URL:
-        "postgresql://postgres:postgres@localhost:5432/shopify_letters?schema=test",
+        "postgresql://postgres:postgres@localhost:5433/shopify_letters?schema=test",
     },
     stdio: "pipe",
   });

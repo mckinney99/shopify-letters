@@ -22,7 +22,7 @@ export default defineWorkspace([
       setupFiles: ["app/__tests__/integration/setup.ts"],
       env: {
         DATABASE_URL:
-          "postgresql://postgres:postgres@localhost:5432/shopify_letters?schema=test",
+          "postgresql://postgres:postgres@localhost:5433/shopify_letters?schema=test",
       },
     },
   },

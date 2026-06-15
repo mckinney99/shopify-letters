@@ -11,7 +11,7 @@ import type { FieldRules } from "~/utils/normalize";
 const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: "postgresql://postgres:postgres@localhost:5432/shopify_letters?schema=test",
+      url: "postgresql://postgres:postgres@localhost:5433/shopify_letters?schema=test",
     },
   },
 });

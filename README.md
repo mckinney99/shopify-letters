@@ -76,7 +76,7 @@ Start a local Postgres database with Docker Compose:
 docker compose up -d
 ```
 
-This runs Postgres on `localhost:5432` with a persistent volume (database `shopify_letters`, user/password `postgres`/`postgres` — matches the default `DATABASE_URL` in `.env.example`).
+This runs Postgres on `localhost:5433` with a persistent volume (database `shopify_letters`, user/password `postgres`/`postgres` — matches the default `DATABASE_URL` in `.env.example`).
 
 Then apply the schema:
 
