@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient({
-  datasources: { db: { url: "file:./test.db" } },
+  datasources: {
+    db: {
+      url: "postgresql://postgres:postgres@localhost:5432/shopify_letters?schema=test",
+    },
+  },
 });
 
 const SHOP_A = "shop-a.myshopify.com";

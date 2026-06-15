@@ -9,7 +9,11 @@ import type { FieldRules } from "~/utils/normalize";
 // mirroring what the /api/preview action does without spinning up HTTP.
 
 const prisma = new PrismaClient({
-  datasources: { db: { url: "file:./test.db" } },
+  datasources: {
+    db: {
+      url: "postgresql://postgres:postgres@localhost:5432/shopify_letters?schema=test",
+    },
+  },
 });
 
 const SHOP = "preview-test.myshopify.com";

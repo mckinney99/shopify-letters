@@ -10,11 +10,6 @@ extensions/*/node_modules
 .env
 .env.example
 
-# Local SQLite databases
-prisma/*.db
-prisma/*.db-*
-prisma/dev.sqlite
-
 # Build output (regenerated in the image)
 build/
 

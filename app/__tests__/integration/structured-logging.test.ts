@@ -8,7 +8,11 @@ import { action as logAction } from "~/routes/api.log";
 // (preview_request -> add_to_cart -> checkout function logs) — see SL-31.
 
 const prisma = new PrismaClient({
-  datasources: { db: { url: "file:./test.db" } },
+  datasources: {
+    db: {
+      url: "postgresql://postgres:postgres@localhost:5432/shopify_letters?schema=test",
+    },
+  },
 });
 
 const SHOP = "structured-logging-test.myshopify.com";
