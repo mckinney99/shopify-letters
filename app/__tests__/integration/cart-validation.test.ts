@@ -14,7 +14,11 @@ import type { FieldRules } from "~/utils/normalize";
 //    writes carries the field rules through to the function unchanged.
 
 const prisma = new PrismaClient({
-  datasources: { db: { url: "file:./test.db" } },
+  datasources: {
+    db: {
+      url: "postgresql://postgres:postgres@localhost:5433/shopify_letters?schema=test",
+    },
+  },
 });
 
 const SHOP = "cart-validation-test.myshopify.com";

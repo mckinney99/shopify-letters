@@ -15,7 +15,11 @@ import type { FieldInput, FieldPricingRule } from "~/utils/pricing";
 //    writes produces the correct field→label mapping when re-read by the function.
 
 const prisma = new PrismaClient({
-  datasources: { db: { url: "file:./test.db" } },
+  datasources: {
+    db: {
+      url: "postgresql://postgres:postgres@localhost:5433/shopify_letters?schema=test",
+    },
+  },
 });
 
 const SHOP = "cart-transform-test.myshopify.com";

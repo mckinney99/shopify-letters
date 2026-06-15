@@ -9,9 +9,9 @@ generator client {
 }
 
 datasource db {
-  // SQLite for local development; swap to postgresql for production
-  // DATABASE_URL in .env controls which is used
-  provider = "sqlite"
+  // PostgreSQL for local development (via docker-compose) and production.
+  // DATABASE_URL in .env controls which database is used.
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

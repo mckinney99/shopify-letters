@@ -10,6 +10,7 @@ Built with [Remix](https://remix.run) + Node.js on the [Shopify App framework](h
 
 - **Node.js** >= 18.20.0 (`node --version`)
 - **npm** >= 10 (`npm --version`)
+- **Docker** — for running Postgres locally (`docker --version`)
 - **Shopify Partners account** — [partners.shopify.com](https://partners.shopify.com) (free)
 - **Development store** — created from Partners dashboard (free, unlimited orders)
 - **GitHub CLI** — `gh auth login` (for PR workflow)
@@ -39,7 +40,7 @@ Fill in `.env`:
 | `SHOPIFY_API_KEY` | Partners dashboard → Apps → your app → API credentials |
 | `SHOPIFY_API_SECRET` | Same location |
 | `SCOPES` | Leave as default or adjust |
-| `DATABASE_URL` | Leave as `file:./dev.db` for local SQLite |
+| `DATABASE_URL` | Leave as the default — points at the local Postgres container started via `docker compose up -d` |
 
 > `SHOPIFY_APP_URL` is set automatically by `shopify app dev` — leave it blank.
 
@@ -69,12 +70,20 @@ You'll select this store when `shopify app dev` asks which store to use.
 
 ### 4. Set up the database
 
+Start a local Postgres database with Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+This runs Postgres on `localhost:5433` with a persistent volume (database `shopify_letters`, user/password `postgres`/`postgres` — matches the default `DATABASE_URL` in `.env.example`).
+
+Then apply the schema:
+
 ```bash
 npm run setup
 # runs: prisma generate && prisma migrate dev
 ```
-
-This creates a local SQLite database at `prisma/dev.db`.
 
 ### 5. Start the dev server
 
@@ -95,6 +104,8 @@ The embedded admin app will be available inside your dev store's Shopify Admin.
 
 ## Testing
 
+Integration tests require the local Postgres container to be running (`docker compose up -d`). They use a separate `test` schema in the same `shopify_letters` database, which is reset automatically before each run.
+
 ```bash
 # All tests
 npm test
@@ -102,7 +113,7 @@ npm test
 # Unit only (no Shopify/DB required)
 npm run test:unit
 
-# Integration (requires test DB)
+# Integration (requires local Postgres - see above)
 npm run test:integration
 ```
 
@@ -136,10 +147,12 @@ For hosting the backend, see the architecture outline in `docs/architecture-outl
 │   └── entry.client.tsx         # Client hydration entry
 ├── extensions/                  # Shopify extensions (theme app, functions)
 ├── prisma/
-│   └── schema.prisma            # DB schema (Session + app models)
+│   ├── schema.prisma            # DB schema (Session + app models)
+│   └── migrations/               # Postgres migration history
 ├── public/                      # Static assets
 ├── docs/                        # Architecture and planning docs
 ├── .env.example                 # Environment variable template
+├── docker-compose.yml           # Local Postgres for development
 ├── shopify.app.toml             # Shopify CLI app configuration
 └── vite.config.ts               # Vite/Remix build config
 ```
