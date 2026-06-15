@@ -126,7 +126,7 @@ npm run test:integration
 shopify app deploy
 ```
 
-For hosting the backend, see the architecture outline in `docs/architecture-outline.md`.
+The production AWS infrastructure (RDS, ECR, ECS Fargate, ALB) is defined as Terraform in [`terraform/`](./terraform/README.md). For the broader hosting architecture, see `docs/architecture-outline.md`.
 
 ---
 
@@ -153,6 +153,7 @@ For hosting the backend, see the architecture outline in `docs/architecture-outl
 ├── docs/                        # Architecture and planning docs
 ├── .env.example                 # Environment variable template
 ├── docker-compose.yml           # Local Postgres for development
+├── terraform/                    # Production AWS infrastructure (RDS, ECR, ECS, ALB)
 ├── shopify.app.toml             # Shopify CLI app configuration
 └── vite.config.ts               # Vite/Remix build config
 ```
