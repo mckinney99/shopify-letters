@@ -1,0 +1,40 @@
+# Dependencies (reinstalled in the image)
+node_modules
+extensions/*/node_modules
+
+# Version control
+.git
+.gitignore
+
+# Local env / secrets
+.env
+.env.example
+
+# Local SQLite databases
+prisma/*.db
+prisma/*.db-*
+prisma/dev.sqlite
+
+# Build output (regenerated in the image)
+build/
+
+# Function build artifacts
+extensions/*/dist/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Local tooling not needed in the image
+.claude/
+.mcp.json
+.playwright-mcp/
+.shopify/
+_bmad/
+_bmad-output/
+docs/
+
+# Misc local artifacts
+*.png
+README.md

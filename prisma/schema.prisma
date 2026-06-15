@@ -1,7 +1,11 @@
 // Learn more about this file: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" keeps local dev working. The Alpine-based production image
+  // ships OpenSSL 3.0; both musl targets are included to support running
+  // the image on x86_64 or arm64 hosts (e.g. AWS Fargate, Apple Silicon).
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
