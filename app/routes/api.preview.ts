@@ -7,6 +7,7 @@ import type { FieldInput, FieldPricingRule } from "../utils/pricing";
 import type { FieldRules } from "../utils/normalize";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
 import { logEvent, shortHash } from "../utils/log";
+import { recordPreviewLatency } from "../utils/metrics";
 import { makeRateLimiter } from "../utils/rateLimit";
 
 const CORS_HEADERS = {
@@ -168,6 +169,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }, {});
   const inputHash = shortHash(JSON.stringify(sortedFieldValues));
 
+  const latencyMs = Date.now() - startedAt;
+  recordPreviewLatency(shop, latencyMs);
+
   logEvent("preview_request", {
     shop,
     productId: productGid,
@@ -175,7 +179,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     inputHash,
     valid: allErrors.length === 0,
     priceMinor: result.priceMinor,
-    latencyMs: Date.now() - startedAt,
+    latencyMs,
   });
 
   return json(

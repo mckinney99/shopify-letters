@@ -131,66 +131,72 @@ export function run(input: Input): unknown {
     const productId = variant.product.id;
     const correlationId = line.correlationAttribute?.value ?? null;
 
-    let payload: MetafieldPayload;
     try {
-      payload = JSON.parse(metafieldRaw) as MetafieldPayload;
-    } catch {
-      logEnforcement({ event: "checkout_price_enforcement", shop: null, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "invalid_metafield" });
-      continue;
-    }
+      let payload: MetafieldPayload;
+      try {
+        payload = JSON.parse(metafieldRaw) as MetafieldPayload;
+      } catch {
+        logEnforcement({ event: "checkout_price_enforcement", shop: null, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "invalid_metafield" });
+        continue;
+      }
 
-    if (!Array.isArray(payload.fields) || !Array.isArray(payload.rules)) continue;
-    if (payload.fields.length === 0 && payload.rules.length === 0) continue;
+      if (!Array.isArray(payload.fields) || !Array.isArray(payload.rules)) continue;
+      if (payload.fields.length === 0 && payload.rules.length === 0) continue;
 
-    const shop = payload.shop ?? null;
+      const shop = payload.shop ?? null;
 
-    // Read the bundled field inputs written by the storefront extension.
-    // Format: { [fieldId]: rawText } — keyed by field ID, not label.
-    const etchRaw = line.attribute?.value;
-    if (!etchRaw) {
-      logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "missing_inputs" });
-      continue;
-    }
+      // Read the bundled field inputs written by the storefront extension.
+      // Format: { [fieldId]: rawText } — keyed by field ID, not label.
+      const etchRaw = line.attribute?.value;
+      if (!etchRaw) {
+        logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "missing_inputs" });
+        continue;
+      }
 
-    let etchInputs: Record<string, string>;
-    try {
-      etchInputs = JSON.parse(etchRaw) as Record<string, string>;
-    } catch {
-      logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "corrupt_inputs" });
-      continue;
-    }
+      let etchInputs: Record<string, string>;
+      try {
+        etchInputs = JSON.parse(etchRaw) as Record<string, string>;
+      } catch {
+        logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "corrupt_inputs" });
+        continue;
+      }
 
-    const fieldInputs = payload.fields.map((fieldDef) => ({
-      fieldId: fieldDef.id,
-      normalizedText: normalizeText(etchInputs[fieldDef.id] ?? ""),
-    }));
+      const fieldInputs = payload.fields.map((fieldDef) => ({
+        fieldId: fieldDef.id,
+        normalizedText: normalizeText(etchInputs[fieldDef.id] ?? ""),
+      }));
 
-    const enforcedMinor = calculatePrice(fieldInputs, payload.rules);
-    const enforcedAmount = (enforcedMinor / 100).toFixed(2);
+      const enforcedMinor = calculatePrice(fieldInputs, payload.rules);
+      const enforcedAmount = (enforcedMinor / 100).toFixed(2);
 
-    logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: enforcedMinor, pass: true });
+      logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: enforcedMinor, pass: true });
 
-    // Operation structure per CartTransformRunResult schema (2025-10):
-    // lineExpand > expandedCartItems[].price.adjustment.fixedPricePerUnit.amount
-    // Currency is inferred from the cart's presentment currency — not specified here.
-    operations.push({
-      lineExpand: {
-        cartLineId: line.id,
-        expandedCartItems: [
-          {
-            merchandiseId: variant.id,
-            quantity: line.quantity,
-            price: {
-              adjustment: {
-                fixedPricePerUnit: {
-                  amount: enforcedAmount,
+      // Operation structure per CartTransformRunResult schema (2025-10):
+      // lineExpand > expandedCartItems[].price.adjustment.fixedPricePerUnit.amount
+      // Currency is inferred from the cart's presentment currency — not specified here.
+      operations.push({
+        lineExpand: {
+          cartLineId: line.id,
+          expandedCartItems: [
+            {
+              merchandiseId: variant.id,
+              quantity: line.quantity,
+              price: {
+                adjustment: {
+                  fixedPricePerUnit: {
+                    amount: enforcedAmount,
+                  },
                 },
               },
             },
-          },
-        ],
-      },
-    });
+          ],
+        },
+      });
+    } catch {
+      // Catch-all for unexpected errors (e.g. malformed rules data) so one
+      // bad line doesn't crash enforcement for the whole cart (see SL-32).
+      logEnforcement({ event: "checkout_price_enforcement", shop: null, productId, correlationId, enforcedPriceMinor: null, pass: false, reason: "function_error" });
+    }
   }
 
   return { operations };
