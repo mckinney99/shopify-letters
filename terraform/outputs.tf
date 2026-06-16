@@ -50,3 +50,13 @@ output "github_actions_role_arn" {
   description = "IAM role ARN for GitHub Actions OIDC. Set as AWS_DEPLOY_ROLE_ARN in repository secrets."
   value       = aws_iam_role.github_actions.arn
 }
+
+output "alerts_sns_topic_arn" {
+  description = "SNS topic ARN for production alerts (price mismatch, etc.)."
+  value       = aws_sns_topic.alerts.arn
+}
+
+output "price_mismatch_alarm_name" {
+  description = "CloudWatch alarm name for the price mismatch rate alert."
+  value       = aws_cloudwatch_metric_alarm.price_mismatch_alert.alarm_name
+}

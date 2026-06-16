@@ -87,3 +87,9 @@ variable "cloudflare_api_token" {
   type        = string
   sensitive   = true
 }
+
+variable "alert_email" {
+  description = "Email address to notify when the price_mismatch_rate_exceeded alarm fires."
+  type        = string
+  default     = "mckinney99@gmail.com"
+}
