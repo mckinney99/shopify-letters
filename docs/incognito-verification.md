@@ -55,8 +55,11 @@ Sessions are stored in the `Session` table in Postgres via `PrismaSessionStorage
 | Route | Auth call | Notes |
 |---|---|---|
 | `app._index.tsx` | `authenticate.admin` | Home dashboard |
-| `app.products.tsx` | `authenticate.admin` | Product config list |
-| `app.products.$id.tsx` | `authenticate.admin` | Product detail / field editor |
+| `app.products.tsx` | Layout shell | No direct auth; delegates to index/detail |
+| `app.products._index.tsx` | `authenticate.admin` | Product config list |
+| `app.products.$productId.tsx` | `authenticate.admin` | Product detail / field editor |
+| `app.orders._index.tsx` | `authenticate.admin` | Order list |
+| `app.orders.$orderId.tsx` | `authenticate.admin` | Order detail |
 | `app.billing.tsx` | `authenticate.admin` | Subscription gate |
 | `app.support.tsx` | `authenticate.admin` | Help & Support page |
 | `webhooks.tsx` | HMAC verification | Not an embedded route |
