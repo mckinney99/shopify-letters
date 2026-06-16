@@ -61,4 +61,4 @@ jobs:
       - name: Deploy Shopify extensions
         env:
           SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
-        run: npm run deploy -- --force
+        run: npm run deploy -- --config shopify.app.etch.toml --allow-updates
