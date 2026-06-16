@@ -89,6 +89,33 @@ aws ecs execute-command \
   --container etch --interactive --command "node scripts/check-env.mjs"
 ```
 
+## CI/CD pipeline setup
+
+The pipeline is GitHub Actions (`.github/workflows/`). After `terraform apply`:
+
+1. **Get the deploy role ARN:**
+   ```bash
+   terraform output -raw github_actions_role_arn
+   ```
+
+2. **Add GitHub repository secrets** (Settings → Secrets and variables → Actions):
+   - `AWS_DEPLOY_ROLE_ARN` — the role ARN from step 1
+   - `SHOPIFY_CLI_PARTNERS_TOKEN` — a Shopify Partners API token with `write_apps` scope (create at partners.shopify.com → Settings → Partner API clients)
+
+3. **Enable branch protection** so the CI status check blocks merges on failure:
+   ```bash
+   gh api repos/mckinney99/shopify-letters/branches/main/protection \
+     --method PUT \
+     --field required_status_checks='{"strict":true,"contexts":["Lint, typecheck, and test"]}' \
+     --field enforce_admins=false \
+     --field required_pull_request_reviews=null \
+     --field restrictions=null
+   ```
+
+The deploy workflow uses OIDC (no long-lived AWS keys stored as secrets). The role is scoped to pushes from `main` only.
+
+ECS deploys use `deployment_circuit_breaker` with auto-rollback: if new tasks fail health checks, ECS rolls back to the previous task definition and the pipeline step fails with a non-zero exit code, so the broken commit is never considered "deployed".
+
 ## Tearing down
 
 ```bash

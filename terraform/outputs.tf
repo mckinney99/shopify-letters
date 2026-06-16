@@ -45,3 +45,8 @@ output "acm_certificate_arn" {
   description = "Validated ACM certificate used by the ALB's HTTPS listener."
   value       = aws_acm_certificate_validation.app.certificate_arn
 }
+
+output "github_actions_role_arn" {
+  description = "IAM role ARN for GitHub Actions OIDC. Set as AWS_DEPLOY_ROLE_ARN in repository secrets."
+  value       = aws_iam_role.github_actions.arn
+}
