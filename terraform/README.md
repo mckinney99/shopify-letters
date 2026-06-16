@@ -8,25 +8,27 @@ Provisions the AWS resources Etch runs on in production:
 - **Application Load Balancer** (`etch-alb`) routing HTTP and HTTPS traffic to the service and health-checking `/healthz`
 - **ACM certificate** for `etch.direct`, DNS-validated via Cloudflare (the domain's authoritative DNS provider)
 - **Cloudflare DNS record** pointing `etch.direct` at the ALB (DNS-only, not proxied — the browser connects directly to the ALB and terminates TLS with the ACM cert)
+- **Secrets Manager secret** (`etch/shopify/credentials`) holding `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`, injected into the ECS task alongside the RDS-backed `DATABASE_URL`
 
 This reuses the existing `modvent-vpc` (shared with another project) rather than creating a new VPC, and skips a NAT gateway by placing the Fargate task in a public subnet with a locked-down security group. RDS stays in the private subnets and is only reachable from the ECS task's security group.
 
-## Cloudflare provider setup
+## Secrets setup
 
-`etch.direct` is registered in this AWS account's Route 53, but its nameservers are delegated to Cloudflare, so DNS records (ACM validation + the apex record pointing at the ALB) are managed via the Cloudflare Terraform provider.
-
-Copy `secrets.auto.tfvars.example` to `secrets.auto.tfvars` (gitignored) and fill in a Cloudflare API token scoped to **Zone:DNS:Edit** on the `etch.direct` zone:
+Copy `secrets.auto.tfvars.example` to `secrets.auto.tfvars` (gitignored) and fill in real values:
 
 ```bash
 cp secrets.auto.tfvars.example secrets.auto.tfvars
-# edit secrets.auto.tfvars and set cloudflare_api_token
+# edit secrets.auto.tfvars
 ```
+
+- `cloudflare_api_token` — `etch.direct` is registered in this AWS account's Route 53, but its nameservers are delegated to Cloudflare, so DNS records (ACM validation + the apex record pointing at the ALB) are managed via the Cloudflare Terraform provider. Create a token scoped to **Zone:DNS:Edit** on the `etch.direct` zone.
+- `shopify_api_key` / `shopify_api_secret` — same values as `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` in your local `.env`. Stored in the `etch/shopify/credentials` Secrets Manager secret and injected into the ECS task at runtime.
 
 ## Prerequisites
 
 - Terraform >= 1.5
 - AWS CLI configured with credentials that can manage VPC/RDS/ECR/ECS/ALB/ACM/IAM/Secrets Manager in the target account
-- A Cloudflare API token (see above)
+- A Cloudflare API token and Shopify app credentials (see above)
 - Docker (to build and push the app image)
 
 ## Usage
@@ -67,15 +69,25 @@ terraform output
 - `production_url` — `https://etch.direct` — the production hostname, once DNS has propagated
 - `ecr_repository_url` — push images here
 - `rds_endpoint` / `db_secret_arn` — RDS connection info (the full `DATABASE_URL` is in the Secrets Manager secret)
+- `shopify_secret_arn` — Secrets Manager secret holding `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`
 - `acm_certificate_arn` — the validated ACM certificate used by the ALB's HTTPS listener
 
 ## Custom domain & TLS
 
 `etch.direct` previously had a CNAME at the zone apex pointing to a Cloudflare Tunnel (the old local-dev-based production setup). Terraform now manages that record (`allow_overwrite = true`) as a CNAME to the ALB, DNS-only (not proxied), so browsers connect directly to the ALB and terminate TLS with the ACM certificate.
 
-## Placeholder Shopify credentials
+## Production secrets & env vars
 
-`SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` are set to placeholder values (`shopify_api_key_placeholder` / `shopify_api_secret_placeholder` variables) so the container passes `check-env.mjs` and boots. Real production credentials and a Secrets-Manager-backed setup for all app secrets are wired up in **SL-41**.
+All values required by `scripts/check-env.mjs` (`SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SCOPES`, `DATABASE_URL`) plus `SHOPIFY_APP_URL` are present in the running container: the two Shopify credentials and `DATABASE_URL` come from Secrets Manager via the task definition's `secrets` block (never in plaintext in the image, repo, or Terraform state output); `SCOPES` and `SHOPIFY_APP_URL` are non-sensitive and set directly as task `environment` vars.
+
+The ECS service has `enable_execute_command = true`, so you can shell into the running task to verify the environment directly:
+
+```bash
+aws ecs execute-command \
+  --cluster etch-cluster --service etch \
+  --task "$(aws ecs list-tasks --cluster etch-cluster --service-name etch --query 'taskArns[0]' --output text)" \
+  --container etch --interactive --command "node scripts/check-env.mjs"
+```
 
 ## Tearing down
 
