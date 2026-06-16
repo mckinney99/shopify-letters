@@ -38,6 +38,9 @@ jobs:
 
       - name: Deploy to ECS
         run: |
+          # The task definition always references :latest (var.image_tag = "latest" in Terraform).
+          # Fargate pulls the image on every task start, so --force-new-deployment picks up
+          # the new :latest image pushed above without needing a new task definition revision.
           aws ecs update-service \
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
