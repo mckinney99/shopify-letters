@@ -182,7 +182,7 @@ export default function ProductsPage() {
             ]}
             selectable={false}
           >
-            {products.map((product, index) => (
+            {products.map((product: any, index: number) => (
               <IndexTable.Row id={product.id} key={product.id} position={index}>
                 <IndexTable.Cell>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>

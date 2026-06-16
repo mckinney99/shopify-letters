@@ -192,7 +192,7 @@ export default function OrdersPage() {
             ]}
             selectable={false}
           >
-            {orders.map((order, index) => (
+            {orders.map((order: any, index: number) => (
               <IndexTable.Row id={order.id} key={order.id} position={index}>
                 <IndexTable.Cell>
                   <Link to={`/app/orders/${order.numericId}`}>

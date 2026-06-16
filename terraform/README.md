@@ -89,6 +89,37 @@ aws ecs execute-command \
   --container etch --interactive --command "node scripts/check-env.mjs"
 ```
 
+## Monitoring & alerting
+
+Container stdout/stderr ships to the `/ecs/etch` CloudWatch Logs group (via the awslogs driver already configured in the task definition).
+
+A CloudWatch metric filter watches that log group for `price_mismatch_rate_exceeded` events (JSON lines where `$.event = "price_mismatch_rate_exceeded"`, emitted by `app/utils/metrics.ts` when a shop's preview/charged price mismatch rate exceeds 5% over 10+ samples). Each matching line increments the `Etch/Alerts / MismatchAlertCount` metric by 1.
+
+A CloudWatch alarm fires when the metric sum ≥ 1 in any 5-minute window and notifies via SNS email (`var.alert_email`, default `mckinney99@gmail.com`). Confirm the SNS subscription by clicking the link in the email AWS sends after `terraform apply`.
+
+### Verifying the alarm end-to-end
+
+Inject a fake matching log line directly into the production log group, then check the alarm state:
+
+```bash
+LOG_STREAM=$(aws logs describe-log-streams \
+  --log-group-name /ecs/etch \
+  --order-by LastEventTime --descending \
+  --query 'logStreams[0].logStreamName' --output text)
+
+aws logs put-log-events \
+  --log-group-name /ecs/etch \
+  --log-stream-name "$LOG_STREAM" \
+  --log-events "[{\"timestamp\": $(date +%s%3N), \"message\": \"{\\\"event\\\":\\\"price_mismatch_rate_exceeded\\\",\\\"ts\\\":\\\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\\\",\\\"severity\\\":\\\"alert\\\",\\\"shop\\\":\\\"test.myshopify.com\\\",\\\"rate\\\":0.06,\\\"sampleSize\\\":10,\\\"threshold\\\":0.05}\"}]"
+
+# Wait ~1 minute, then check alarm state:
+aws cloudwatch describe-alarms \
+  --alarm-names "$(terraform output -raw price_mismatch_alarm_name)" \
+  --query 'MetricAlarms[0].StateValue' --output text
+```
+
+The alarm should transition to `ALARM` and you should receive an email at `var.alert_email`.
+
 ## CI/CD pipeline setup
 
 The pipeline is GitHub Actions (`.github/workflows/`). After `terraform apply`:
