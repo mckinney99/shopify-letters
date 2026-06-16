@@ -19,7 +19,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     try {
       const result = await billing.check({
         plans: [MONTHLY_PLAN],
-        isTest: process.env.NODE_ENV !== "production",
+        isTest: process.env.BILLING_IS_TEST !== "false",
       });
       if (!result.hasActivePayment) {
         return redirect(`/app/billing?${url.searchParams.toString()}`);

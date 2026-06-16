@@ -20,29 +20,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { billing } = await authenticate.admin(request);
 
-  // Decode the Shopify host param (base64 → "admin.shopify.com/store/STORE") so
-  // after billing consent Shopify returns the merchant to the embedded app URL
-  // instead of a bare localhost URL that has no embedded context.
-  const url = new URL(request.url);
-  const host = url.searchParams.get("host");
-  const decodedHost = host
-    ? Buffer.from(host.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString()
-    : null;
-  const appHandle = process.env.SHOPIFY_APP_HANDLE || "etch";
-  const returnUrl = decodedHost
-    ? `https://${decodedHost}/apps/${appHandle}`
-    : `${process.env.SHOPIFY_APP_URL || "https://localhost:3000"}/app`;
-
   // isTest=true until the app is listed on the Shopify App Store and billing is
   // approved for real transactions. Override via BILLING_IS_TEST=false in ECS.
   const isTest = process.env.BILLING_IS_TEST !== "false";
 
   try {
     // billing.request() throws a Response (redirect) on success — let Remix handle it.
+    // No explicit returnUrl: the library builds the correct embedded app URL using
+    // config.apiKey (the client ID), which is what Shopify Admin expects at
+    // /admin/apps/{apiKey}. Passing a named handle caused 404s.
     await billing.request({
       plan: MONTHLY_PLAN,
       isTest,
-      returnUrl,
     });
   } catch (err) {
     // Re-throw Remix redirect Responses unchanged; log actual errors.
