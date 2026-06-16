@@ -51,14 +51,3 @@ jobs:
             --cluster "$ECS_CLUSTER" \
             --services "$ECS_SERVICE"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-
-      - run: npm ci
-
-      - name: Deploy Shopify extensions
-        env:
-          SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
-        run: npm run deploy -- --config shopify.app.etch.toml --allow-updates

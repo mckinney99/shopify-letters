@@ -33,13 +33,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ? `https://${decodedHost}/apps/${appHandle}`
     : `${process.env.SHOPIFY_APP_URL || "https://localhost:3000"}/app`;
 
-  // billing.request() throws a Response (redirect) on success — let Remix handle it.
-  // Only catch actual errors.
-  await billing.request({
-    plan: MONTHLY_PLAN,
-    isTest: process.env.NODE_ENV !== "production",
-    returnUrl,
-  });
+  // isTest=true until the app is listed on the Shopify App Store and billing is
+  // approved for real transactions. Override via BILLING_IS_TEST=false in ECS.
+  const isTest = process.env.BILLING_IS_TEST !== "false";
+
+  try {
+    // billing.request() throws a Response (redirect) on success — let Remix handle it.
+    await billing.request({
+      plan: MONTHLY_PLAN,
+      isTest,
+      returnUrl,
+    });
+  } catch (err) {
+    // Re-throw Remix redirect Responses unchanged; log actual errors.
+    if (err instanceof Response) throw err;
+    console.error("[billing] billing.request() failed:", err);
+    throw err;
+  }
 };
 
 export default function BillingPage() {
