@@ -23,16 +23,21 @@ const checkRateLimit = makeRateLimiter(30, 60_000);
 // Returns field definitions for a published product so the storefront
 // can render the form before the shopper has typed anything.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // Remix may route OPTIONS to loader for resource routes.
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop") ?? "";
   const productId = url.searchParams.get("productId") ?? "";
 
   if (!shop || !productId) {
-    return json({ error: "Missing shop or productId" }, { status: 400 });
+    return json({ error: "Missing shop or productId" }, { status: 400, headers: CORS_HEADERS });
   }
 
   if (!checkRateLimit(shop)) {
-    return json({ error: "Too many requests" }, { status: 429 });
+    return json({ error: "Too many requests" }, { status: 429, headers: CORS_HEADERS });
   }
 
   const productGid = `gid://shopify/Product/${productId}`;
@@ -49,7 +54,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   if (!config?.published) {
-    return json({ error: "Not found" }, { status: 404 });
+    return json({ error: "Not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
   return json({ fields: dbFields }, { headers: CORS_HEADERS });
@@ -62,7 +67,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (request.method !== "POST") {
-    return json({ error: "Method not allowed" }, { status: 405 });
+    return json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });
   }
 
   const startedAt = Date.now();
@@ -71,20 +76,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     body = await request.json();
   } catch {
-    return json({ error: "Invalid JSON body" }, { status: 400 });
+    return json({ error: "Invalid JSON body" }, { status: 400, headers: CORS_HEADERS });
   }
 
   const { shop, productId, fields, correlationId } = body;
 
   if (typeof shop !== "string" || !shop) {
-    return json({ error: "Missing or invalid shop" }, { status: 400 });
+    return json({ error: "Missing or invalid shop" }, { status: 400, headers: CORS_HEADERS });
   }
   if (typeof productId !== "string" || !productId) {
-    return json({ error: "Missing or invalid productId" }, { status: 400 });
+    return json({ error: "Missing or invalid productId" }, { status: 400, headers: CORS_HEADERS });
   }
 
   if (!checkRateLimit(shop)) {
-    return json({ error: "Too many requests" }, { status: 429 });
+    return json({ error: "Too many requests" }, { status: 429, headers: CORS_HEADERS });
   }
 
   const fieldValues: Record<string, string> =
@@ -112,7 +117,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!config?.published) {
     return json(
       { error: "Product configuration not found or not published" },
-      { status: 404 }
+      { status: 404, headers: CORS_HEADERS }
     );
   }
 
