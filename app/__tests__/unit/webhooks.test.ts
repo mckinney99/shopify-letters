@@ -64,6 +64,20 @@ describe("CUSTOMERS_DATA_REQUEST webhook", () => {
     expect(logged.shop).toBe(SHOP);
     expect(logged.note).toBe("no_customer_pii_stored");
   });
+
+  it("still logs even when the shop has no active session (post-uninstall)", async () => {
+    vi.mocked(authenticate.webhook).mockResolvedValue({
+      topic: "CUSTOMERS_DATA_REQUEST",
+      shop: SHOP,
+      session: undefined as any,
+      admin: undefined as any,
+      payload: {},
+    } as any);
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await callAction();
+    const logged = JSON.parse(spy.mock.calls[0][0] as string);
+    expect(logged.event).toBe("gdpr_customers_data_request");
+  });
 });
 
 describe("CUSTOMERS_REDACT webhook", () => {
@@ -91,6 +105,20 @@ describe("CUSTOMERS_REDACT webhook", () => {
     expect(logged.event).toBe("gdpr_customers_redact");
     expect(logged.shop).toBe(SHOP);
     expect(logged.note).toBe("no_customer_pii_stored");
+  });
+
+  it("still logs even when the shop has no active session (post-uninstall)", async () => {
+    vi.mocked(authenticate.webhook).mockResolvedValue({
+      topic: "CUSTOMERS_REDACT",
+      shop: SHOP,
+      session: undefined as any,
+      admin: undefined as any,
+      payload: {},
+    } as any);
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    await callAction();
+    const logged = JSON.parse(spy.mock.calls[0][0] as string);
+    expect(logged.event).toBe("gdpr_customers_redact");
   });
 });
 

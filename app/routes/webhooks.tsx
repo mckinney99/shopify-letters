@@ -7,7 +7,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, shop, session, admin, payload } =
     await authenticate.webhook(request);
 
-  if (!admin && topic !== "SHOP_REDACT") {
+  // GDPR topics don't use admin — allow them through regardless of session state
+  const GDPR_TOPICS = new Set(["CUSTOMERS_DATA_REQUEST", "CUSTOMERS_REDACT", "SHOP_REDACT"]);
+  if (!admin && !GDPR_TOPICS.has(topic)) {
     throw new Response();
   }
 
