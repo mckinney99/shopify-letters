@@ -1,0 +1,34 @@
+name: Deploy Shopify Extensions
+
+# Shopify CLI 3.x authenticates via OAuth token exchange (accounts.shopify.com).
+# Partners API client tokens (prtapi_*) are not accepted by that endpoint — only
+# OAuth access tokens obtained via `shopify auth login` work. Until Shopify
+# provides a service-account-compatible token type, extension deploys must be
+# triggered manually by someone who has already run `shopify auth login` locally,
+# or by running `npm run deploy -- --config shopify.app.etch.toml --allow-updates`
+# directly from a machine with an active CLI session.
+#
+# This workflow exists for documentation and future use when Shopify adds
+# non-interactive auth support. Trigger it manually from the Actions tab.
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-extensions:
+    name: Deploy Shopify extensions
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Deploy Shopify extensions
+        env:
+          SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
+        run: npm run deploy -- --config shopify.app.etch.toml --allow-updates
