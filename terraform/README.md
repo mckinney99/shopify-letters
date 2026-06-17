@@ -4,7 +4,7 @@ Provisions the AWS resources Etch runs on in production:
 
 - **RDS PostgreSQL** (`etch-postgres`) in the private subnets of the shared `modvent-vpc`, credentials in Secrets Manager
 - **ECR repository** (`etch`) for the app's Docker image
-- **ECS Fargate cluster/service** (`etch-cluster` / `etch`) running the app, in the VPC's public subnets with public IPs (no NAT gateway)
+- **ECS Fargate cluster/service** (`etch-cluster` / `etch`) running the app, in the VPC's public subnets with public IPs (no NAT gateway); `desired_count = 2` keeps one task healthy during rolling deploys — this doubles the Fargate compute cost (~$0.02/hr per 0.25 vCPU / 0.5 GB task → ~$0.04/hr total, ~$29/month)
 - **Application Load Balancer** (`etch-alb`) routing HTTP and HTTPS traffic to the service and health-checking `/healthz`
 - **ACM certificate** for `etch.direct`, DNS-validated via Cloudflare (the domain's authoritative DNS provider)
 - **Cloudflare DNS record** pointing `etch.direct` at the ALB (DNS-only, not proxied — the browser connects directly to the ALB and terminates TLS with the ACM cert)
