@@ -11,7 +11,7 @@ import prisma from "./db.server";
 
 // Shopify deprecated non-expiring shpat_ tokens in Dec 2025. Any fresh OAuth
 // install still gets one; this exchanges it for an expiring token immediately.
-async function migrateShpat(session: any): Promise<void> {
+export async function migrateShpat(session: any): Promise<void> {
   const params = new URLSearchParams({
     client_id: process.env.SHOPIFY_API_KEY!,
     client_secret: process.env.SHOPIFY_API_SECRET!,
@@ -74,12 +74,12 @@ const shopify = shopifyApp({
     [MONTHLY_PLAN]: {
       lineItems: [
         {
-          amount: 4.99,
+          amount: 9.99,
           currencyCode: "USD",
           interval: BillingInterval.Every30Days,
         },
       ],
-      trialDays: Number(process.env.BILLING_TRIAL_DAYS || 7),
+      trialDays: Number(process.env.BILLING_TRIAL_DAYS || 14),
     },
   },
   webhooks: {

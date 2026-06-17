@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, useRouteError } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -8,6 +8,7 @@ import {
   InlineStack,
   Text,
   Badge,
+  Banner,
   Box,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
@@ -197,6 +198,17 @@ function CustomizationDetails({
         )}
       </BlockStack>
     </Box>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  return (
+    <Page>
+      <Banner title="Something went wrong" tone="critical">
+        <p>{error instanceof Error ? error.message : "An unexpected error occurred."}</p>
+      </Banner>
+    </Page>
   );
 }
 

@@ -5,14 +5,20 @@ import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
-import { authenticate, MONTHLY_PLAN } from "../shopify.server";
+import { authenticate, MONTHLY_PLAN, migrateShpat } from "../shopify.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
 
-  const { billing } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+
+  if (session.accessToken?.startsWith("shpat_")) {
+    await migrateShpat(session).catch((err: Error) =>
+      console.error("[app] proactive token migration failed:", err.message)
+    );
+  }
 
   // Skip billing check on the billing page itself to avoid redirect loops.
   // Also skip entirely in staging/dev where DISABLE_BILLING=true.
