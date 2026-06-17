@@ -11,7 +11,7 @@
 ```
 Charge shoppers for custom text — by character, word, or flat fee. No code needed.
 ```
-*(83 chars)*
+*(82 chars)*
 
 ---
 
@@ -22,7 +22,7 @@ Etch adds a "Personalize your item" form to your product pages so shoppers can e
 
 Set pricing rules per product: charge by character count, word count, or a flat fee per field. Etch installs as a native app block in the Theme Editor — no code changes required. Customization details appear directly on order line items so your team knows exactly what to make.
 ```
-*(478 chars)*
+*(488 chars)*
 
 ---
 
