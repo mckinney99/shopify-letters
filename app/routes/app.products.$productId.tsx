@@ -861,11 +861,9 @@ export default function ProductDetailPage() {
                       for example, "Enter your engraving text here" or "Monogram initials (max 3 letters)".
                       Etch will charge per character based on whatever your customer types in.
                     </Text>
-                    <Text as="p">
-                      <b>Label</b> — the name of the input that your customer will see.<br />
-                      <b>Min/Max characters</b> — optional limits on how long the input can be.<br />
-                      <b>Allowed/Disallowed characters</b> — optionally restrict to certain letters or symbols.
-                    </Text>
+                    <Text as="p"><b>Label</b> — the name of the input that your customer will see.</Text>
+                    <Text as="p"><b>Min/Max characters</b> — optional limits on how long the input can be.</Text>
+                    <Text as="p"><b>Allowed/Disallowed characters</b> — optionally restrict to certain letters or symbols.</Text>
                     <Text as="p">
                       Click <b>Add field</b> below to create your first one, then head to the{" "}
                       <b>Pricing</b> tab to set your prices.

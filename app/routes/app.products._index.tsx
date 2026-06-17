@@ -157,6 +157,9 @@ function ToggleButton({
   );
 }
 
+// Persists across remounts within the same SPA session (resets on hard refresh).
+let step2Dismissed = false;
+
 export function ErrorBoundary() {
   const error = useRouteError();
   return (
@@ -171,7 +174,8 @@ export function ErrorBoundary() {
 export default function ProductsPage() {
   const { products, pageInfo } = useLoaderData<typeof loader>();
   const [onboardingComplete, setOnboardingComplete] = useState(false);
-  const [guideVisible, setGuideVisible] = useState(true);
+  // Module-level flag persists dismissed state across SPA navigation within the session.
+  const [guideVisible, setGuideVisible] = useState(() => !step2Dismissed);
 
   useEffect(() => {
     setOnboardingComplete(localStorage.getItem("etch_onboarding_complete") === "1");
@@ -186,7 +190,7 @@ export default function ProductsPage() {
           <Banner
             title="Step 2 of 5 — Pick a product to set up"
             tone="info"
-            onDismiss={() => setGuideVisible(false)}
+            onDismiss={() => { step2Dismissed = true; setGuideVisible(false); }}
           >
             <Text as="p">
               This is your list of Shopify products. Click any <b>product name</b> in the table below
@@ -250,7 +254,7 @@ export default function ProductsPage() {
                   </Badge>
                 </IndexTable.Cell>
                 <IndexTable.Cell>
-                  <Link to={`/app/products/${product.numericId}`}>Configure</Link>
+                  <Link to={`/app/products/${product.numericId}`}>Add custom pricing</Link>
                 </IndexTable.Cell>
               </IndexTable.Row>
             ))}
