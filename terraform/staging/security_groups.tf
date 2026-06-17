@@ -3,7 +3,7 @@
 # network through the tunnel, not through any open inbound port.
 resource "aws_security_group" "ecs_task" {
   name        = "${var.app_name}-ecs-sg"
-  description = "Staging ECS task — outbound only (cloudflared tunnel, no ALB)"
+  description = "Staging ECS task - outbound only (cloudflared tunnel, no ALB)"
   vpc_id      = data.aws_vpc.main.id
 
   egress {

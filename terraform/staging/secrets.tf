@@ -22,5 +22,5 @@ resource "aws_secretsmanager_secret" "tunnel_token" {
 
 resource "aws_secretsmanager_secret_version" "tunnel_token" {
   secret_id     = aws_secretsmanager_secret.tunnel_token.id
-  secret_string = cloudflare_tunnel.staging.tunnel_token
+  secret_string = cloudflare_zero_trust_tunnel_cloudflared.staging.tunnel_token
 }

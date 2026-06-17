@@ -28,5 +28,5 @@ output "shopify_secret_arn" {
 
 output "tunnel_id" {
   description = "Cloudflare Tunnel ID for the staging cloudflared connection."
-  value       = cloudflare_tunnel.staging.id
+  value       = cloudflare_zero_trust_tunnel_cloudflared.staging.id
 }
