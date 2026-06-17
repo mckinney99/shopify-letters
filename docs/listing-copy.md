@@ -75,9 +75,9 @@ Captured at 1600×900. Stored in `assets/screenshots/`.
 
 | File | Alt text | Status |
 |---|---|---|
-| `01-product-page.png` | Etch customization form on a Shopify product page showing the Custom Message field and character counter | ✅ Captured |
-| `02-product-page-filled.png` | Product page with "Love, Alex" entered in the Custom Message field — price updates automatically to $24.99 | ✅ Captured |
-| `03-cart.png` | Shopify cart showing the engraved item with "Custom Message: Love, Alex" on the line item | ✅ Captured |
+| `01-product-page.png` | Etch customization form on a Sterling Silver Name Necklace product page showing the "Personalize your item" section with Custom Message field and character counter | ✅ Captured |
+| `02-product-page-filled.png` | Sterling Silver Name Necklace product page with "Emma" entered in the Custom Message field — price updates automatically based on character count | ✅ Captured |
+| `03-cart.png` | Luminary Fine Jewelry cart showing a Sterling Silver Name Necklace with "Custom Message: Emma" on the line item | ✅ Captured |
 | `04-admin-products.png` | Etch admin showing the product list with configured customization fields | ⚠️ Manual step — capture with `npm run dev` running, then visit `/app/products` |
 | `05-admin-product-config.png` | Etch admin product configuration screen showing pricing rules setup | ⚠️ Manual step — capture with `npm run dev` running, then visit `/app/products/{id}` |
 
