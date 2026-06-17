@@ -14,7 +14,7 @@ import {
   Pagination,
 } from "@shopify/polaris";
 import { ImageIcon } from "@shopify/polaris-icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -170,9 +170,32 @@ export function ErrorBoundary() {
 
 export default function ProductsPage() {
   const { products, pageInfo } = useLoaderData<typeof loader>();
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [guideVisible, setGuideVisible] = useState(true);
+
+  useEffect(() => {
+    setOnboardingComplete(localStorage.getItem("etch_onboarding_complete") === "1");
+  }, []);
+
+  const showGuide = !onboardingComplete && guideVisible;
 
   return (
     <Page title="Products">
+      {showGuide && (
+        <div style={{ marginBottom: "16px" }}>
+          <Banner
+            title="Step 2 of 5 — Pick a product to set up"
+            tone="info"
+            onDismiss={() => setGuideVisible(false)}
+          >
+            <Text as="p">
+              This is your list of Shopify products. Click any <b>product name</b> in the table below
+              to open it and add custom pricing — it only takes a couple of minutes.
+              You'll be guided through every step.
+            </Text>
+          </Banner>
+        </div>
+      )}
       <Card padding="0">
         {products.length === 0 ? (
           <EmptyState
