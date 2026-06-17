@@ -80,6 +80,7 @@ Captured at 1600×900. Stored in `assets/screenshots/`.
 | `03-cart.png` | Luminary Fine Jewelry cart showing a Sterling Silver Name Necklace with "Custom Message: Emma" on the line item | ✅ Captured |
 | `04-admin-products.png` | Etch admin showing the product list with configured customization fields | ✅ Captured |
 | `05-admin-product-config.png` | Etch admin product configuration screen showing the Custom Message field and Pricing tab | ✅ Captured |
+| `06-admin-pricing.png` | Etch admin Pricing tab showing base price ($89), per-character price ($2/char), and live price estimator | ✅ Captured |
 
 ---
 
