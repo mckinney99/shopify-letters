@@ -78,14 +78,8 @@ Captured at 1600×900. Stored in `assets/screenshots/`.
 | `01-product-page.png` | Etch customization form on a Sterling Silver Name Necklace product page showing the "Personalize your item" section with Custom Message field and character counter | ✅ Captured |
 | `02-product-page-filled.png` | Sterling Silver Name Necklace product page with "Emma" entered in the Custom Message field — price updates automatically based on character count | ✅ Captured |
 | `03-cart.png` | Luminary Fine Jewelry cart showing a Sterling Silver Name Necklace with "Custom Message: Emma" on the line item | ✅ Captured |
-| `04-admin-products.png` | Etch admin showing the product list with configured customization fields | ⚠️ Manual step — capture with `npm run dev` running, then visit `/app/products` |
-| `05-admin-product-config.png` | Etch admin product configuration screen showing pricing rules setup | ⚠️ Manual step — capture with `npm run dev` running, then visit `/app/products/{id}` |
-
-**To capture the admin screenshots (04 + 05):**
-1. Run `npm run dev` in the shopify-letters repo
-2. Open `https://admin.shopify.com/store/its-peanut-butter-jelly-time/apps/etch-4` in a 1600×900 browser window
-3. Screenshot the products list page and one product config page
-4. Save as `assets/screenshots/04-admin-products.png` and `05-admin-product-config.png`
+| `04-admin-products.png` | Etch admin showing the product list with configured customization fields | ✅ Captured |
+| `05-admin-product-config.png` | Etch admin product configuration screen showing the Custom Message field and Pricing tab | ✅ Captured |
 
 ---
 
@@ -115,7 +109,7 @@ Captured at 1600×900. Stored in `assets/screenshots/`.
 
 - [ ] Icon uploaded (`assets/icon.png`, 1200×1200)
 - [ ] Screenshots 01–03 uploaded (captured in this story)
-- [ ] Screenshots 04–05 captured manually and uploaded (requires dev server)
+- [ ] Screenshots 04–05 captured and uploaded
 - [ ] Feature media produced and uploaded
 - [ ] App Introduction filled in (83 chars)
 - [ ] App Details filled in (478 chars)
