@@ -154,3 +154,54 @@ terraform destroy
 ```
 
 This deletes the RDS instance (no final snapshot — `skip_final_snapshot = true`), ECS service/cluster, ALB, ECR repo (including images), and associated security groups/IAM roles/secrets. It does **not** touch the shared `modvent-vpc` or any `modvent-*` resources.
+
+---
+
+## Staging environment (`terraform/staging/`)
+
+A cheap staging environment runs in the same AWS account and shared VPC, without an ALB or ACM certificate. HTTPS is provided by a **Cloudflare Tunnel** (`cloudflared` sidecar in the ECS task) — traffic arrives at `staging.etch.direct` via Cloudflare's edge and is tunnelled to the app over an outbound-only connection. No inbound ports are opened.
+
+**Cost:** ~$12–14/month
+- ECS Fargate: 1 task × (0.25 vCPU + 0.5 GB) = ~$0.015/hr (~$11/month)
+- RDS `db.t3.micro`: ~$12–16/month
+- ALB: **none** (Cloudflare Tunnel is free)
+- ACM cert: **none** (Cloudflare terminates TLS)
+
+Compare with a full production mirror (with ALB): ~$43–47/month. Staging saves ~$16/month by dropping the ALB.
+
+### First-time setup
+
+```bash
+cd terraform/staging
+cp secrets.auto.tfvars.example secrets.auto.tfvars
+# Fill in cloudflare_api_token, cloudflare_account_id, shopify_api_key, shopify_api_secret
+terraform init
+terraform plan -out=tfplan.out
+terraform apply tfplan.out
+```
+
+The `cloudflare_account_id` is visible in the Cloudflare dashboard URL: `cloudflare.com/<account_id>/...`
+
+After apply, run migrations on staging:
+
+```bash
+aws ecs run-task \
+  --cluster etch-staging-cluster \
+  --task-definition etch-staging \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[<public-subnet-id>],securityGroups=[<staging-ecs-sg-id>],assignPublicIp=ENABLED}" \
+  --overrides '{"containerOverrides":[{"name":"etch","command":["npx","prisma","migrate","deploy"]}]}'
+```
+
+### CI/CD integration
+
+The deploy workflow (`deploy.yml`) deploys to staging first and waits for steady state before deploying to production. If staging fails to stabilize, the production deploy is skipped. This requires staging to be provisioned before the CI/CD pipeline can run successfully.
+
+### Tearing down staging
+
+```bash
+cd terraform/staging
+terraform destroy
+```
+
+This does **not** affect production — the two environments have fully independent state files and Secrets Manager secrets. The shared ECR repository (owned by production Terraform) is not touched.

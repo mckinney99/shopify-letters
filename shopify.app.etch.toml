@@ -19,6 +19,8 @@ scopes = "read_orders,read_products,write_products,write_cart_transforms,write_v
 redirect_urls = [
   "https://etch.direct/auth/callback",
   "https://etch.direct/auth/shopify/callback",
+  "https://staging.etch.direct/auth/callback",
+  "https://staging.etch.direct/auth/shopify/callback",
   "http://localhost:3000/auth/callback",
   "http://localhost:3000/auth/shopify/callback"
 ]
