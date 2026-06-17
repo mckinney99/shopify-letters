@@ -97,6 +97,7 @@ resource "aws_ecs_task_definition" "staging" {
       environment = [
         { name = "SCOPES", value = var.shopify_scopes },
         { name = "SHOPIFY_APP_URL", value = "https://staging.${var.domain_name}" },
+        { name = "DISABLE_BILLING", value = "true" },
       ]
 
       secrets = [

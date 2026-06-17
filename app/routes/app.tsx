@@ -14,8 +14,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const { billing } = await authenticate.admin(request);
 
-  // Skip billing check on the billing page itself to avoid redirect loops
-  if (url.pathname !== "/app/billing") {
+  // Skip billing check on the billing page itself to avoid redirect loops.
+  // Also skip entirely in staging/dev where DISABLE_BILLING=true.
+  const billingDisabled = process.env.DISABLE_BILLING === "true";
+  if (!billingDisabled && url.pathname !== "/app/billing") {
     try {
       const result = await billing.check({
         plans: [MONTHLY_PLAN],
