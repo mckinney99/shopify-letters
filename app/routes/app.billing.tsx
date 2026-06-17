@@ -17,7 +17,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (process.env.DISABLE_BILLING === "true") {
     return redirect("/app");
   }
-  return json({ trialDays: Number(process.env.BILLING_TRIAL_DAYS || 7) });
+  return json({ trialDays: Number(process.env.BILLING_TRIAL_DAYS || 14) });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -60,7 +60,7 @@ export default function BillingPage() {
           </Banner>
           <BlockStack gap="200">
             <Text as="h2" variant="headingMd">
-              Monthly Plan — $4.99/month
+              Monthly Plan — $9.99/month
             </Text>
             <Text as="p" tone="subdued">
               Includes a {trialDays}-day free trial. Cancel any time from your

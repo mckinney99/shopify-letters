@@ -1,12 +1,13 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, Link } from "@remix-run/react";
+import { useLoaderData, Link, useRouteError } from "@remix-run/react";
 import {
   Page,
   Card,
   IndexTable,
   Text,
   Badge,
+  Banner,
   EmptyState,
   Pagination,
 } from "@shopify/polaris";
@@ -167,6 +168,17 @@ function formatStatus(status: string): string {
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  return (
+    <Page>
+      <Banner title="Something went wrong" tone="critical">
+        <p>{error instanceof Error ? error.message : "An unexpected error occurred."}</p>
+      </Banner>
+    </Page>
+  );
 }
 
 export default function OrdersPage() {

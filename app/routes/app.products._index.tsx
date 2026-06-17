@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher, Link } from "@remix-run/react";
+import { useLoaderData, useFetcher, Link, useRouteError } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -8,6 +8,7 @@ import {
   Text,
   Thumbnail,
   Badge,
+  Banner,
   useIndexResourceState,
   EmptyState,
   Pagination,
@@ -153,6 +154,17 @@ function ToggleButton({
         {optimisticEnabled ? "Enabled" : "Disabled"}
       </button>
     </fetcher.Form>
+  );
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  return (
+    <Page>
+      <Banner title="Something went wrong" tone="critical">
+        <p>{error instanceof Error ? error.message : "An unexpected error occurred."}</p>
+      </Banner>
+    </Page>
   );
 }
 
