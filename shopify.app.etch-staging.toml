@@ -1,0 +1,24 @@
+# Staging app config — separate Shopify Partner app with application_url pointing
+# to staging.etch.direct. Deploy with: shopify app deploy --config etch-staging
+
+client_id = "f0951025adf75faa674eeacd5d61d231"
+name = "Etch (Staging)"
+application_url = "https://staging.etch.direct"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = false
+
+[webhooks]
+api_version = "2025-10"
+
+[access_scopes]
+scopes = "read_orders,write_orders,read_products,write_products,write_cart_transforms,write_validations"
+
+[auth]
+redirect_urls = [
+  "https://staging.etch.direct/auth/callback",
+  "https://staging.etch.direct/auth/shopify/callback",
+  "http://localhost:3000/auth/callback",
+  "http://localhost:3000/auth/shopify/callback"
+]
