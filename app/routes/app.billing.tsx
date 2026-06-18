@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import {
   Page,
@@ -14,6 +14,9 @@ import { authenticate, MONTHLY_PLAN } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
+  if (process.env.DISABLE_BILLING === "true") {
+    return redirect("/app");
+  }
   return json({ trialDays: Number(process.env.BILLING_TRIAL_DAYS || 14) });
 };
 

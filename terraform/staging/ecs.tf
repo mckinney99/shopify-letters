@@ -1,4 +1,4 @@
-resource "aws_ecs_cluster" "main" {
+resource "aws_ecs_cluster" "staging" {
   name = "${var.app_name}-cluster"
 
   setting {
@@ -7,7 +7,7 @@ resource "aws_ecs_cluster" "main" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "app" {
+resource "aws_cloudwatch_log_group" "staging" {
   name              = "/ecs/${var.app_name}"
   retention_in_days = 14
 }
@@ -38,6 +38,7 @@ data "aws_iam_policy_document" "ecs_execution_secrets" {
     resources = [
       aws_secretsmanager_secret.db.arn,
       aws_secretsmanager_secret.shopify.arn,
+      aws_secretsmanager_secret.tunnel_token.arn,
     ]
   }
 }
@@ -48,9 +49,6 @@ resource "aws_iam_role_policy" "ecs_execution_secrets" {
   policy = data.aws_iam_policy_document.ecs_execution_secrets.json
 }
 
-# Task role (assumed by the running container, distinct from the execution
-# role above) — only used here to grant ECS Exec (SSM Session Manager)
-# access for debugging and for verifying the task's environment.
 resource "aws_iam_role" "ecs_task" {
   name               = "${var.app_name}-ecs-task-role"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume.json
@@ -74,7 +72,7 @@ resource "aws_iam_role_policy" "ecs_task_exec" {
   policy = data.aws_iam_policy_document.ecs_exec.json
 }
 
-resource "aws_ecs_task_definition" "app" {
+resource "aws_ecs_task_definition" "staging" {
   family                   = var.app_name
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -85,8 +83,8 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([
     {
-      name      = var.app_name
-      image     = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
+      name      = "etch"
+      image     = "${data.aws_ecr_repository.app.repository_url}:${var.image_tag}"
       essential = true
 
       portMappings = [
@@ -98,7 +96,8 @@ resource "aws_ecs_task_definition" "app" {
 
       environment = [
         { name = "SCOPES", value = var.shopify_scopes },
-        { name = "SHOPIFY_APP_URL", value = "https://${var.domain_name}" },
+        { name = "SHOPIFY_APP_URL", value = "https://staging.${var.domain_name}" },
+        { name = "DISABLE_BILLING", value = "true" },
       ]
 
       secrets = [
@@ -119,9 +118,35 @@ resource "aws_ecs_task_definition" "app" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.app.name
+          "awslogs-group"         = aws_cloudwatch_log_group.staging.name
           "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = var.app_name
+          "awslogs-stream-prefix" = "etch"
+        }
+      }
+    },
+    {
+      name      = "cloudflared"
+      image     = "cloudflare/cloudflared:2024.11.1"
+      essential = false
+
+      # Reads TUNNEL_TOKEN from the environment and connects outbound to the
+      # Cloudflare edge. All containers in an awsvpc task share localhost, so
+      # the tunnel routes staging.etch.direct → http://localhost:3000.
+      command = ["tunnel", "--no-autoupdate", "run"]
+
+      secrets = [
+        {
+          name      = "TUNNEL_TOKEN"
+          valueFrom = aws_secretsmanager_secret.tunnel_token.arn
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.staging.name
+          "awslogs-region"        = var.aws_region
+          "awslogs-stream-prefix" = "cloudflared"
         }
       }
     }
@@ -132,11 +157,11 @@ resource "aws_ecs_task_definition" "app" {
   }
 }
 
-resource "aws_ecs_service" "app" {
+resource "aws_ecs_service" "staging" {
   name                   = var.app_name
-  cluster                = aws_ecs_cluster.main.id
-  task_definition        = aws_ecs_task_definition.app.arn
-  desired_count          = 2
+  cluster                = aws_ecs_cluster.staging.id
+  task_definition        = aws_ecs_task_definition.staging.arn
+  desired_count          = 1
   launch_type            = "FARGATE"
   enable_execute_command = true
 
@@ -146,16 +171,8 @@ resource "aws_ecs_service" "app" {
     assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.app.arn
-    container_name   = var.app_name
-    container_port   = var.container_port
-  }
-
   deployment_circuit_breaker {
     enable   = true
     rollback = true
   }
-
-  depends_on = [aws_lb_listener.http]
 }

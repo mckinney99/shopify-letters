@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import { useLoaderData, useFetcher, useRouteError } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -715,6 +715,17 @@ function PricingTab({
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+  return (
+    <Page>
+      <Banner title="Something went wrong" tone="critical">
+        <p>{error instanceof Error ? error.message : "An unexpected error occurred."}</p>
+      </Banner>
+    </Page>
+  );
+}
 
 export default function ProductDetailPage() {
   const { product, published, fields, pricingRules } = useLoaderData<typeof loader>();

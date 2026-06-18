@@ -1,8 +1,9 @@
-# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+# Staging app config — separate Shopify Partner app with application_url pointing
+# to staging.etch.direct. Deploy with: shopify app deploy --config etch-staging
 
-client_id = "5904cf9b73a4faab36946d484c5b5feb"
-name = "Etch"
-application_url = "https://etch.direct"
+client_id = "f0951025adf75faa674eeacd5d61d231"
+name = "Etch (Staging)"
+application_url = "https://staging.etch.direct"
 embedded = true
 
 [build]
@@ -12,13 +13,10 @@ automatically_update_urls_on_dev = false
 api_version = "2025-10"
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_orders,read_products,write_products,write_cart_transforms,write_validations"
 
 [auth]
 redirect_urls = [
-  "https://etch.direct/auth/callback",
-  "https://etch.direct/auth/shopify/callback",
   "https://staging.etch.direct/auth/callback",
   "https://staging.etch.direct/auth/shopify/callback",
   "http://localhost:3000/auth/callback",
