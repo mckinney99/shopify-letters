@@ -1,0 +1,98 @@
+name: Deploy branch to staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch name to build and deploy to staging'
+        required: true
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: 394554601568.dkr.ecr.us-east-1.amazonaws.com/etch
+  STAGING_ECS_CLUSTER: etch-staging-cluster
+  STAGING_ECS_SERVICE: etch-staging
+  STAGING_TASK_FAMILY: etch-staging
+
+jobs:
+  deploy:
+    name: Build and deploy to staging
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG="staging-preview"
+          docker build -t "$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker push "$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+
+      - name: Register new staging task definition
+        run: |
+          # Fetch current task definition and strip read-only fields that
+          # would cause register-task-definition to reject the payload.
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "$STAGING_TASK_FAMILY" \
+            --query 'taskDefinition' \
+            --output json | jq 'del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .placementConstraints,
+              .compatibilities,
+              .registeredAt,
+              .registeredBy
+            )')
+
+          # Swap the image on the "etch" container only (leaves cloudflared unchanged).
+          NEW_TASK_DEF=$(echo "$TASK_DEF" | jq \
+            --arg IMAGE "$ECR_REPOSITORY:$IMAGE_TAG" \
+            '(.containerDefinitions[] | select(.name == "etch") | .image) |= $IMAGE')
+
+          # Register the updated task definition and capture the new ARN.
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_TASK_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "Registered task definition: $NEW_ARN"
+          echo "NEW_TASK_DEF_ARN=$NEW_ARN" >> "$GITHUB_ENV"
+
+      - name: Deploy to staging
+        run: |
+          aws ecs update-service \
+            --cluster "$STAGING_ECS_CLUSTER" \
+            --service "$STAGING_ECS_SERVICE" \
+            --task-definition "$NEW_TASK_DEF_ARN" \
+            --force-new-deployment \
+            --no-cli-pager
+
+          echo "Waiting for staging to stabilize (up to 10 min)..."
+          aws ecs wait services-stable \
+            --cluster "$STAGING_ECS_CLUSTER" \
+            --services "$STAGING_ECS_SERVICE"
+
+      - name: Summary
+        run: |
+          echo "### Staging deploy complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | \`${{ inputs.branch }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | \`$ECR_REPOSITORY:$IMAGE_TAG\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Staging URL | https://staging.etch.direct |" >> "$GITHUB_STEP_SUMMARY"
