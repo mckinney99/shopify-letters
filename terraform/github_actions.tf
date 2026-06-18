@@ -19,7 +19,7 @@ data "aws_iam_policy_document" "github_actions_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:mckinney99/shopify-letters:ref:refs/heads/main"]
+      values   = ["repo:mckinney99/shopify-letters:ref:refs/heads/*"]
     }
   }
 }
@@ -73,6 +73,22 @@ data "aws_iam_policy_document" "github_actions" {
     actions = ["ecs:UpdateService"]
     # Scoped to both production and staging services by name prefix.
     resources = ["arn:aws:ecs:${var.aws_region}:*:service/etch*/etch*"]
+  }
+
+  statement {
+    sid = "ECSTaskDefinition"
+    actions = [
+      "ecs:DescribeTaskDefinition",
+      "ecs:RegisterTaskDefinition",
+    ]
+    # Task definition actions don't support resource-level conditions.
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "PassRoleToECS"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::*:role/etch*"]
   }
 }
 
