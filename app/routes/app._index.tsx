@@ -26,6 +26,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return json({ totalCount, enabledCount, publishedCount });
 };
 
+function TopNav() {
+  return (
+    <Box paddingBlockEnd="200">
+      <InlineStack gap="400" align="start">
+        <Button url="/app/products" variant="plain">Products</Button>
+        <Button url="/app/orders" variant="plain">Orders</Button>
+        <Button url="/app/support" variant="plain">Help &amp; Support</Button>
+      </InlineStack>
+    </Box>
+  );
+}
+
 export default function Index() {
   const { totalCount, enabledCount, publishedCount } = useLoaderData<typeof loader>();
 
@@ -35,11 +47,12 @@ export default function Index() {
         <Layout>
           <Layout.Section>
             <BlockStack gap="500">
+              <TopNav />
               <Card>
                 <BlockStack gap="400">
                   <Text as="h2" variant="headingMd">What is Etch?</Text>
                   <Text as="p">
-                    Etch lets you charge customers based on what they type — perfect for engraving,
+                    Etch lets you charge customers based on what they type, perfect for engraving,
                     monogramming, embroidery, and any product with personalised text. Set a price per
                     character and Etch automatically adds the right amount to the cart total.
                   </Text>
@@ -47,10 +60,10 @@ export default function Index() {
                   <BlockStack gap="200">
                     <Text as="h3" variant="headingSm">How to get set up (takes about 2 minutes):</Text>
                     <BlockStack gap="100">
-                      <Text as="p"><b>1. Pick a product</b> — choose any product from your Shopify store</Text>
-                      <Text as="p"><b>2. Add a text field</b> — tell Etch what your customer will type (e.g. "Enter engraving text")</Text>
-                      <Text as="p"><b>3. Set your pricing</b> — choose a flat fee and/or a price per character typed</Text>
-                      <Text as="p"><b>4. Publish</b> — go live on your storefront instantly, no code required</Text>
+                      <Text as="p"><b>1. Pick a product:</b> choose any product from your Shopify store</Text>
+                      <Text as="p"><b>2. Add a text field:</b> tell Etch what your customer will type (e.g. "Enter engraving text")</Text>
+                      <Text as="p"><b>3. Set your pricing:</b> choose a flat fee and/or a price per character typed</Text>
+                      <Text as="p"><b>4. Publish:</b> go live on your storefront instantly, no code required</Text>
                     </BlockStack>
                   </BlockStack>
                   <Box>
@@ -58,10 +71,10 @@ export default function Index() {
                   </Box>
                 </BlockStack>
               </Card>
-              <Banner title="Step 1 of 5 — Head to Products" tone="info">
+              <Banner title="Step 1 of 5: Head to Products" tone="info">
                 <Text as="p">
-                  Click <b>Products</b> in the left navigation bar to see your Shopify products.
-                  You'll pick one to add custom pricing to it — don't worry, you can do as many as you like later.
+                  Click <b>Products</b> to see your Shopify products.
+                  From there you can select which products you would like to add custom pricing to.
                 </Text>
               </Banner>
             </BlockStack>
@@ -75,28 +88,31 @@ export default function Index() {
     <Page title="Etch">
       <Layout>
         <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Your products</Text>
-              <InlineStack gap="800">
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingXl" fontWeight="bold">{publishedCount}</Text>
-                  <Text as="p" tone="subdued">Published</Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingXl" fontWeight="bold">{enabledCount}</Text>
-                  <Text as="p" tone="subdued">Enabled</Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingXl" fontWeight="bold">{totalCount}</Text>
-                  <Text as="p" tone="subdued">Configured</Text>
-                </BlockStack>
-              </InlineStack>
-              <Box>
-                <Button url="/app/products" variant="primary">Add custom pricing</Button>
-              </Box>
-            </BlockStack>
-          </Card>
+          <BlockStack gap="500">
+            <TopNav />
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">Your products</Text>
+                <InlineStack gap="800">
+                  <BlockStack gap="100">
+                    <Text as="p" variant="headingXl" fontWeight="bold">{publishedCount}</Text>
+                    <Text as="p" tone="subdued">Published</Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="headingXl" fontWeight="bold">{enabledCount}</Text>
+                    <Text as="p" tone="subdued">Enabled</Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="headingXl" fontWeight="bold">{totalCount}</Text>
+                    <Text as="p" tone="subdued">Configured</Text>
+                  </BlockStack>
+                </InlineStack>
+                <Box>
+                  <Button url="/app/products" variant="primary">Add custom pricing</Button>
+                </Box>
+              </BlockStack>
+            </Card>
+          </BlockStack>
         </Layout.Section>
       </Layout>
     </Page>

@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher, useRouteError, Link } from "@remix-run/react";
+import { useLoaderData, useFetcher, useRouteError, useNavigate } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -123,7 +123,7 @@ function validateField(data: Record<string, string>): string | null {
   if (min !== null && max !== null && min > max)
     return "Min characters cannot exceed max characters.";
   if (data.allowedChars?.trim() && data.disallowedChars?.trim())
-    return "Cannot set both allowed and disallowed characters — choose one or neither.";
+    return "Cannot set both allowed and disallowed characters. Choose one or neither.";
   return null;
 }
 
@@ -729,6 +729,7 @@ export function ErrorBoundary() {
 
 export default function ProductDetailPage() {
   const { product, published, fields, pricingRules } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -823,8 +824,9 @@ export default function ProductDetailPage() {
                 in real time. Etch will automatically apply the correct charge at checkout.
               </Text>
               <Text as="p">
-                <Link to="/app/support"><b>Bookmark our Help &amp; Support page</b></Link> for
-                tips, FAQs, and pricing ideas whenever you need them.
+                <Button variant="plain" onClick={() => navigate("/app/support")}>
+                  Bookmark our Help &amp; Support page
+                </Button>{" "}for tips, FAQs, and pricing ideas whenever you need them.
               </Text>
             </BlockStack>
           </Banner>
@@ -832,14 +834,14 @@ export default function ProductDetailPage() {
 
         {!onboardingComplete && !optimisticPublished && !publishCalloutDismissed && (
           <Banner
-            title="Step 5 of 5 — Go live!"
+            title="Step 5 of 5: Go live!"
             tone="info"
             onDismiss={() => setPublishCalloutDismissed(true)}
           >
             <Text as="p">
               Once you've added a field and set your pricing below, click the{" "}
-              <b>Publish</b> button in the top-right corner. That's it — your custom
-              pricing will go live on your storefront immediately. Your customers will see it the
+              <b>Publish</b> button in the top-right corner. Your custom pricing will go live
+              on your storefront immediately. Your customers will see it the
               next time they view this product.
             </Text>
           </Banner>
@@ -851,19 +853,19 @@ export default function ProductDetailPage() {
             <BlockStack gap="400">
               {!onboardingComplete && !fieldCalloutDismissed && (
                 <Banner
-                  title="Step 3 of 5 — Add a text field"
+                  title="Step 3 of 5: Add a text field"
                   tone="info"
                   onDismiss={() => setFieldCalloutDismissed(true)}
                 >
                   <BlockStack gap="200">
                     <Text as="p">
-                      A <b>field</b> is a text box shown to your customer on the product page —
-                      for example, "Enter your engraving text here" or "Monogram initials (max 3 letters)".
+                      A <b>field</b> is a text box shown to your customer on the product page. For
+                      example: "Enter your engraving text here" or "Monogram initials (max 3 letters)".
                       Etch will charge per character based on whatever your customer types in.
                     </Text>
-                    <Text as="p"><b>Label</b> — the name of the input that your customer will see.</Text>
-                    <Text as="p"><b>Min/Max characters</b> — optional limits on how long the input can be.</Text>
-                    <Text as="p"><b>Allowed/Disallowed characters</b> — optionally restrict to certain letters or symbols.</Text>
+                    <Text as="p"><b>Label:</b> the name of the input that your customer will see.</Text>
+                    <Text as="p"><b>Min/Max characters:</b> optional limits on how long the input can be.</Text>
+                    <Text as="p"><b>Allowed/Disallowed characters:</b> optionally restrict to certain letters or symbols.</Text>
                     <Text as="p">
                       Click <b>Add field</b> below to create your first one, then head to the{" "}
                       <b>Pricing</b> tab to set your prices.
@@ -914,22 +916,22 @@ export default function ProductDetailPage() {
             <BlockStack gap="400">
               {!onboardingComplete && !pricingCalloutDismissed && (
                 <Banner
-                  title="Step 4 of 5 — Set your pricing"
+                  title="Step 4 of 5: Set your pricing"
                   tone="info"
                   onDismiss={() => setPricingCalloutDismissed(true)}
                 >
                   <BlockStack gap="200">
                     <Text as="p">
-                      <b>Base price</b> — a flat fee added to every order for this product, no matter how
+                      <b>Base price:</b> a flat fee added to every order for this product, no matter how
                       many characters the customer types. Use this if there's a fixed setup cost
                       (e.g. $5.00 for any engraving job).
                     </Text>
                     <Text as="p">
-                      <b>Per-character price</b> — charged for each character the customer types.
+                      <b>Per-character price:</b> charged for each character the customer types.
                       For example, at $0.50/char, the word "Hello" (5 characters) adds $2.50 to the cart.
                     </Text>
                     <Text as="p">
-                      <b>Character groups</b> (optional) — charge a different price for specific
+                      <b>Character groups</b> (optional): charge a different price for specific
                       character sets. For example, emoji or special symbols could cost more than
                       regular letters.
                     </Text>

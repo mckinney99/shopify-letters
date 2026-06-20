@@ -64,9 +64,9 @@ export default function Support() {
                 <Divider />
                 <BlockStack gap="200">
                   <Text as="p" tone="subdued">
-                    Etch lets you charge customers based on what they type —
-                    configurable per-character pricing for engraving, monogramming,
-                    or any text-based customization.
+                    Etch lets you charge customers based on what they type: configurable
+                    per-character pricing for engraving, monogramming, or any text-based
+                    customization.
                   </Text>
                   <Text as="p" tone="subdued">
                     Pricing rules are applied at checkout automatically via

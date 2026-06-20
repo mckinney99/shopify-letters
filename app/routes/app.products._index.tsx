@@ -188,13 +188,13 @@ export default function ProductsPage() {
       {showGuide && (
         <div style={{ marginBottom: "16px" }}>
           <Banner
-            title="Step 2 of 5 — Pick a product to set up"
+            title="Step 2 of 5: Pick a product to set up"
             tone="info"
             onDismiss={() => { step2Dismissed = true; setGuideVisible(false); }}
           >
             <Text as="p">
               This is your list of Shopify products. Click any <b>product name</b> in the table below
-              to open it and add custom pricing — it only takes a couple of minutes.
+              to open it and add custom pricing. It only takes a couple of minutes.
               You'll be guided through every step.
             </Text>
           </Banner>
