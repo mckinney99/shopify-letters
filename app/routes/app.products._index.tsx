@@ -1,6 +1,6 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher, Link, useRouteError } from "@remix-run/react";
+import { useLoaderData, Link, useRouteError } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -9,7 +9,6 @@ import {
   Thumbnail,
   Badge,
   Banner,
-  useIndexResourceState,
   EmptyState,
   Pagination,
 } from "@shopify/polaris";
@@ -90,7 +89,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const configs = await prisma.productConfig.findMany({
     where: { shop: session.shop, productId: { in: productIds } },
-    select: { productId: true, enabled: true, published: true },
+    select: { productId: true, published: true },
   });
 
   const configMap = new Map(configs.map((c) => [c.productId, c]));
@@ -103,59 +102,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     status: node.status,
     imageUrl: node.featuredImage?.url ?? null,
     imageAlt: node.featuredImage?.altText ?? node.title,
-    enabled: configMap.get(node.id)?.enabled ?? false,
     published: configMap.get(node.id)?.published ?? false,
   }));
 
   return json({ products, pageInfo });
 };
-
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const form = await request.formData();
-  const productId = form.get("productId") as string;
-  const enabled = form.get("enabled") === "true";
-
-  await prisma.productConfig.upsert({
-    where: { shop_productId: { shop: session.shop, productId } },
-    update: { enabled },
-    create: { shop: session.shop, productId, enabled },
-  });
-
-  return json({ ok: true });
-};
-
-function ToggleButton({
-  productId,
-  enabled,
-}: {
-  productId: string;
-  enabled: boolean;
-}) {
-  const fetcher = useFetcher();
-  // Optimistic: flip immediately, revert on error if needed
-  const optimisticEnabled =
-    fetcher.state !== "idle"
-      ? fetcher.formData?.get("enabled") === "true"
-      : enabled;
-
-  return (
-    <fetcher.Form method="post">
-      <input type="hidden" name="productId" value={productId} />
-      <input
-        type="hidden"
-        name="enabled"
-        value={String(!optimisticEnabled)}
-      />
-      <button
-        type="submit"
-        className={`product-toggle ${optimisticEnabled ? "product-toggle--on" : "product-toggle--off"}`}
-      >
-        {optimisticEnabled ? "Enabled" : "Disabled"}
-      </button>
-    </fetcher.Form>
-  );
-}
 
 // Persists across remounts within the same SPA session (resets on hard refresh).
 let step2Dismissed = false;
@@ -214,9 +165,8 @@ export default function ProductsPage() {
             itemCount={products.length}
             headings={[
               { title: "Product" },
-              { title: "Status" },
-              { title: "Customization" },
-              { title: "Published" },
+              { title: "Shopify Status" },
+              { title: "Etch Status" },
               { title: "Fields" },
             ]}
             selectable={false}
@@ -243,14 +193,8 @@ export default function ProductsPage() {
                   </Badge>
                 </IndexTable.Cell>
                 <IndexTable.Cell>
-                  <ToggleButton
-                    productId={product.id}
-                    enabled={product.enabled}
-                  />
-                </IndexTable.Cell>
-                <IndexTable.Cell>
                   <Badge tone={product.published ? "success" : "new"}>
-                    {product.published ? "Published" : "Draft"}
+                    {product.published ? "Active" : "Not configured"}
                   </Badge>
                 </IndexTable.Cell>
                 <IndexTable.Cell>

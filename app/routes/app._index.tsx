@@ -18,12 +18,11 @@ import prisma from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const [totalCount, enabledCount, publishedCount] = await Promise.all([
+  const [totalCount, publishedCount] = await Promise.all([
     prisma.productConfig.count({ where: { shop: session.shop } }),
-    prisma.productConfig.count({ where: { shop: session.shop, enabled: true } }),
     prisma.productConfig.count({ where: { shop: session.shop, published: true } }),
   ]);
-  return json({ totalCount, enabledCount, publishedCount });
+  return json({ totalCount, publishedCount });
 };
 
 function TopNav() {
@@ -39,7 +38,7 @@ function TopNav() {
 }
 
 export default function Index() {
-  const { totalCount, enabledCount, publishedCount } = useLoaderData<typeof loader>();
+  const { totalCount, publishedCount } = useLoaderData<typeof loader>();
 
   if (publishedCount === 0) {
     return (
@@ -96,11 +95,7 @@ export default function Index() {
                 <InlineStack gap="800">
                   <BlockStack gap="100">
                     <Text as="p" variant="headingXl" fontWeight="bold">{publishedCount}</Text>
-                    <Text as="p" tone="subdued">Published</Text>
-                  </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="headingXl" fontWeight="bold">{enabledCount}</Text>
-                    <Text as="p" tone="subdued">Enabled</Text>
+                    <Text as="p" tone="subdued">Active</Text>
                   </BlockStack>
                   <BlockStack gap="100">
                     <Text as="p" variant="headingXl" fontWeight="bold">{totalCount}</Text>
