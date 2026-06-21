@@ -451,6 +451,10 @@
     return '$' + (minor / 100).toFixed(2);
   }
 
-  // Boot all blocks on the page
-  document.querySelectorAll('.etch-customization').forEach(initBlock);
+  // Boot all blocks on the page. Guard prevents double-init when a theme places
+  // multiple blocks of this type (each block includes its own <script> tag).
+  document.querySelectorAll('.etch-customization:not([data-etch-init])').forEach(function(container) {
+    container.setAttribute('data-etch-init', '1');
+    initBlock(container);
+  });
 })();
