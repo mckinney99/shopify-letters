@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher, useRouteError } from "@remix-run/react";
+import { useLoaderData, useFetcher, useRouteError, useNavigate } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -17,7 +17,7 @@ import {
   Divider,
   Badge,
 } from "@shopify/polaris";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
@@ -123,7 +123,7 @@ function validateField(data: Record<string, string>): string | null {
   if (min !== null && max !== null && min > max)
     return "Min characters cannot exceed max characters.";
   if (data.allowedChars?.trim() && data.disallowedChars?.trim())
-    return "Cannot set both allowed and disallowed characters — choose one or neither.";
+    return "Cannot set both allowed and disallowed characters. Choose one or neither.";
   return null;
 }
 
@@ -729,9 +729,21 @@ export function ErrorBoundary() {
 
 export default function ProductDetailPage() {
   const { product, published, fields, pricingRules } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Onboarding guide state
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [showCongrats, setShowCongrats] = useState(false);
+  const [fieldCalloutDismissed, setFieldCalloutDismissed] = useState(false);
+  const [pricingCalloutDismissed, setPricingCalloutDismissed] = useState(false);
+  const [publishCalloutDismissed, setPublishCalloutDismissed] = useState(false);
+
+  useEffect(() => {
+    setOnboardingComplete(localStorage.getItem("etch_onboarding_complete") === "1");
+  }, []);
 
   const publishFetcher = useFetcher<{ ok?: boolean }>();
   const isPublishing = publishFetcher.state !== "idle";
@@ -739,6 +751,30 @@ export default function ProductDetailPage() {
     isPublishing
       ? publishFetcher.formData?.get("published") === "true"
       : published;
+
+  // Track last publish intent in a ref so we can read it after state returns to "idle"
+  // (formData is typed as never when state === "idle").
+  const lastPublishedValue = useRef<string | null>(null);
+  useEffect(() => {
+    if (publishFetcher.state !== "idle" && publishFetcher.formData) {
+      lastPublishedValue.current = publishFetcher.formData.get("published") as string | null;
+    }
+  }, [publishFetcher.state, publishFetcher.formData]);
+
+  // Detect first publish — show congrats and set the flag permanently
+  useEffect(() => {
+    if (
+      publishFetcher.state === "idle" &&
+      publishFetcher.data?.ok === true &&
+      lastPublishedValue.current === "true" &&
+      !onboardingComplete
+    ) {
+      lastPublishedValue.current = null;
+      localStorage.setItem("etch_onboarding_complete", "1");
+      setOnboardingComplete(true);
+      setShowCongrats(true);
+    }
+  }, [publishFetcher.state, publishFetcher.data, onboardingComplete]);
 
   const handleEdit = useCallback((id: string) => {
     setShowAddForm(false);
@@ -775,10 +811,68 @@ export default function ProductDetailPage() {
           ),
       }}
     >
+      <BlockStack gap="400">
+        {showCongrats && (
+          <Banner
+            title="You're all set! Your first custom pricing is live."
+            tone="success"
+            onDismiss={() => setShowCongrats(false)}
+          >
+            <BlockStack gap="200">
+              <Text as="p">
+                Your customers can now add custom text to this product and see the price update
+                in real time. Etch will automatically apply the correct charge at checkout.
+              </Text>
+              <Text as="p">
+                <Button variant="plain" onClick={() => navigate("/app/support")}>
+                  Bookmark our Help &amp; Support page
+                </Button>{" "}for tips, FAQs, and pricing ideas whenever you need them.
+              </Text>
+            </BlockStack>
+          </Banner>
+        )}
+
+        {!onboardingComplete && !optimisticPublished && !publishCalloutDismissed && (
+          <Banner
+            title="Step 5 of 5: Go live!"
+            tone="info"
+            onDismiss={() => setPublishCalloutDismissed(true)}
+          >
+            <Text as="p">
+              Once you've added a field and set your pricing below, click the{" "}
+              <b>Publish</b> button in the top-right corner. Your custom pricing will go live
+              on your storefront immediately. Your customers will see it the
+              next time they view this product.
+            </Text>
+          </Banner>
+        )}
+
       <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
         <Box paddingBlockStart="400">
           {selectedTab === 0 ? (
             <BlockStack gap="400">
+              {!onboardingComplete && !fieldCalloutDismissed && (
+                <Banner
+                  title="Step 3 of 5: Add a text field"
+                  tone="info"
+                  onDismiss={() => setFieldCalloutDismissed(true)}
+                >
+                  <BlockStack gap="200">
+                    <Text as="p">
+                      A <b>field</b> is a text box shown to your customer on the product page. For
+                      example: "Enter your engraving text here" or "Monogram initials (max 3 letters)".
+                      Etch will charge per character based on whatever your customer types in.
+                    </Text>
+                    <Text as="p"><b>Label:</b> the name of the input that your customer will see.</Text>
+                    <Text as="p"><b>Min/Max characters:</b> optional limits on how long the input can be.</Text>
+                    <Text as="p"><b>Allowed/Disallowed characters:</b> optionally restrict to certain letters or symbols.</Text>
+                    <Text as="p">
+                      Click <b>Add field</b> below to create your first one, then head to the{" "}
+                      <b>Pricing</b> tab to set your prices.
+                    </Text>
+                  </BlockStack>
+                </Banner>
+              )}
               <Card padding="0">
                 {fields.length === 0 && !showAddForm ? (
                   <EmptyState
@@ -819,10 +913,41 @@ export default function ProductDetailPage() {
               )}
             </BlockStack>
           ) : (
-            <PricingTab fields={fields} pricingRules={pricingRules} />
+            <BlockStack gap="400">
+              {!onboardingComplete && !pricingCalloutDismissed && (
+                <Banner
+                  title="Step 4 of 5: Set your pricing"
+                  tone="info"
+                  onDismiss={() => setPricingCalloutDismissed(true)}
+                >
+                  <BlockStack gap="200">
+                    <Text as="p">
+                      <b>Base price:</b> a flat fee added to every order for this product, no matter how
+                      many characters the customer types. Use this if there's a fixed setup cost
+                      (e.g. $5.00 for any engraving job).
+                    </Text>
+                    <Text as="p">
+                      <b>Per-character price:</b> charged for each character the customer types.
+                      For example, at $0.50/char, the word "Hello" (5 characters) adds $2.50 to the cart.
+                    </Text>
+                    <Text as="p">
+                      <b>Character groups</b> (optional): charge a different price for specific
+                      character sets. For example, emoji or special symbols could cost more than
+                      regular letters.
+                    </Text>
+                    <Text as="p">
+                      Once you're happy with your pricing, head back to this page's top-right corner
+                      and click <b>Publish</b> to go live.
+                    </Text>
+                  </BlockStack>
+                </Banner>
+              )}
+              <PricingTab fields={fields} pricingRules={pricingRules} />
+            </BlockStack>
           )}
         </Box>
       </Tabs>
+      </BlockStack>
     </Page>
   );
 }

@@ -14,7 +14,7 @@ import {
   Pagination,
 } from "@shopify/polaris";
 import { ImageIcon } from "@shopify/polaris-icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -157,6 +157,9 @@ function ToggleButton({
   );
 }
 
+// Persists across remounts within the same SPA session (resets on hard refresh).
+let step2Dismissed = false;
+
 export function ErrorBoundary() {
   const error = useRouteError();
   return (
@@ -170,9 +173,33 @@ export function ErrorBoundary() {
 
 export default function ProductsPage() {
   const { products, pageInfo } = useLoaderData<typeof loader>();
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  // Module-level flag persists dismissed state across SPA navigation within the session.
+  const [guideVisible, setGuideVisible] = useState(() => !step2Dismissed);
+
+  useEffect(() => {
+    setOnboardingComplete(localStorage.getItem("etch_onboarding_complete") === "1");
+  }, []);
+
+  const showGuide = !onboardingComplete && guideVisible;
 
   return (
     <Page title="Products">
+      {showGuide && (
+        <div style={{ marginBottom: "16px" }}>
+          <Banner
+            title="Step 2 of 5: Pick a product to set up"
+            tone="info"
+            onDismiss={() => { step2Dismissed = true; setGuideVisible(false); }}
+          >
+            <Text as="p">
+              This is your list of Shopify products. Click any <b>product name</b> in the table below
+              to open it and add custom pricing. It only takes a couple of minutes.
+              You'll be guided through every step.
+            </Text>
+          </Banner>
+        </div>
+      )}
       <Card padding="0">
         {products.length === 0 ? (
           <EmptyState
@@ -227,7 +254,7 @@ export default function ProductsPage() {
                   </Badge>
                 </IndexTable.Cell>
                 <IndexTable.Cell>
-                  <Link to={`/app/products/${product.numericId}`}>Configure</Link>
+                  <Link to={`/app/products/${product.numericId}`}>Add custom pricing</Link>
                 </IndexTable.Cell>
               </IndexTable.Row>
             ))}
