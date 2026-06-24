@@ -1,40 +1,20 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { redirect } from "@remix-run/node";
 import { Outlet, useLoaderData, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
-import { authenticate, MONTHLY_PLAN, migrateShpat } from "../shopify.server";
+import { authenticate, migrateShpat } from "../shopify.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-
-  const { billing, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   if (session.accessToken?.startsWith("shpat_")) {
     await migrateShpat(session).catch((err: Error) =>
       console.error("[app] proactive token migration failed:", err.message)
     );
-  }
-
-  // Skip billing check on the billing page itself to avoid redirect loops.
-  // Also skip entirely in staging/dev where DISABLE_BILLING=true.
-  const billingDisabled = process.env.DISABLE_BILLING === "true";
-  if (!billingDisabled && url.pathname !== "/app/billing") {
-    try {
-      const result = await billing.check({
-        plans: [MONTHLY_PLAN],
-        isTest: process.env.BILLING_IS_TEST !== "false",
-      });
-      if (!result.hasActivePayment) {
-        return redirect(`/app/billing?${url.searchParams.toString()}`);
-      }
-    } catch {
-      return redirect(`/app/billing?${url.searchParams.toString()}`);
-    }
   }
 
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
