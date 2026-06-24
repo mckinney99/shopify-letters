@@ -3,14 +3,14 @@ import type { MetaFunction } from "@remix-run/node";
 export const meta: MetaFunction = () => [
   {
     title:
-      "Etch — Per-Character Pricing for Shopify | Custom Engraving & Personalization",
+      "Etch: Per-Character Pricing for Shopify | Custom Engraving & Personalization",
   },
   {
     name: "description",
     content:
       "Etch lets you charge customers based on what they type. Set per-character and per-letter pricing for custom engraving, monogramming, personalized jewelry, custom mugs, tote bags, and more. No code required.",
   },
-  { property: "og:title", content: "Etch — Per-Character Pricing for Shopify" },
+  { property: "og:title", content: "Etch: Per-Character Pricing for Shopify" },
   {
     property: "og:description",
     content:
@@ -22,7 +22,7 @@ export const meta: MetaFunction = () => [
   { name: "twitter:card", content: "summary_large_image" },
   {
     name: "twitter:title",
-    content: "Etch — Per-Character Pricing for Shopify",
+    content: "Etch: Per-Character Pricing for Shopify",
   },
   {
     name: "twitter:description",
@@ -91,7 +91,7 @@ const STEPS = [
   {
     num: "1",
     heading: "Pick a product",
-    body: "Choose any product from your Shopify store — an engraved ring, a custom tote bag, a personalized mug, or anything else your customers can personalise.",
+    body: "Choose any product from your Shopify store: an engraved ring, a custom tote bag, a personalized mug, or anything else your customers can personalise.",
   },
   {
     num: "2",
@@ -101,7 +101,7 @@ const STEPS = [
   {
     num: "3",
     heading: "Go live instantly",
-    body: "Publish with one click. Customers type, Etch calculates the right price, and the updated total appears in the cart — no code, no plugins, no developer needed.",
+    body: "Publish with one click. Customers type, Etch calculates the right price, and the updated total appears in the cart. No code, no plugins, no developer needed.",
   },
 ];
 
@@ -149,8 +149,8 @@ export default function LandingPage() {
           </h1>
           <p className="hero-sub">
             Etch adds <strong>per-character and per-letter pricing</strong> to any Shopify product.
-            Set a price per character typed and Etch automatically calculates the right total at checkout —
-            no code, no developer, no guesswork.
+            Set a price per character typed and Etch automatically calculates the right total at checkout.
+            No code, no developer, no guesswork.
           </p>
           <div className="hero-actions">
             <a href={APP_STORE_URL} className="btn btn-lg" rel="noopener noreferrer" target="_blank">
@@ -230,7 +230,7 @@ export default function LandingPage() {
               ))}
             </ul>
             <a href={APP_STORE_URL} className="btn btn-lg price-cta" rel="noopener noreferrer" target="_blank">
-              Add to Shopify — Free for 14 days
+              Add to Shopify, Free for 14 days
             </a>
           </div>
         </div>
@@ -242,7 +242,7 @@ export default function LandingPage() {
           <h2 className="final-h2">Ready to charge what your craftsmanship is worth?</h2>
           <p className="final-sub">
             Join Shopify merchants selling custom engraving, personalised jewellery, monogrammed apparel,
-            and hundreds of other custom products — all powered by Etch.
+            and hundreds of other custom products, all powered by Etch.
           </p>
           <a href={APP_STORE_URL} className="btn btn-lg btn-outline" rel="noopener noreferrer" target="_blank">
             Add to Shopify for free →
@@ -259,7 +259,7 @@ export default function LandingPage() {
             <a href="mailto:support@etch.direct">Support</a>
             <a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">Shopify App Store</a>
           </nav>
-          <p className="footer-copy">© 2024 Etch. All rights reserved.</p>
+          <p className="footer-copy">© 2026 Etch. All rights reserved.</p>
         </div>
       </footer>
     </>
