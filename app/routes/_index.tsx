@@ -1,4 +1,17 @@
-import type { MetaFunction } from "@remix-run/node";
+import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import { redirect } from "@remix-run/node";
+
+// When Shopify loads the app it appends ?shop=... and/or ?host=... to the
+// app URL (etch.direct). Bounce those requests into the embedded app at /app
+// so the Shopify admin shell and NavMenu work correctly. All other visitors
+// (e.g. direct browser traffic) see the marketing landing page.
+export const loader = ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  if (url.searchParams.has("shop") || url.searchParams.has("host")) {
+    return redirect(`/app?${url.searchParams.toString()}`);
+  }
+  return null;
+};
 
 export const meta: MetaFunction = () => [
   {
