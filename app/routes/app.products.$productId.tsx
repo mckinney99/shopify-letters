@@ -774,6 +774,9 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     setOnboardingComplete(localStorage.getItem("etch_onboarding_complete") === "1");
+    setFieldCalloutDismissed(localStorage.getItem("etch_banner_fields_dismissed") === "1");
+    setPricingCalloutDismissed(localStorage.getItem("etch_banner_pricing_dismissed") === "1");
+    setPublishCalloutDismissed(localStorage.getItem("etch_banner_publish_dismissed") === "1");
   }, []);
 
   const publishFetcher = useFetcher<{ ok?: boolean }>();
@@ -867,7 +870,7 @@ export default function ProductDetailPage() {
           <Banner
             title="Step 5 of 5: Go live!"
             tone="info"
-            onDismiss={() => setPublishCalloutDismissed(true)}
+            onDismiss={() => { localStorage.setItem("etch_banner_publish_dismissed", "1"); setPublishCalloutDismissed(true); }}
           >
             <Text as="p">
               Once you've added a field and set your pricing below, click the{" "}
@@ -882,11 +885,11 @@ export default function ProductDetailPage() {
         <Box paddingBlockStart="400">
           {selectedTab === 0 ? (
             <BlockStack gap="400">
-              {!onboardingComplete && !fieldCalloutDismissed && (
+              {!onboardingComplete && fields.length === 0 && !fieldCalloutDismissed && (
                 <Banner
                   title="Step 3 of 5: Add a text field"
                   tone="info"
-                  onDismiss={() => setFieldCalloutDismissed(true)}
+                  onDismiss={() => { localStorage.setItem("etch_banner_fields_dismissed", "1"); setFieldCalloutDismissed(true); }}
                 >
                   <BlockStack gap="200">
                     <Text as="p">
@@ -945,11 +948,11 @@ export default function ProductDetailPage() {
             </BlockStack>
           ) : (
             <BlockStack gap="400">
-              {!onboardingComplete && !pricingCalloutDismissed && (
+              {!onboardingComplete && pricingRules.length === 0 && !pricingCalloutDismissed && (
                 <Banner
                   title="Step 4 of 5: Set your pricing"
                   tone="info"
-                  onDismiss={() => setPricingCalloutDismissed(true)}
+                  onDismiss={() => { localStorage.setItem("etch_banner_pricing_dismissed", "1"); setPricingCalloutDismissed(true); }}
                 >
                   <BlockStack gap="200">
                     <Text as="p">
