@@ -49,7 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
-      select: { id: true, label: true, minChars: true, maxChars: true, allowedChars: true, disallowedChars: true },
+      select: { id: true, label: true, minChars: true, maxChars: true, allowedChars: true, disallowedChars: true, allowSpaces: true, countSpaces: true },
     }),
   ]);
 
@@ -141,7 +141,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
     const normalized = normalizeInput(raw, rules);
     for (const e of normalized.errors) allErrors.push(`${dbField.label}: ${e}`);
-    fieldInputs.push({ fieldId: dbField.id, normalizedText: normalized.normalizedText });
+    const pricingText = dbField.countSpaces
+      ? normalized.normalizedText
+      : normalized.normalizedText.replace(/ /g, "");
+    fieldInputs.push({ fieldId: dbField.id, normalizedText: pricingText });
   }
 
   // Calculate price using canonical engine

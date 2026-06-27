@@ -164,7 +164,9 @@
       // Hidden mirror inside the product form — submits the value even if the block is outside <form>
       var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
       formTarget.appendChild(hiddenFieldInput);
-      if (field.maxChars) input.maxLength = field.maxChars;
+      // Only use maxLength when spaces count toward the limit — otherwise the
+      // browser would reject valid inputs where spaces push past the limit.
+      if (field.maxChars && field.countSpaces !== false) input.maxLength = field.maxChars;
       var describedBy = errorId;
 
       // Character-count hint
@@ -173,10 +175,18 @@
       hint.className = 'etch-customization__hint';
       hint.setAttribute('aria-live', 'polite');
       if (field.maxChars) {
-        hint.textContent = '0 / ' + field.maxChars + ' characters';
+        var hintUnit = field.countSpaces === false ? ' billed characters' : ' characters';
+        hint.textContent = '0 / ' + field.maxChars + hintUnit;
         describedBy = hint.id + ' ' + errorId;
       }
       input.setAttribute('aria-describedby', describedBy);
+
+      // Block the spacebar entirely when spaces are not allowed.
+      if (field.allowSpaces === false) {
+        input.addEventListener('keydown', function (e) {
+          if (e.key === ' ') e.preventDefault();
+        });
+      }
 
       // Per-field validation error element
       var fieldError = document.createElement('span');
@@ -187,8 +197,23 @@
       fieldErrorEls[field.id] = fieldError;
 
       input.addEventListener('input', function () {
+        // Strip spaces from pasted content when spaces are not allowed.
+        if (field.allowSpaces === false && input.value.indexOf(' ') !== -1) {
+          var pos = input.selectionStart;
+          var spacesBefore = (input.value.slice(0, pos).match(/ /g) || []).length;
+          input.value = input.value.replace(/ /g, '');
+          var newPos = Math.max(0, pos - spacesBefore);
+          input.setSelectionRange(newPos, newPos);
+        }
+
         var len = Array.from(input.value).length; // codepoint count
-        if (field.maxChars) hint.textContent = len + ' / ' + field.maxChars + ' characters';
+        var billedLen = field.countSpaces === false
+          ? Array.from(input.value.replace(/ /g, '')).length
+          : len;
+        if (field.maxChars) {
+          var unit = field.countSpaces === false ? ' billed characters' : ' characters';
+          hint.textContent = billedLen + ' / ' + field.maxChars + unit;
+        }
 
         // Client-side validation — mirrors server-side normalizeInput exactly
         var errors = validateField(input.value, field);

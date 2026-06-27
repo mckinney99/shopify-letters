@@ -16,6 +16,7 @@ import {
   Tabs,
   Divider,
   Badge,
+  Checkbox,
 } from "@shopify/polaris";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -94,6 +95,8 @@ type FieldData = {
   maxChars: number | null;
   allowedChars: string | null;
   disallowedChars: string | null;
+  allowSpaces: boolean;
+  countSpaces: boolean;
   position: number;
 };
 
@@ -175,6 +178,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const maxChars = (form.get("maxChars") as string) ?? "";
     const allowedChars = (form.get("allowedChars") as string) ?? "";
     const disallowedChars = (form.get("disallowedChars") as string) ?? "";
+    const allowSpaces = form.get("allowSpaces") !== "false";
+    const countSpaces = form.get("countSpaces") === "true";
 
     const error = validateField({ label, minChars, maxChars, allowedChars, disallowedChars });
     if (error) return json({ error }, { status: 422 });
@@ -192,6 +197,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         maxChars: maxChars ? parseInt(maxChars) : null,
         allowedChars: allowedChars.trim() || null,
         disallowedChars: disallowedChars.trim() || null,
+        allowSpaces,
+        countSpaces,
         position: count,
       },
     });
@@ -206,6 +213,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const maxChars = (form.get("maxChars") as string) ?? "";
     const allowedChars = (form.get("allowedChars") as string) ?? "";
     const disallowedChars = (form.get("disallowedChars") as string) ?? "";
+    const allowSpaces = form.get("allowSpaces") !== "false";
+    const countSpaces = form.get("countSpaces") === "true";
 
     const error = validateField({ label, minChars, maxChars, allowedChars, disallowedChars });
     if (error) return json({ error }, { status: 422 });
@@ -218,6 +227,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         maxChars: maxChars ? parseInt(maxChars) : null,
         allowedChars: allowedChars.trim() || null,
         disallowedChars: disallowedChars.trim() || null,
+        allowSpaces,
+        countSpaces,
       },
     });
     await syncPricingMetafield(admin, shop, productGid);
@@ -354,6 +365,8 @@ function FieldForm({
   const [maxChars, setMaxChars] = useState(field?.maxChars?.toString() ?? "");
   const [allowedChars, setAllowedChars] = useState(field?.allowedChars ?? "");
   const [disallowedChars, setDisallowedChars] = useState(field?.disallowedChars ?? "");
+  const [allowSpaces, setAllowSpaces] = useState(field?.allowSpaces ?? true);
+  const [countSpaces, setCountSpaces] = useState(field?.countSpaces ?? false);
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) onClose();
@@ -369,6 +382,8 @@ function FieldForm({
         <input type="hidden" name="maxChars" value={maxChars} />
         <input type="hidden" name="allowedChars" value={allowedChars} />
         <input type="hidden" name="disallowedChars" value={disallowedChars} />
+        <input type="hidden" name="allowSpaces" value={String(allowSpaces)} />
+        <input type="hidden" name="countSpaces" value={String(countSpaces)} />
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
         <FormLayout>
           <TextField label="Label" value={label} onChange={setLabel} autoComplete="off" requiredIndicator />
@@ -390,6 +405,20 @@ function FieldForm({
               value={disallowedChars}
               onChange={setDisallowedChars}
               autoComplete="off"
+            />
+          </FormLayout.Group>
+          <FormLayout.Group>
+            <Checkbox
+              label="Allow spaces"
+              helpText="Customers can type spaces in this field"
+              checked={allowSpaces}
+              onChange={setAllowSpaces}
+            />
+            <Checkbox
+              label="Count spaces toward price"
+              helpText="When off, spaces are excluded from the billed character count"
+              checked={countSpaces}
+              onChange={setCountSpaces}
             />
           </FormLayout.Group>
         </FormLayout>
@@ -439,6 +468,8 @@ function FieldRow({
   }
   if (field.allowedChars) charInfo.push(`allowed: "${field.allowedChars}"`);
   if (field.disallowedChars) charInfo.push(`disallowed: "${field.disallowedChars}"`);
+  if (!field.allowSpaces) charInfo.push("no spaces");
+  if (field.countSpaces) charInfo.push("spaces billed");
 
   return (
     <Box padding="400" borderBlockEndWidth="025" borderColor="border">
