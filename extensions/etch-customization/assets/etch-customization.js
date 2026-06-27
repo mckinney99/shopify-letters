@@ -189,6 +189,34 @@
       fieldError.hidden = true;
       fieldErrorEls[field.id] = fieldError;
 
+      // Pre-compute sets once so keydown handler is cheap.
+      var allowedSet = field.allowedChars ? new Set(Array.from(field.allowedChars)) : null;
+      var disallowedSet = field.disallowedChars ? new Set(Array.from(field.disallowedChars)) : null;
+
+      // Block disallowed keystrokes and show an immediate inline error.
+      // Paste is handled by the input event — validateField catches anything
+      // that slips through.
+      input.addEventListener('keydown', function (e) {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key.length !== 1) return;
+
+        var msg = '';
+        if (field.allowSpaces === false && e.key === ' ') {
+          msg = 'Spaces are not allowed.';
+        } else if (disallowedSet && disallowedSet.has(e.key)) {
+          msg = 'Character ' + e.key + ' not allowed.';
+        } else if (allowedSet && e.key !== ' ' && !allowedSet.has(e.key)) {
+          msg = 'Character ' + e.key + ' not allowed.';
+        }
+
+        if (msg) {
+          e.preventDefault();
+          fieldError.textContent = msg;
+          fieldError.hidden = false;
+          input.setAttribute('aria-invalid', 'true');
+        }
+      });
+
       input.addEventListener('input', function () {
         var len = Array.from(input.value).length; // codepoint count
         var billedLen = field.countSpaces === false
@@ -321,16 +349,16 @@
       chars.forEach(function (c) { if (c !== ' ' && !allowed.has(c)) bad.add(c); });
       if (bad.size > 0) {
         var badArr = Array.from(bad);
-        errors.push(badArr.join(', ') + ' character' + (badArr.length === 1 ? '' : 's') + ' not allowed');
+        errors.push('Character' + (badArr.length === 1 ? '' : 's') + ' ' + badArr.join(', ') + ' not allowed.');
       }
     }
     if (field.disallowedChars) {
-      var disallowedSet = new Set(Array.from(field.disallowedChars));
+      var disallowedSetV = new Set(Array.from(field.disallowedChars));
       var found = new Set();
-      chars.forEach(function (c) { if (disallowedSet.has(c)) found.add(c); });
+      chars.forEach(function (c) { if (disallowedSetV.has(c)) found.add(c); });
       if (found.size > 0) {
         var foundArr = Array.from(found);
-        errors.push(foundArr.join(', ') + ' character' + (foundArr.length === 1 ? '' : 's') + ' not allowed');
+        errors.push('Character' + (foundArr.length === 1 ? '' : 's') + ' ' + foundArr.join(', ') + ' not allowed.');
       }
     }
     return errors;
@@ -363,24 +391,32 @@
         priceEl.textContent = 'Customization: ' + data.priceFormatted;
         priceEl.hidden = false;
         if (data.breakdown) renderBreakdown(data.breakdown, fields, breakdownEl);
-        // Server-side validation errors surface in errorEl. With a single
-        // field, the "<label>: " prefix is redundant — strip it so the
-        // message isn't shown twice (once here, once in fieldError).
+        // Route server-side validation errors to the inline element for the
+        // matching field (stripping the "Label: " prefix the server adds).
+        // Errors that don't match any field fall back to the global errorEl.
         if (!data.valid && data.errors.length > 0) {
-          var displayErrors = data.errors;
-          if (fields.length === 1) {
-            var prefix = fields[0].label + ': ';
-            displayErrors = displayErrors.map(function (e) {
-              return e.indexOf(prefix) === 0 ? e.slice(prefix.length) : e;
-            });
-          }
-          errorEl.textContent = displayErrors.join(' ');
-          errorEl.hidden = false;
-          // Avoid showing the same validation error twice — once in the
-          // larger shared errorEl and again in each field's inline alert.
-          Object.keys(fieldErrorEls).forEach(function (id) {
-            fieldErrorEls[id].hidden = true;
+          var unrouted = [];
+          data.errors.forEach(function (e) {
+            var matched = false;
+            for (var fi = 0; fi < fields.length; fi++) {
+              var pfx = fields[fi].label + ': ';
+              if (e.indexOf(pfx) === 0) {
+                var el = fieldErrorEls[fields[fi].id];
+                el.textContent = e.slice(pfx.length);
+                el.hidden = false;
+                matched = true;
+                break;
+              }
+            }
+            if (!matched) unrouted.push(e);
           });
+          if (unrouted.length > 0) {
+            errorEl.textContent = unrouted.join(' ');
+            errorEl.hidden = false;
+          } else {
+            errorEl.hidden = true;
+            errorEl.textContent = '';
+          }
         } else {
           errorEl.hidden = true;
           errorEl.textContent = '';
