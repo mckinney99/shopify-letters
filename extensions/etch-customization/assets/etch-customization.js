@@ -181,13 +181,6 @@
       }
       input.setAttribute('aria-describedby', describedBy);
 
-      // Block the spacebar entirely when spaces are not allowed.
-      if (field.allowSpaces === false) {
-        input.addEventListener('keydown', function (e) {
-          if (e.key === ' ') e.preventDefault();
-        });
-      }
-
       // Per-field validation error element
       var fieldError = document.createElement('span');
       fieldError.id = errorId;
@@ -197,15 +190,6 @@
       fieldErrorEls[field.id] = fieldError;
 
       input.addEventListener('input', function () {
-        // Strip spaces from pasted content when spaces are not allowed.
-        if (field.allowSpaces === false && input.value.indexOf(' ') !== -1) {
-          var pos = input.selectionStart;
-          var spacesBefore = (input.value.slice(0, pos).match(/ /g) || []).length;
-          input.value = input.value.replace(/ /g, '');
-          var newPos = Math.max(0, pos - spacesBefore);
-          input.setSelectionRange(newPos, newPos);
-        }
-
         var len = Array.from(input.value).length; // codepoint count
         var billedLen = field.countSpaces === false
           ? Array.from(input.value.replace(/ /g, '')).length
@@ -327,6 +311,9 @@
     }
     if (field.maxChars && count > field.maxChars) {
       errors.push('Maximum ' + field.maxChars + ' characters allowed.');
+    }
+    if (field.allowSpaces === false && normalized.indexOf(' ') !== -1) {
+      errors.push('Spaces are not allowed.');
     }
     if (field.allowedChars) {
       var allowed = new Set(Array.from(field.allowedChars));

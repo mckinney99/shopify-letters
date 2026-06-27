@@ -8,6 +8,7 @@ export type FieldRules = {
   maxChars?: number | null;
   allowedChars?: string | null;
   disallowedChars?: string | null;
+  allowSpaces?: boolean | null;
   charGroups?: CharGroup[];
 };
 
@@ -33,6 +34,9 @@ export function normalizeInput(rawInput: string, rules: FieldRules): NormalizeRe
   const charCount = chars.length;
   const errors: string[] = [];
 
+  if (rules.allowSpaces === false && chars.some((c) => c === " ")) {
+    errors.push("Spaces are not allowed.");
+  }
   if (rules.allowedChars != null && rules.allowedChars.length > 0) {
     const allowed = new Set([...rules.allowedChars]);
     const bad = [...new Set(chars.filter((c) => c !== " " && !allowed.has(c)))];
