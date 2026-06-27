@@ -79,14 +79,14 @@ describe("Cart Validation rule parity (in-memory)", () => {
     const rules: FieldRules = { allowedChars: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" };
 
     expect(functionValidateField("Hello123", rules)).toEqual(normalizeInput("Hello123", rules).errors);
-    expect(functionValidateField("Hello123", rules)).toEqual(["e, l, o characters not allowed"]);
+    expect(functionValidateField("Hello123", rules)).toEqual(["Characters e, l, o not allowed."]);
   });
 
   it("disallowedChars: function matches normalizeInput", () => {
     const rules: FieldRules = { disallowedChars: "!@#$%" };
 
     expect(functionValidateField("Hello!", rules)).toEqual(normalizeInput("Hello!", rules).errors);
-    expect(functionValidateField("Hello!", rules)).toEqual(["! character not allowed"]);
+    expect(functionValidateField("Hello!", rules)).toEqual(["Character ! not allowed."]);
   });
 
   it("normalizes whitespace before validating, like normalizeInput", () => {
@@ -141,7 +141,7 @@ describe("Cart Validation metafield roundtrip", () => {
     // Too short and contains a disallowed character
     expect(functionValidateField("!", fieldDef)).toEqual(normalizeInput("!", fieldDef).errors);
     expect(functionValidateField("!", fieldDef)).toEqual([
-      "! character not allowed",
+      "Character ! not allowed.",
       "Must be at least 2 characters.",
     ]);
 
