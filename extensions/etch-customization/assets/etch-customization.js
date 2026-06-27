@@ -373,9 +373,6 @@
   }
 
   function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId) {
-    priceEl.textContent = 'Calculating…';
-    priceEl.hidden = false;
-
     fetch(appUrl + '/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
