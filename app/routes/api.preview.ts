@@ -133,6 +133,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       maxChars: dbField.maxChars,
       allowedChars: dbField.allowedChars,
       disallowedChars: dbField.disallowedChars,
+      allowSpaces: dbField.allowSpaces,
       charGroups:
         fieldRule?.charGroups.map((g) => ({
           label: g.label,
