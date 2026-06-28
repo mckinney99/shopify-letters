@@ -666,12 +666,21 @@ function PricingTab({
 
   const estimatedTotal = minPrice !== null ? minPrice + estimatedSurcharge : null;
 
+  const basePriceLabel = minPrice !== null
+    ? `$${minPrice.toFixed(2)}${hasPriceRange ? ` – $${maxPrice!.toFixed(2)}` : ""}`
+    : "—";
+
   return (
     <BlockStack gap="500">
-      <Banner tone="info">
-        The base price is taken directly from your Shopify product price — no need to enter it here.
-        Etch adds the per-character surcharge on top at checkout.
-      </Banner>
+      <Card>
+        <BlockStack gap="200">
+          <Text as="h2" variant="headingMd">Base price</Text>
+          <Text as="p" variant="bodyLg" fontWeight="semibold">{basePriceLabel}</Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            Pulled from your Shopify product. Etch adds the per-character surcharge on top at checkout.
+          </Text>
+        </BlockStack>
+      </Card>
 
       {fields.length === 0 ? (
         <Banner tone="info">
@@ -703,41 +712,35 @@ function PricingTab({
             autoComplete="off"
             placeholder="e.g. Hello World"
           />
-          {minPrice !== null && (
-            <BlockStack gap="100">
+          <BlockStack gap="100">
+            {minPrice !== null && (
               <Text as="p" variant="bodySm" tone="subdued">
-                Shopify base price:{" "}
+                Base price:{" "}
                 <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
-                  ${minPrice.toFixed(2)}{hasPriceRange ? ` – $${maxPrice!.toFixed(2)}` : ""}
+                  {basePriceLabel}
                 </Text>
               </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Customization add-on:{" "}
-                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
-                  +${estimatedSurcharge.toFixed(2)}
-                </Text>
-                {previewText.length > 0 && (
-                  <Text as="span" variant="bodySm" tone="subdued">
-                    {" "}({previewText.length} char{previewText.length !== 1 ? "s" : ""})
-                  </Text>
-                )}
+            )}
+            <Text as="p" variant="bodySm" tone="subdued">
+              Customization add-on:{" "}
+              <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
+                +${estimatedSurcharge.toFixed(2)}
               </Text>
+              {previewText.length > 0 && (
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {" "}({previewText.length} char{previewText.length !== 1 ? "s" : ""})
+                </Text>
+              )}
+            </Text>
+            {estimatedTotal !== null && (
               <Text as="p" variant="bodyMd">
                 Estimated total:{" "}
                 <Text as="span" variant="bodyMd" fontWeight="semibold">
-                  ${estimatedTotal!.toFixed(2)}{hasPriceRange ? "+" : ""}
+                  ${estimatedTotal.toFixed(2)}{hasPriceRange ? "+" : ""}
                 </Text>
               </Text>
-            </BlockStack>
-          )}
-          {minPrice === null && (
-            <Text as="p" variant="bodyMd">
-              Customization add-on:{" "}
-              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                +${estimatedSurcharge.toFixed(2)}
-              </Text>
-            </Text>
-          )}
+            )}
+          </BlockStack>
         </BlockStack>
       </Card>
     </BlockStack>
