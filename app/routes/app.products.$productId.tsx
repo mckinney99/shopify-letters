@@ -28,6 +28,13 @@ const PRODUCT_QUERY = `
     product(id: $id) {
       id
       title
+      variants(first: 50) {
+        edges {
+          node {
+            price
+          }
+        }
+      }
     }
   }
 `;
@@ -155,11 +162,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Product not found", { status: 404 });
   }
 
+  const variantPrices: number[] = (
+    data.product.variants?.edges ?? []
+  ).map((e: { node: { price: string } }) => parseFloat(e.node.price));
+
   return json({
     product: data.product as { id: string; title: string },
     published: config?.published ?? false,
     fields,
     pricingRules,
+    variantPrices,
   });
 };
 
@@ -627,11 +639,17 @@ function FieldPricingCard({
 function PricingTab({
   fields,
   pricingRules,
+  variantPrices,
 }: {
   fields: FieldData[];
   pricingRules: PricingRuleData[];
+  variantPrices: number[];
 }) {
   const [previewText, setPreviewText] = useState("");
+
+  const minPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
+  const maxPrice = variantPrices.length > 0 ? Math.max(...variantPrices) : null;
+  const hasPriceRange = minPrice !== null && maxPrice !== null && minPrice !== maxPrice;
 
   const estimatedSurcharge = fields.reduce((total, field) => {
     const rule = pricingRules.find((r) => r.fieldId === field.id);
@@ -645,6 +663,8 @@ function PricingTab({
       }, 0)
     );
   }, 0);
+
+  const estimatedTotal = minPrice !== null ? minPrice + estimatedSurcharge : null;
 
   return (
     <BlockStack gap="500">
@@ -683,17 +703,41 @@ function PricingTab({
             autoComplete="off"
             placeholder="e.g. Hello World"
           />
-          <Text as="p" variant="bodyMd">
-            Customization add-on:{" "}
-            <Text as="span" variant="bodyMd" fontWeight="semibold">
-              +${estimatedSurcharge.toFixed(2)}
-            </Text>
-            {previewText.length > 0 && (
-              <Text as="span" variant="bodySm" tone="subdued">
-                {" "}({previewText.length} char{previewText.length !== 1 ? "s" : ""})
+          {minPrice !== null && (
+            <BlockStack gap="100">
+              <Text as="p" variant="bodySm" tone="subdued">
+                Shopify base price:{" "}
+                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
+                  ${minPrice.toFixed(2)}{hasPriceRange ? ` – $${maxPrice!.toFixed(2)}` : ""}
+                </Text>
               </Text>
-            )}
-          </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Customization add-on:{" "}
+                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
+                  +${estimatedSurcharge.toFixed(2)}
+                </Text>
+                {previewText.length > 0 && (
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {" "}({previewText.length} char{previewText.length !== 1 ? "s" : ""})
+                  </Text>
+                )}
+              </Text>
+              <Text as="p" variant="bodyMd">
+                Estimated total:{" "}
+                <Text as="span" variant="bodyMd" fontWeight="semibold">
+                  ${estimatedTotal!.toFixed(2)}{hasPriceRange ? "+" : ""}
+                </Text>
+              </Text>
+            </BlockStack>
+          )}
+          {minPrice === null && (
+            <Text as="p" variant="bodyMd">
+              Customization add-on:{" "}
+              <Text as="span" variant="bodyMd" fontWeight="semibold">
+                +${estimatedSurcharge.toFixed(2)}
+              </Text>
+            </Text>
+          )}
         </BlockStack>
       </Card>
     </BlockStack>
@@ -714,7 +758,7 @@ export function ErrorBoundary() {
 }
 
 export default function ProductDetailPage() {
-  const { product, published, fields, pricingRules } = useLoaderData<typeof loader>();
+  const { product, published, fields, pricingRules, variantPrices } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -931,7 +975,7 @@ export default function ProductDetailPage() {
                   </BlockStack>
                 </Banner>
               )}
-              <PricingTab fields={fields} pricingRules={pricingRules} />
+              <PricingTab fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
             </BlockStack>
           )}
         </Box>
