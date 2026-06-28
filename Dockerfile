@@ -24,7 +24,7 @@ RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
 COPY extensions/etch-cart-transform/package.json ./extensions/etch-cart-transform/package.json
 COPY extensions/etch-cart-validation/package.json ./extensions/etch-cart-validation/package.json
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/build ./build
