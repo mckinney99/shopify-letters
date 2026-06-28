@@ -11,6 +11,8 @@ env:
   ECS_SERVICE: etch
   STAGING_ECS_CLUSTER: etch-staging-cluster
   STAGING_ECS_SERVICE: etch-staging
+  # Required until aws-actions/* ship Node 24-compatible versions
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   deploy:
