@@ -11,6 +11,8 @@ env:
   ECS_SERVICE: etch
   STAGING_ECS_CLUSTER: etch-staging-cluster
   STAGING_ECS_SERVICE: etch-staging
+  # Required until aws-actions/* ship Node 24-compatible versions
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   deploy:
@@ -30,13 +32,17 @@ jobs:
 
       - uses: aws-actions/amazon-ecr-login@v2
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Build and push Docker image
-        run: |
-          IMAGE_TAG="${{ github.sha }}"
-          docker build -t "$ECR_REPOSITORY:$IMAGE_TAG" -t "$ECR_REPOSITORY:latest" .
-          docker push "$ECR_REPOSITORY:$IMAGE_TAG"
-          docker push "$ECR_REPOSITORY:latest"
-          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: |
+            ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Deploy to staging
         run: |
