@@ -14,6 +14,16 @@ const baseFields = [
 
 const baseRules = [
   {
+    fieldId: "field-1",
+    perCharPrice: 0.5,
+    charGroups: [{ label: "Emoji", characters: "😀😎", pricePerChar: 1 }],
+  },
+];
+
+// Simulates what Prisma returns — includes basePrice DB column and a legacy
+// fieldId:"" base-price row. buildPricingConfig must strip both from output.
+const dbRules = [
+  {
     fieldId: "",
     basePrice: 5,
     perCharPrice: 0,
@@ -31,11 +41,19 @@ describe("buildPricingConfig", () => {
   it("keeps only the fields relevant to pricing, dropping DB-only columns", () => {
     const config = buildPricingConfig(
       [{ ...baseFields[0], shop: "x", productId: "y", type: "text", position: 0 } as any],
-      baseRules.map((r) => ({ ...r, id: "rule-1", shop: "x", productId: "y" } as any))
+      dbRules.map((r) => ({ ...r, id: "rule-1", shop: "x", productId: "y" } as any))
     );
 
     expect(config.fields).toEqual(baseFields);
     expect(config.rules).toEqual(baseRules);
+  });
+
+  it("filters out the legacy fieldId:'' base-price rule", () => {
+    const config = buildPricingConfig(
+      baseFields,
+      dbRules.map((r) => ({ ...r, id: "rule-1", shop: "x", productId: "y" } as any))
+    );
+    expect(config.rules.every((r) => r.fieldId !== "")).toBe(true);
   });
 });
 
@@ -51,9 +69,9 @@ describe("computeConfigVersion", () => {
   });
 
   it("changes when a pricing rule changes", () => {
-    const before = computeConfigVersion(buildPricingConfig(baseFields, baseRules));
+    const before = computeConfigVersion(buildPricingConfig(baseFields, dbRules));
 
-    const changedRules = baseRules.map((r) =>
+    const changedRules = dbRules.map((r) =>
       r.fieldId === "field-1" ? { ...r, perCharPrice: 0.75 } : r
     );
     const after = computeConfigVersion(buildPricingConfig(baseFields, changedRules));
@@ -73,9 +91,9 @@ describe("computeConfigVersion", () => {
   it("is unaffected by unrelated DB columns", () => {
     const withExtras = buildPricingConfig(
       [{ ...baseFields[0], shop: "shop-a", productId: "p1", type: "text", position: 0 } as any],
-      baseRules.map((r) => ({ ...r, id: "rule-1", shop: "shop-a", productId: "p1" } as any))
+      dbRules.map((r) => ({ ...r, id: "rule-1", shop: "shop-a", productId: "p1" } as any))
     );
-    const withoutExtras = buildPricingConfig(baseFields, baseRules);
+    const withoutExtras = buildPricingConfig(baseFields, dbRules);
 
     expect(computeConfigVersion(withExtras)).toBe(computeConfigVersion(withoutExtras));
   });
