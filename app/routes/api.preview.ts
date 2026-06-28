@@ -148,17 +148,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     fieldInputs.push({ fieldId: dbField.id, normalizedText: pricingText });
   }
 
-  // Calculate price using canonical engine
-  const ruleInputs: FieldPricingRule[] = pricingRules.map((r) => ({
-    fieldId: r.fieldId,
-    basePrice: r.basePrice,
-    perCharPrice: r.perCharPrice,
-    charGroups: r.charGroups.map((g) => ({
-      label: g.label,
-      characters: g.characters,
-      pricePerChar: g.pricePerChar,
-    })),
-  }));
+  // Calculate price using canonical engine — base rule excluded; variant price
+  // is the base and is enforced by the cart transform reading cost.amountPerQuantity.
+  const ruleInputs: FieldPricingRule[] = pricingRules
+    .filter((r) => r.fieldId !== "")
+    .map((r) => ({
+      fieldId: r.fieldId,
+      basePrice: 0,
+      perCharPrice: r.perCharPrice,
+      charGroups: r.charGroups.map((g) => ({
+        label: g.label,
+        characters: g.characters,
+        pricePerChar: g.pricePerChar,
+      })),
+    }));
 
   const result = calculateProductPrice(fieldInputs, ruleInputs);
   for (const e of result.validationErrors) allErrors.push(e);

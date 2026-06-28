@@ -22,7 +22,6 @@ export type PricingConfigCharGroup = {
 
 export type PricingConfigRule = {
   fieldId: string;
-  basePrice: number;
   perCharPrice: number;
   charGroups: PricingConfigCharGroup[];
 };
@@ -49,7 +48,6 @@ type DbCharGroup = {
 
 type DbPricingRule = {
   fieldId: string;
-  basePrice: number;
   perCharPrice: number;
   charGroups: DbCharGroup[];
 };
@@ -67,16 +65,17 @@ export function buildPricingConfig(fields: DbField[], rules: DbPricingRule[]): P
       allowedChars: f.allowedChars,
       disallowedChars: f.disallowedChars,
     })),
-    rules: rules.map((r) => ({
-      fieldId: r.fieldId,
-      basePrice: r.basePrice,
-      perCharPrice: r.perCharPrice,
-      charGroups: r.charGroups.map((g) => ({
-        label: g.label,
-        characters: g.characters,
-        pricePerChar: g.pricePerChar,
+    rules: rules
+      .filter((r) => r.fieldId !== "")
+      .map((r) => ({
+        fieldId: r.fieldId,
+        perCharPrice: r.perCharPrice,
+        charGroups: r.charGroups.map((g) => ({
+          label: g.label,
+          characters: g.characters,
+          pricePerChar: g.pricePerChar,
+        })),
       })),
-    })),
   };
 }
 

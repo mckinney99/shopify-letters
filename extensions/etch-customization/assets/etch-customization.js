@@ -385,7 +385,7 @@
           breakdownEl.hidden = true;
           return;
         }
-        priceEl.textContent = 'Customization: ' + data.priceFormatted;
+        priceEl.textContent = 'Customization add-on: +' + data.priceFormatted;
         priceEl.hidden = false;
         if (data.breakdown) renderBreakdown(data.breakdown, fields, breakdownEl);
         // Route server-side validation errors to the inline element for the

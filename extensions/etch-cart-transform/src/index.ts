@@ -14,7 +14,6 @@ type CharGroupRule = {
 
 type FieldPricingRule = {
   fieldId: string;
-  basePrice: number;
   perCharPrice: number;
   charGroups: CharGroupRule[];
 };
@@ -51,6 +50,7 @@ type CartLine = {
   id: string;
   quantity: number;
   merchandise: ProductVariant | UnknownMerchandise;
+  cost: { amountPerQuantity: { amount: string } };
   attribute: { value: string } | null; // attribute(key: "_etch_inputs")
   correlationAttribute: { value: string } | null; // attribute(key: "_etch_correlation_id")
 };
@@ -77,10 +77,10 @@ const MAX_PRICE_MINOR = 9_999_999;
 
 function calculatePrice(
   fieldInputs: Array<{ fieldId: string; normalizedText: string }>,
-  rules: FieldPricingRule[]
+  rules: FieldPricingRule[],
+  baseMinor: number
 ): number {
-  const baseRule = rules.find((r) => r.fieldId === "");
-  let total = toCents(baseRule?.basePrice ?? 0);
+  let total = baseMinor;
 
   for (const input of fieldInputs) {
     const rule = rules.find((r) => r.fieldId === input.fieldId);
@@ -166,7 +166,8 @@ export function run(input: Input): unknown {
         normalizedText: normalizeText(etchInputs[fieldDef.id] ?? ""),
       }));
 
-      const enforcedMinor = calculatePrice(fieldInputs, payload.rules);
+      const baseMinor = Math.round(parseFloat(line.cost.amountPerQuantity.amount) * 100);
+      const enforcedMinor = calculatePrice(fieldInputs, payload.rules, baseMinor);
       const enforcedAmount = (enforcedMinor / 100).toFixed(2);
 
       logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: enforcedMinor, pass: true });

@@ -280,17 +280,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
   // ── Pricing actions ────────────────────────────────────────────────────────
 
-  if (_action === "set_base_price") {
-    const basePrice = parseFloat((form.get("basePrice") as string) || "0") || 0;
-    await prisma.pricingRule.upsert({
-      where: { shop_productId_fieldId: { shop, productId: productGid, fieldId: "" } },
-      update: { basePrice },
-      create: { shop, productId: productGid, fieldId: "", basePrice },
-    });
-    await syncPricingMetafield(admin, shop, productGid);
-    return json({ ok: true });
-  }
-
   if (_action === "set_field_price") {
     const fieldId = form.get("fieldId") as string;
     const perCharPrice = parseFloat((form.get("perCharPrice") as string) || "0") || 0;
@@ -505,39 +494,6 @@ function FieldRow({
 
 // ── Pricing components ────────────────────────────────────────────────────────
 
-function BasePriceForm({ basePrice }: { basePrice: number }) {
-  const fetcher = useFetcher<{ ok?: boolean }>();
-  const [price, setPrice] = useState(basePrice.toFixed(2));
-
-  return (
-    <Card>
-      <fetcher.Form method="post">
-        <input type="hidden" name="_action" value="set_base_price" />
-        <input type="hidden" name="basePrice" value={price} />
-        <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">Base price</Text>
-          <Text as="p" variant="bodySm" tone="subdued">
-            Fixed amount added to every order for this product, regardless of characters typed.
-          </Text>
-          <InlineStack gap="300" blockAlign="end">
-            <div style={{ width: "200px" }}>
-              <TextField
-                label="Amount ($)"
-                type="number"
-                value={price}
-                onChange={setPrice}
-                prefix="$"
-                autoComplete="off"
-              />
-            </div>
-            <Button variant="primary" submit loading={fetcher.state !== "idle"}>Save</Button>
-          </InlineStack>
-        </BlockStack>
-      </fetcher.Form>
-    </Card>
-  );
-}
-
 function CharGroupRow({ group }: { group: CharPriceGroupData }) {
   const deleteFetcher = useFetcher();
   return (
@@ -675,28 +631,27 @@ function PricingTab({
   fields: FieldData[];
   pricingRules: PricingRuleData[];
 }) {
-  const baseRule = pricingRules.find((r) => r.fieldId === "");
   const [previewText, setPreviewText] = useState("");
 
-  const basePrice = baseRule?.basePrice ?? 0;
-  const estimatedPrice =
-    basePrice +
-    fields.reduce((total, field) => {
-      const rule = pricingRules.find((r) => r.fieldId === field.id);
-      if (!rule) return total;
-      const chars = [...previewText].slice(0, field.maxChars ?? previewText.length);
-      return (
-        total +
-        chars.reduce((sum, char) => {
-          const group = rule.charGroups.find((g) => g.characters.includes(char));
-          return sum + (group ? group.pricePerChar : rule.perCharPrice);
-        }, 0)
-      );
-    }, 0);
+  const estimatedSurcharge = fields.reduce((total, field) => {
+    const rule = pricingRules.find((r) => r.fieldId === field.id);
+    if (!rule) return total;
+    const chars = [...previewText].slice(0, field.maxChars ?? previewText.length);
+    return (
+      total +
+      chars.reduce((sum, char) => {
+        const group = rule.charGroups.find((g) => g.characters.includes(char));
+        return sum + (group ? group.pricePerChar : rule.perCharPrice);
+      }, 0)
+    );
+  }, 0);
 
   return (
     <BlockStack gap="500">
-      <BasePriceForm basePrice={baseRule?.basePrice ?? 0} />
+      <Banner tone="info">
+        The base price is taken directly from your Shopify product price — no need to enter it here.
+        Etch adds the per-character surcharge on top at checkout.
+      </Banner>
 
       {fields.length === 0 ? (
         <Banner tone="info">
@@ -729,13 +684,13 @@ function PricingTab({
             placeholder="e.g. Hello World"
           />
           <Text as="p" variant="bodyMd">
-            Estimated price:{" "}
+            Customization add-on:{" "}
             <Text as="span" variant="bodyMd" fontWeight="semibold">
-              ${estimatedPrice.toFixed(2)}
+              +${estimatedSurcharge.toFixed(2)}
             </Text>
             {previewText.length > 0 && (
               <Text as="span" variant="bodySm" tone="subdued">
-                {" "}(base ${basePrice.toFixed(2)} + {previewText.length} char{previewText.length !== 1 ? "s" : ""})
+                {" "}({previewText.length} char{previewText.length !== 1 ? "s" : ""})
               </Text>
             )}
           </Text>
