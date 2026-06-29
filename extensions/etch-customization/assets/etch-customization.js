@@ -341,13 +341,13 @@
       pricedFields.forEach(function(f) {
         var defaultLine = document.createElement('p');
         defaultLine.className = 'etch-customization__breakdown-item';
-        defaultLine.textContent = (multiField ? f.label + ' — ' : '') + 'Per-character price: ' + formatMinor(f.perCharPrice);
+        defaultLine.textContent = (multiField ? f.label + ' — ' : '') + 'Per-character price: ' + formatDollar(f.perCharPrice);
         pricingInfoEl.appendChild(defaultLine);
         (f.charGroups || []).forEach(function(g) {
           var groupLine = document.createElement('p');
           groupLine.className = 'etch-customization__breakdown-item';
           groupLine.style.paddingLeft = '1em';
-          groupLine.textContent = g.label + ': ' + formatMinor(g.pricePerChar);
+          groupLine.textContent = g.label + ': ' + formatDollar(g.pricePerChar);
           pricingInfoEl.appendChild(groupLine);
         });
       });
@@ -588,6 +588,10 @@
 
   function formatMinor(minor) {
     return '$' + (minor / 100).toFixed(2);
+  }
+
+  function formatDollar(amount) {
+    return '$' + Number(amount).toFixed(2);
   }
 
   // Boot all blocks on the page. Guard prevents double-init when a theme places
