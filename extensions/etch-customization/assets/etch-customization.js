@@ -191,8 +191,12 @@
     // Called by fetchPreview on every successful price response
     function onPriceUpdate(data) {
       latestPriceData = data;
-      snapMinorInput.value = String(data.price);
-      snapPriceInput.value = data.priceFormatted;
+      // _etch_price_minor must equal the full line total (base + surcharge) so
+      // the mismatch check in the order admin can compare it against the charged price.
+      var baseMinor = getBaseMinor();
+      var totalMinor = baseMinor !== null ? baseMinor + data.price : data.price;
+      snapMinorInput.value = String(totalMinor);
+      snapPriceInput.value = data.priceFormatted; // surcharge only — shown in admin UI
       snapAtInput.value = new Date().toISOString();
       snapBreakdownInput.value = data.breakdown
         ? JSON.stringify(resolveBreakdownLabels(data.breakdown, fields))
