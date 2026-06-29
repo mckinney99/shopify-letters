@@ -110,22 +110,13 @@
         return;
       }
       lastSurchargeMinor = surchargeMinor;
-      while (priceEl.firstChild) priceEl.removeChild(priceEl.firstChild);
       var baseMinor = getBaseMinor();
       var suffix = currency ? ' ' + currency : '';
       if (baseMinor !== null) {
-        var baseLine = document.createElement('span');
-        baseLine.style.display = 'block';
-        baseLine.textContent = 'Base price: ' + formatMinor(baseMinor) + suffix;
-        priceEl.appendChild(baseLine);
-        var totalLine = document.createElement('span');
-        totalLine.style.display = 'block';
-        totalLine.style.fontWeight = '600';
-        totalLine.textContent = 'Customized price: ' + formatMinor(baseMinor + surchargeMinor) + suffix;
-        priceEl.appendChild(totalLine);
+        priceEl.textContent = 'Base price: ' + formatMinor(baseMinor) + suffix;
         updateThemePrice(baseMinor + surchargeMinor);
       } else {
-        priceEl.textContent = 'Customization add-on: +' + formatMinor(surchargeMinor) + suffix;
+        priceEl.textContent = 'Customization add-on: +' + formatMinor(surchargeMinor);
       }
       priceEl.hidden = false;
     }
@@ -340,6 +331,28 @@
 
       inputMap[field.id] = '';
     });
+
+    // Static per-character pricing summary — shows rates, not calculated totals
+    var pricedFields = fields.filter(function(f) { return f.perCharPrice != null; });
+    if (pricedFields.length > 0) {
+      var pricingInfoEl = document.createElement('div');
+      pricingInfoEl.className = 'etch-customization__pricing-info';
+      var multiField = pricedFields.length > 1;
+      pricedFields.forEach(function(f) {
+        var defaultLine = document.createElement('p');
+        defaultLine.className = 'etch-customization__breakdown-item';
+        defaultLine.textContent = (multiField ? f.label + ' — ' : '') + 'Per-character price: ' + formatMinor(f.perCharPrice);
+        pricingInfoEl.appendChild(defaultLine);
+        (f.charGroups || []).forEach(function(g) {
+          var groupLine = document.createElement('p');
+          groupLine.className = 'etch-customization__breakdown-item';
+          groupLine.style.paddingLeft = '1em';
+          groupLine.textContent = g.label + ': ' + formatMinor(g.pricePerChar);
+          pricingInfoEl.appendChild(groupLine);
+        });
+      });
+      fieldsEl.appendChild(pricingInfoEl);
+    }
 
     // Bundled JSON attribute read by the Cart Transform function via
     // attribute(key: "_etch_inputs"). Created after forEach so inputMap has
