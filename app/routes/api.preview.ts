@@ -41,7 +41,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const productGid = `gid://shopify/Product/${productId}`;
-  const [config, dbFields] = await Promise.all([
+  const [config, dbFields, pricingRules] = await Promise.all([
     prisma.productConfig.findUnique({
       where: { shop_productId: { shop, productId: productGid } },
       select: { published: true },
@@ -51,13 +51,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       orderBy: { position: "asc" },
       select: { id: true, label: true, minChars: true, maxChars: true, allowedChars: true, disallowedChars: true, allowSpaces: true, countSpaces: true },
     }),
+    prisma.pricingRule.findMany({
+      where: { shop, productId: productGid, fieldId: { not: "" } },
+      select: { fieldId: true, perCharPrice: true, charGroups: { select: { label: true, pricePerChar: true } } },
+    }),
   ]);
 
   if (!config?.published) {
     return json({ error: "Not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
-  return json({ fields: dbFields }, { headers: CORS_HEADERS });
+  const ruleByFieldId = Object.fromEntries(pricingRules.map((r) => [r.fieldId, r]));
+  const fields = dbFields.map((f) => ({
+    id: f.id,
+    label: f.label,
+    minChars: f.minChars,
+    maxChars: f.maxChars,
+    allowedChars: f.allowedChars,
+    disallowedChars: f.disallowedChars,
+    allowSpaces: f.allowSpaces,
+    countSpaces: f.countSpaces,
+    perCharPrice: ruleByFieldId[f.id]?.perCharPrice ?? null,
+    charGroups: ruleByFieldId[f.id]?.charGroups ?? [],
+  }));
+
+  return json({ fields }, { headers: CORS_HEADERS });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
