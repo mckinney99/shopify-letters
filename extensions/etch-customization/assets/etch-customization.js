@@ -84,9 +84,31 @@
       return ids.length > 0 ? variantPricesMap[ids[0]] : null;
     }
 
+    // Capture theme price elements so we can update them with the customized total
+    var themePriceEls = [];
+    ['span.price-item--regular', 'span.price-item--sale.price-item--last'].forEach(function(sel) {
+      document.querySelectorAll(sel).forEach(function(el) {
+        if (el.textContent.trim()) themePriceEls.push({ el: el, original: el.textContent.trim() });
+      });
+    });
+
+    function updateThemePrice(totalMinor) {
+      var formatted = formatMinor(totalMinor) + (currency ? ' ' + currency : '');
+      themePriceEls.forEach(function(item) { item.el.textContent = formatted; });
+    }
+
+    function restoreThemePrice() {
+      themePriceEls.forEach(function(item) { item.el.textContent = item.original; });
+    }
+
     var lastSurchargeMinor = null;
 
     function renderPriceEl(surchargeMinor) {
+      if (surchargeMinor === null) {
+        priceEl.hidden = true;
+        restoreThemePrice();
+        return;
+      }
       lastSurchargeMinor = surchargeMinor;
       while (priceEl.firstChild) priceEl.removeChild(priceEl.firstChild);
       var baseMinor = getBaseMinor();
@@ -101,6 +123,7 @@
         totalLine.style.fontWeight = '600';
         totalLine.textContent = 'Customized price: ' + formatMinor(baseMinor + surchargeMinor) + suffix;
         priceEl.appendChild(totalLine);
+        updateThemePrice(baseMinor + surchargeMinor);
       } else {
         priceEl.textContent = 'Customization add-on: +' + formatMinor(surchargeMinor) + suffix;
       }
@@ -440,7 +463,7 @@
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {
         if (!data) {
-          priceEl.hidden = true;
+          renderPrice(null);
           breakdownEl.hidden = true;
           return;
         }
@@ -479,7 +502,7 @@
         if (onPriceUpdate) onPriceUpdate(data);
       })
       .catch(function () {
-        priceEl.hidden = true;
+        renderPrice(null);
         breakdownEl.hidden = true;
       });
   }
