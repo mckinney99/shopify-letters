@@ -10,6 +10,14 @@
     var errorEl = container.querySelector('.etch-customization__error');
     var priceEl = container.querySelector('.etch-customization__price');
 
+    var variantPricesMap = {};
+    try {
+      JSON.parse(container.dataset.variantPrices || '[]').forEach(function(v) {
+        variantPricesMap[String(v.id)] = v.price;
+      });
+    } catch(e) {}
+    var currency = container.dataset.currency || '';
+
     if (!shop || !productId || !appUrl) {
       container.hidden = true;
       return;
@@ -39,7 +47,7 @@
           return;
         }
         loadingEl.hidden = true;
-        renderFields(container, data.fields, shop, productId, appUrl, fieldsEl, priceEl, errorEl);
+        renderFields(container, data.fields, shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency);
         fieldsEl.hidden = false;
       })
       .catch(function () {
@@ -49,7 +57,7 @@
       });
   }
 
-  function renderFields(container, fields, shop, productId, appUrl, fieldsEl, priceEl, errorEl) {
+  function renderFields(container, fields, shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency) {
     var blockId = container.id;
     var heading = container.dataset.heading;
 
@@ -65,6 +73,57 @@
     breakdownEl.setAttribute('aria-live', 'polite');
     breakdownEl.hidden = true;
     container.appendChild(breakdownEl);
+
+    function getBaseMinor() {
+      var params = new URLSearchParams(window.location.search);
+      var variantId = params.get('variant');
+      if (variantId && variantPricesMap[variantId] !== undefined) {
+        return variantPricesMap[variantId];
+      }
+      var ids = Object.keys(variantPricesMap);
+      return ids.length > 0 ? variantPricesMap[ids[0]] : null;
+    }
+
+    var lastSurchargeMinor = null;
+
+    function renderPriceEl(surchargeMinor) {
+      lastSurchargeMinor = surchargeMinor;
+      while (priceEl.firstChild) priceEl.removeChild(priceEl.firstChild);
+      var baseMinor = getBaseMinor();
+      var suffix = currency ? ' ' + currency : '';
+      if (baseMinor !== null) {
+        var baseLine = document.createElement('span');
+        baseLine.style.display = 'block';
+        baseLine.textContent = 'Base price: ' + formatMinor(baseMinor) + suffix;
+        priceEl.appendChild(baseLine);
+        var totalLine = document.createElement('span');
+        totalLine.style.display = 'block';
+        totalLine.style.fontWeight = '600';
+        totalLine.textContent = 'Customized price: ' + formatMinor(baseMinor + surchargeMinor) + suffix;
+        priceEl.appendChild(totalLine);
+      } else {
+        priceEl.textContent = 'Customization add-on: +' + formatMinor(surchargeMinor) + suffix;
+      }
+      priceEl.hidden = false;
+    }
+
+    function onVariantChange() {
+      if (lastSurchargeMinor === null || priceEl.hidden) return;
+      renderPriceEl(lastSurchargeMinor);
+    }
+
+    if (!window.__etchVariantListening) {
+      window.__etchVariantListening = true;
+      var _origPushState = history.pushState.bind(history);
+      history.pushState = function() {
+        _origPushState.apply(this, arguments);
+        window.dispatchEvent(new Event('etch:urlchange'));
+      };
+      window.addEventListener('popstate', function() {
+        window.dispatchEvent(new Event('etch:urlchange'));
+      });
+    }
+    window.addEventListener('etch:urlchange', onVariantChange);
 
     // null until first successful price response — cart button stays disabled until set
     var latestPriceData = null;
@@ -247,7 +306,7 @@
         // Keep the bundled JSON attribute in sync so the Cart Transform function
         // can read all field values via a single attribute(key: "_etch_inputs") query.
         etchInputsEl.value = JSON.stringify(inputMap);
-        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId);
+        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
       });
 
       wrapper.appendChild(label);
@@ -268,7 +327,7 @@
     // Initial button state: disabled until price loads
     updateBtn();
 
-    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId);
+    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
   }
 
   // RFC 4122-ish v4 UUID, with a non-crypto fallback for older browsers.
@@ -365,14 +424,14 @@
   }
 
   var debounceTimer;
-  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId) {
+  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice) {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
-      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId);
+      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice);
     }, 350);
   }
 
-  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId) {
+  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice) {
     fetch(appUrl + '/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -385,8 +444,7 @@
           breakdownEl.hidden = true;
           return;
         }
-        priceEl.textContent = 'Customization add-on: +' + data.priceFormatted;
-        priceEl.hidden = false;
+        renderPrice(data.price);
         if (data.breakdown) renderBreakdown(data.breakdown, fields, breakdownEl);
         // Route server-side validation errors to the inline element for the
         // matching field (stripping the "Label: " prefix the server adds).
