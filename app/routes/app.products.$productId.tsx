@@ -504,6 +504,163 @@ function FieldRow({
   );
 }
 
+// ── Live example helpers (mirror widget logic exactly) ────────────────────────
+
+function validateLiveField(value: string, field: FieldData): string[] {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  const chars = [...normalized];
+  const billedChars = field.countSpaces ? chars : chars.filter((c) => c !== " ");
+  const errors: string[] = [];
+  if (field.minChars !== null && billedChars.length < field.minChars)
+    errors.push(`Enter at least ${field.minChars} character${field.minChars === 1 ? "" : "s"}.`);
+  if (field.maxChars !== null && billedChars.length > field.maxChars)
+    errors.push(`Maximum ${field.maxChars} characters allowed.`);
+  if (!field.allowSpaces && normalized.includes(" "))
+    errors.push("Spaces are not allowed.");
+  if (field.allowedChars) {
+    const allowed = new Set([...field.allowedChars]);
+    const bad = new Set(chars.filter((c) => c !== " " && !allowed.has(c)));
+    if (bad.size > 0)
+      errors.push(`Character${bad.size === 1 ? "" : "s"} ${[...bad].join(", ")} not allowed.`);
+  }
+  if (field.disallowedChars) {
+    const dis = new Set([...field.disallowedChars]);
+    const found = new Set(chars.filter((c) => dis.has(c)));
+    if (found.size > 0)
+      errors.push(`Character${found.size === 1 ? "" : "s"} ${[...found].join(", ")} not allowed.`);
+  }
+  return errors;
+}
+
+function calcFieldSurcharge(value: string, field: FieldData, rule: PricingRuleData | undefined): number {
+  if (!rule) return 0;
+  const normalized = value.trim().replace(/\s+/g, " ");
+  const chars = field.countSpaces
+    ? [...normalized]
+    : [...normalized].filter((c) => c !== " ");
+  return chars.reduce((sum, char) => {
+    const group = rule.charGroups.find((g) => g.characters.includes(char));
+    return sum + (group ? group.pricePerChar : rule.perCharPrice);
+  }, 0);
+}
+
+function LiveExample({
+  fields,
+  pricingRules,
+  variantPrices,
+}: {
+  fields: FieldData[];
+  pricingRules: PricingRuleData[];
+  variantPrices: number[];
+}) {
+  const [values, setValues] = useState<Record<string, string>>(
+    () => Object.fromEntries(fields.map((f) => [f.id, ""]))
+  );
+
+  const basePrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
+
+  function handleChange(field: FieldData, raw: string) {
+    // Strip chars the widget's keydown handler would block
+    const filtered = [...raw]
+      .filter((char) => {
+        if (!field.allowSpaces && char === " ") return false;
+        if (field.disallowedChars && field.disallowedChars.includes(char)) return false;
+        if (field.allowedChars && char !== " " && !field.allowedChars.includes(char)) return false;
+        return true;
+      })
+      .join("");
+    setValues((prev) => ({ ...prev, [field.id]: filtered }));
+  }
+
+  const totalSurcharge = fields.reduce((sum, f) => {
+    const rule = pricingRules.find((r) => r.fieldId === f.id);
+    return sum + calcFieldSurcharge(values[f.id] ?? "", f, rule);
+  }, 0);
+  const estimatedTotal = basePrice !== null ? basePrice + totalSurcharge : null;
+
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <BlockStack gap="100">
+          <Text as="h2" variant="headingMd">Live example</Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            Preview exactly what customers see — character rules, pricing, and inline errors all apply.
+          </Text>
+        </BlockStack>
+
+        {fields.length === 0 ? (
+          <Text as="p" variant="bodySm" tone="subdued">
+            Add fields on the Fields tab to see a preview here.
+          </Text>
+        ) : (
+          <BlockStack gap="400">
+            {fields.map((field) => {
+              const value = values[field.id] ?? "";
+              const rule = pricingRules.find((r) => r.fieldId === field.id);
+              const errors = value.length > 0 ? validateLiveField(value, field) : [];
+              const normalized = value.trim().replace(/\s+/g, " ");
+              const billedLen = field.countSpaces
+                ? [...normalized].length
+                : [...normalized].filter((c) => c !== " ").length;
+              const hintUnit = field.countSpaces ? " characters" : " billed characters";
+              const charHint = field.maxChars
+                ? `${billedLen} / ${field.maxChars}${hintUnit}`
+                : undefined;
+
+              return (
+                <BlockStack gap="150" key={field.id}>
+                  <TextField
+                    label={field.label}
+                    value={value}
+                    onChange={(v) => handleChange(field, v)}
+                    maxLength={field.maxChars && field.countSpaces ? field.maxChars : undefined}
+                    helpText={charHint}
+                    error={errors.length > 0 ? errors[0] : undefined}
+                    autoComplete="off"
+                  />
+                  {rule && (
+                    <BlockStack gap="050">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Per-character price: ${rule.perCharPrice.toFixed(2)}
+                      </Text>
+                      {rule.charGroups.map((g) => (
+                        <Text key={g.id} as="p" variant="bodySm" tone="subdued">
+                          &nbsp;&nbsp;{g.label}: ${g.pricePerChar.toFixed(2)}
+                        </Text>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              );
+            })}
+
+            <Divider />
+
+            <BlockStack gap="100">
+              {basePrice !== null && (
+                <Text as="p" variant="bodySm">
+                  Base price:{" "}
+                  <Text as="span" variant="bodySm" fontWeight="semibold">
+                    ${basePrice.toFixed(2)} USD
+                  </Text>
+                </Text>
+              )}
+              {estimatedTotal !== null && (
+                <Text as="p" variant="bodyMd">
+                  Estimated total:{" "}
+                  <Text as="span" variant="bodyMd" fontWeight="semibold">
+                    ${estimatedTotal.toFixed(2)} USD
+                  </Text>
+                </Text>
+              )}
+            </BlockStack>
+          </BlockStack>
+        )}
+      </BlockStack>
+    </Card>
+  );
+}
+
 // ── Pricing components ────────────────────────────────────────────────────────
 
 function CharGroupRow({ group }: { group: CharPriceGroupData }) {
@@ -645,27 +802,9 @@ function PricingTab({
   pricingRules: PricingRuleData[];
   variantPrices: number[];
 }) {
-  const [previewText, setPreviewText] = useState("");
-
   const minPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
   const maxPrice = variantPrices.length > 0 ? Math.max(...variantPrices) : null;
   const hasPriceRange = minPrice !== null && maxPrice !== null && minPrice !== maxPrice;
-
-  const estimatedSurcharge = fields.reduce((total, field) => {
-    const rule = pricingRules.find((r) => r.fieldId === field.id);
-    if (!rule) return total;
-    const chars = [...previewText].slice(0, field.maxChars ?? previewText.length);
-    return (
-      total +
-      chars.reduce((sum, char) => {
-        const group = rule.charGroups.find((g) => g.characters.includes(char));
-        return sum + (group ? group.pricePerChar : rule.perCharPrice);
-      }, 0)
-    );
-  }, 0);
-
-  const estimatedTotal = minPrice !== null ? minPrice + estimatedSurcharge : null;
-
   const basePriceLabel = minPrice !== null
     ? `$${minPrice.toFixed(2)}${hasPriceRange ? ` – $${maxPrice!.toFixed(2)}` : ""}`
     : "—";
@@ -699,50 +838,7 @@ function PricingTab({
         </BlockStack>
       )}
 
-      <Card>
-        <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">Live example</Text>
-          <Text as="p" variant="bodySm" tone="subdued">
-            Type sample text to see an estimated price based on your current rules.
-          </Text>
-          <TextField
-            label="Sample input"
-            value={previewText}
-            onChange={setPreviewText}
-            autoComplete="off"
-            placeholder="e.g. Hello World"
-          />
-          <BlockStack gap="100">
-            {minPrice !== null && (
-              <Text as="p" variant="bodySm" tone="subdued">
-                Base price:{" "}
-                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
-                  {basePriceLabel}
-                </Text>
-              </Text>
-            )}
-            <Text as="p" variant="bodySm" tone="subdued">
-              Customization add-on:{" "}
-              <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
-                +${estimatedSurcharge.toFixed(2)}
-              </Text>
-              {previewText.length > 0 && (
-                <Text as="span" variant="bodySm" tone="subdued">
-                  {" "}({previewText.length} char{previewText.length !== 1 ? "s" : ""})
-                </Text>
-              )}
-            </Text>
-            {estimatedTotal !== null && (
-              <Text as="p" variant="bodyMd">
-                Estimated total:{" "}
-                <Text as="span" variant="bodyMd" fontWeight="semibold">
-                  ${estimatedTotal.toFixed(2)}{hasPriceRange ? "+" : ""}
-                </Text>
-              </Text>
-            )}
-          </BlockStack>
-        </BlockStack>
-      </Card>
+      <LiveExample fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
     </BlockStack>
   );
 }
