@@ -205,18 +205,18 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Video placeholder ── */}
+      {/* ── Video ── */}
       <section className="video-section">
         <div className="container">
           <h2 className="section-heading">See Etch in action</h2>
-          <p className="section-sub">Watch how to go from zero to live per-character pricing in under two minutes.</p>
-          <div className="video-placeholder">
-            <div className="video-play">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </div>
-            <p className="video-coming">Video coming soon</p>
+          <p className="section-sub">A 4-minute overview of how Etch works — from setup to live per-character pricing on your store.</p>
+          <div className="video-wrapper">
+            <iframe
+              src="https://www.youtube.com/embed/cMfURTumxwo"
+              title="Etch: Per-Character Pricing for Shopify — Quick Overview"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
           </div>
         </div>
       </section>
@@ -341,9 +341,8 @@ body { background: var(--white); color: var(--text); line-height: 1.6; }
 
 /* Video */
 .video-section { background: var(--bg-alt); padding: 96px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.video-placeholder { max-width: 800px; margin: 0 auto; aspect-ratio: 16/9; background: var(--navy); border-radius: var(--radius); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.08); }
-.video-play { width: 80px; height: 80px; border-radius: 50%; background: rgba(200,151,58,0.15); border: 2px solid rgba(200,151,58,0.4); display: flex; align-items: center; justify-content: center; color: var(--gold); }
-.video-coming { font-size: 0.9375rem; letter-spacing: 0.04em; }
+.video-wrapper { max-width: 800px; margin: 0 auto; aspect-ratio: 16/9; border-radius: var(--radius); overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+.video-wrapper iframe { width: 100%; height: 100%; border: 0; display: block; }
 
 /* Pricing */
 .pricing { padding: 96px 0; }
