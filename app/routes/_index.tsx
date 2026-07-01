@@ -269,7 +269,7 @@ export default function LandingPage() {
           <span className="logo footer-logo">Etch</span>
           <nav className="footer-links">
             <a href="/privacy">Privacy Policy</a>
-            <a href="mailto:support@etch.direct">Support</a>
+            <a href="/support">Support</a>
             <a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">Shopify App Store</a>
           </nav>
           <p className="footer-copy">© 2026 Etch. All rights reserved.</p>
