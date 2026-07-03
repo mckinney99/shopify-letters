@@ -68,19 +68,11 @@ const shopify = shopifyApp({
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
   webhooks: {
+    // Mandatory compliance topics (customers/data_request, customers/redact,
+    // shop/redact) are NOT registered here — Shopify ignores API-registered
+    // subscriptions for them. They are declared in shopify.app.*.toml under
+    // [[webhooks.subscriptions]] compliance_topics. See SL-69.
     APP_UNINSTALLED: {
-      deliveryMethod: DeliveryMethod.Http,
-      callbackUrl: "/webhooks",
-    },
-    CUSTOMERS_DATA_REQUEST: {
-      deliveryMethod: DeliveryMethod.Http,
-      callbackUrl: "/webhooks",
-    },
-    CUSTOMERS_REDACT: {
-      deliveryMethod: DeliveryMethod.Http,
-      callbackUrl: "/webhooks",
-    },
-    SHOP_REDACT: {
       deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks",
     },

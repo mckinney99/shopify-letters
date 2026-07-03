@@ -11,6 +11,13 @@ automatically_update_urls_on_dev = false
 [webhooks]
 api_version = "2025-10"
 
+  # Mandatory compliance (privacy) webhooks must be declared here in app config —
+  # Shopify ignores API-registered subscriptions for these topics. Handled by the
+  # /webhooks route, which verifies HMAC via authenticate.webhook(). See SL-69.
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "read_orders,read_products,write_products,write_cart_transforms,write_validations"
