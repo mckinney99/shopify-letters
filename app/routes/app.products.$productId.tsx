@@ -891,6 +891,12 @@ export default function ProductDetailPage() {
       ? publishFetcher.formData?.get("published") === "true"
       : published;
 
+  // The Step 3/4/5 onboarding banners exist to guide a merchant to publish. Once
+  // the product is published they've served their purpose, so hide them for
+  // already-published products (they otherwise reappear on every reload since the
+  // dismiss state is not persisted across page loads). See SL-60.
+  const showOnboarding = !onboardingComplete && !optimisticPublished;
+
   // Track last publish intent in a ref so we can read it after state returns to "idle"
   // (formData is typed as never when state === "idle").
   const lastPublishedValue = useRef<string | null>(null);
@@ -981,7 +987,7 @@ export default function ProductDetailPage() {
           </Banner>
         )}
 
-        {!onboardingComplete && !optimisticPublished && !publishCalloutDismissed && (
+        {showOnboarding && !publishCalloutDismissed && (
           <Banner
             title="Step 5 of 5: Go live!"
             tone="info"
@@ -1000,7 +1006,7 @@ export default function ProductDetailPage() {
         <Box paddingBlockStart="400">
           {selectedTab === 0 ? (
             <BlockStack gap="400">
-              {!onboardingComplete && fields.length === 0 && !fieldCalloutDismissed && (
+              {showOnboarding && fields.length === 0 && !fieldCalloutDismissed && (
                 <Banner
                   title="Step 3 of 5: Add a text field"
                   tone="info"
@@ -1063,7 +1069,7 @@ export default function ProductDetailPage() {
             </BlockStack>
           ) : (
             <BlockStack gap="400">
-              {!onboardingComplete && pricingRules.length === 0 && !pricingCalloutDismissed && (
+              {showOnboarding && pricingRules.length === 0 && !pricingCalloutDismissed && (
                 <Banner
                   title="Step 4 of 5: Set your pricing"
                   tone="info"
