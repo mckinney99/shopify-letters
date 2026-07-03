@@ -38,9 +38,8 @@ async function seedPublishedProduct() {
   const field = await prisma.customizationField.create({
     data: { shop: SHOP, productId: PRODUCT_GID, label: "Engraving", type: "text", minChars: 1, maxChars: 20, position: 0 },
   });
-  await prisma.pricingRule.create({
-    data: { shop: SHOP, productId: PRODUCT_GID, fieldId: "", basePrice: 5.0, perCharPrice: 0 },
-  });
+  // SL-67 removed the stored base-price rule (fieldId: ""); base price now comes
+  // from the Shopify variant, and /api/preview returns the customization surcharge only.
   await prisma.pricingRule.create({
     data: { shop: SHOP, productId: PRODUCT_GID, fieldId: field.id, basePrice: 0, perCharPrice: 0.5 },
   });
@@ -71,7 +70,7 @@ describe("POST /api/preview structured logging", () => {
     const response = await previewAction({ request, params: {}, context: {} });
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.price).toBe(750); // $5 base + 5 chars * $0.50
+    expect(body.price).toBe(250); // 5 chars * $0.50 surcharge (base price is the variant's — SL-67)
 
     const logged = lastJsonLog(spy);
     expect(logged.event).toBe("preview_request");
@@ -79,7 +78,7 @@ describe("POST /api/preview structured logging", () => {
     expect(logged.productId).toBe(PRODUCT_GID);
     expect(logged.correlationId).toBe("corr-123");
     expect(logged.valid).toBe(true);
-    expect(logged.priceMinor).toBe(750);
+    expect(logged.priceMinor).toBe(250);
     expect(typeof logged.inputHash).toBe("string");
     expect(logged.inputHash).toMatch(/^[0-9a-f]{12}$/);
     expect(typeof logged.latencyMs).toBe("number");
