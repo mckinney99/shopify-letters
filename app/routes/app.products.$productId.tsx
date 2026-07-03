@@ -746,7 +746,10 @@ function FieldPricingCard({
   // savedPerCharPrice matches the input again — clearing dirty automatically.
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
-  const priceDirty = perCharPrice !== savedPerCharPrice;
+  // Compare numerically, not by string: after saving "2" the loader revalidates
+  // rule.perCharPrice to 2 which formats back to "2.0000", so a raw string compare
+  // would wrongly stay dirty and nag on every tab switch (SL-68 QA).
+  const priceDirty = parseFloat(perCharPrice || "0") !== (rule?.perCharPrice ?? 0);
   useEffect(() => {
     onDirtyChangeRef.current?.(priceDirty);
   }, [priceDirty]);
