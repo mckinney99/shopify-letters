@@ -17,6 +17,7 @@ import {
   Divider,
   Badge,
   Checkbox,
+  Modal,
 } from "@shopify/polaris";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -362,10 +363,12 @@ function FieldForm({
   field,
   actionType,
   onClose,
+  onDirtyChange,
 }: {
   field?: FieldData;
   actionType: "create" | "update";
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const [label, setLabel] = useState(field?.label ?? "");
@@ -379,6 +382,24 @@ function FieldForm({
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) onClose();
   }, [fetcher.state, fetcher.data, onClose]);
+
+  // Report unsaved-change (dirty) state up so the parent can guard tab switches (SL-68).
+  // A ref keeps us immune to onDirtyChange identity churn between renders.
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  const dirty =
+    label !== (field?.label ?? "") ||
+    minChars !== (field?.minChars?.toString() ?? "") ||
+    maxChars !== (field?.maxChars?.toString() ?? "") ||
+    allowedChars !== (field?.allowedChars ?? "") ||
+    disallowedChars !== (field?.disallowedChars ?? "") ||
+    allowSpaces !== (field?.allowSpaces ?? true) ||
+    countSpaces !== (field?.countSpaces ?? false);
+  useEffect(() => {
+    onDirtyChangeRef.current?.(dirty);
+  }, [dirty]);
+  // Clear the flag when the form unmounts (closed, saved, or discarded).
+  useEffect(() => () => onDirtyChangeRef.current?.(false), []);
 
   return (
     <fetcher.Form method="post">
@@ -448,6 +469,7 @@ function FieldRow({
   isEditing,
   onEdit,
   onEditClose,
+  onDirtyChange,
 }: {
   field: FieldData;
   isFirst: boolean;
@@ -455,6 +477,7 @@ function FieldRow({
   isEditing: boolean;
   onEdit: () => void;
   onEditClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const moveFetcher = useFetcher();
   const deleteFetcher = useFetcher();
@@ -462,7 +485,7 @@ function FieldRow({
   if (isEditing) {
     return (
       <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-        <FieldForm field={field} actionType="update" onClose={onEditClose} />
+        <FieldForm field={field} actionType="update" onClose={onEditClose} onDirtyChange={onDirtyChange} />
       </Box>
     );
   }
@@ -694,13 +717,16 @@ function CharGroupRow({ group }: { group: CharPriceGroupData }) {
 function FieldPricingCard({
   field,
   rule,
+  onDirtyChange,
 }: {
   field: FieldData;
   rule: PricingRuleData | undefined;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const priceFetcher = useFetcher<{ ok?: boolean }>();
   const groupFetcher = useFetcher<{ ok?: boolean; error?: string }>();
-  const [perCharPrice, setPerCharPrice] = useState(rule?.perCharPrice?.toFixed(4) ?? "0.0000");
+  const savedPerCharPrice = rule?.perCharPrice?.toFixed(4) ?? "0.0000";
+  const [perCharPrice, setPerCharPrice] = useState(savedPerCharPrice);
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [groupLabel, setGroupLabel] = useState("");
   const [groupChars, setGroupChars] = useState("");
@@ -714,6 +740,20 @@ function FieldPricingCard({
       setGroupPrice("0.0000");
     }
   }, [groupFetcher.state, groupFetcher.data]);
+
+  // Report an unsaved per-character price up so the parent can guard tab switches (SL-68).
+  // After a successful save the loader revalidates, rule.perCharPrice updates, and
+  // savedPerCharPrice matches the input again — clearing dirty automatically.
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  // Compare numerically, not by string: after saving "2" the loader revalidates
+  // rule.perCharPrice to 2 which formats back to "2.0000", so a raw string compare
+  // would wrongly stay dirty and nag on every tab switch (SL-68 QA).
+  const priceDirty = parseFloat(perCharPrice || "0") !== (rule?.perCharPrice ?? 0);
+  useEffect(() => {
+    onDirtyChangeRef.current?.(priceDirty);
+  }, [priceDirty]);
+  useEffect(() => () => onDirtyChangeRef.current?.(false), []);
 
   return (
     <Card>
@@ -804,10 +844,12 @@ function PricingTab({
   fields,
   pricingRules,
   variantPrices,
+  onFieldPricingDirty,
 }: {
   fields: FieldData[];
   pricingRules: PricingRuleData[];
   variantPrices: number[];
+  onFieldPricingDirty?: (fieldId: string, dirty: boolean) => void;
 }) {
   const minPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
   const maxPrice = variantPrices.length > 0 ? Math.max(...variantPrices) : null;
@@ -840,6 +882,7 @@ function PricingTab({
               key={field.id}
               field={field}
               rule={pricingRules.find((r) => r.fieldId === field.id)}
+              onDirtyChange={onFieldPricingDirty ? (dirty) => onFieldPricingDirty(field.id, dirty) : undefined}
             />
           ))}
         </BlockStack>
@@ -869,6 +912,41 @@ export default function ProductDetailPage() {
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Unsaved-changes guard for tab switches (SL-68). The field form is mutually
+  // exclusive (one add- or edit-form open at a time), so a single boolean suffices.
+  // Pricing has one card per field, so we track the set of dirty field ids.
+  const [fieldFormDirty, setFieldFormDirty] = useState(false);
+  const dirtyPricingFieldsRef = useRef<Set<string>>(new Set());
+  const [pricingFormDirty, setPricingFormDirty] = useState(false);
+  const [pendingTab, setPendingTab] = useState<number | null>(null);
+
+  const reportPricingDirty = useCallback((fieldId: string, dirty: boolean) => {
+    const set = dirtyPricingFieldsRef.current;
+    if (dirty) set.add(fieldId);
+    else set.delete(fieldId);
+    setPricingFormDirty(set.size > 0);
+  }, []);
+
+  const hasUnsavedChanges = fieldFormDirty || pricingFormDirty;
+
+  const handleTabSelect = useCallback(
+    (index: number) => {
+      if (hasUnsavedChanges) setPendingTab(index);
+      else setSelectedTab(index);
+    },
+    [hasUnsavedChanges]
+  );
+
+  const confirmLeaveTab = useCallback(() => {
+    // Discard: clear dirty tracking and switch. Unmounting the current tab's
+    // forms also fires their own onDirtyChange(false), keeping state consistent.
+    dirtyPricingFieldsRef.current.clear();
+    setPricingFormDirty(false);
+    setFieldFormDirty(false);
+    if (pendingTab !== null) setSelectedTab(pendingTab);
+    setPendingTab(null);
+  }, [pendingTab]);
 
   // Onboarding guide state
   const [onboardingComplete, setOnboardingComplete] = useState(false);
@@ -1002,7 +1080,7 @@ export default function ProductDetailPage() {
           </Banner>
         )}
 
-      <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
+      <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabSelect}>
         <Box paddingBlockStart="400">
           {selectedTab === 0 ? (
             <BlockStack gap="400">
@@ -1050,13 +1128,14 @@ export default function ProductDetailPage() {
                         isEditing={editingFieldId === field.id}
                         onEdit={() => handleEdit(field.id)}
                         onEditClose={handleEditClose}
+                        onDirtyChange={setFieldFormDirty}
                       />
                     ))}
                     {showAddForm && (
                       <Box padding="400">
                         <BlockStack gap="300">
                           <Text as="h3" variant="headingSm">New field</Text>
-                          <FieldForm actionType="create" onClose={handleAddClose} />
+                          <FieldForm actionType="create" onClose={handleAddClose} onDirtyChange={setFieldFormDirty} />
                         </BlockStack>
                       </Box>
                     )}
@@ -1097,12 +1176,28 @@ export default function ProductDetailPage() {
                   </BlockStack>
                 </Banner>
               )}
-              <PricingTab fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
+              <PricingTab fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} onFieldPricingDirty={reportPricingDirty} />
             </BlockStack>
           )}
         </Box>
       </Tabs>
       </BlockStack>
+
+      <Modal
+        open={pendingTab !== null}
+        onClose={() => setPendingTab(null)}
+        title="Unsaved changes"
+        primaryAction={{ content: "Leave anyway", destructive: true, onAction: confirmLeaveTab }}
+        secondaryActions={[{ content: "Go back", onAction: () => setPendingTab(null) }]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            {fieldFormDirty
+              ? "You have an unsaved field. Go back to finish adding it, or leave and discard your changes."
+              : "You have unsaved pricing changes. Go back to save them, or leave and discard your changes."}
+          </Text>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }
