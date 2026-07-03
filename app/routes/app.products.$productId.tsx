@@ -22,6 +22,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
+import { buildThemeEditorDeepLink } from "../utils/themeEditor";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -172,6 +173,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     fields,
     pricingRules,
     variantPrices,
+    // One-click theme-editor link to add the Etch widget to the product page.
+    // Upgraded to pre-add the app block when the extension UUID is configured. See SL-70.
+    themeEditorDeepLink: buildThemeEditorDeepLink({
+      shop: session.shop,
+      extensionUuid: process.env.SHOPIFY_THEME_APP_EXTENSION_UUID,
+    }),
   });
 };
 
@@ -857,7 +864,7 @@ export function ErrorBoundary() {
 }
 
 export default function ProductDetailPage() {
-  const { product, published, fields, pricingRules, variantPrices } = useLoaderData<typeof loader>();
+  const { product, published, fields, pricingRules, variantPrices, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -950,15 +957,25 @@ export default function ProductDetailPage() {
             tone="success"
             onDismiss={() => setShowCongrats(false)}
           >
-            <BlockStack gap="200">
+            <BlockStack gap="300">
               <Text as="p">
-                Your customers can now add custom text to this product and see the price update
-                in real time. Etch will automatically apply the correct charge at checkout.
+                Your custom pricing is live. The last step is adding the Etch widget to this
+                product's page so customers can enter their text and see the price update in
+                real time — Etch applies the correct charge at checkout automatically.
               </Text>
-              <Text as="p">
+              {themeEditorDeepLink && (
+                <InlineStack>
+                  <Button url={themeEditorDeepLink} target="_blank" external variant="primary">
+                    Add the Etch widget to your product page
+                  </Button>
+                </InlineStack>
+              )}
+              <Text as="p" tone="subdued">
+                This opens your theme editor. If you don't see the widget added automatically,
+                choose <b>Add block</b> and search for <b>Etch Customization</b>. Full steps are on our{" "}
                 <Button variant="plain" onClick={() => navigate("/app/support")}>
-                  Bookmark our Help &amp; Support page
-                </Button>{" "}for tips, FAQs, and pricing ideas whenever you need them.
+                  Help &amp; Support page
+                </Button>.
               </Text>
             </BlockStack>
           </Banner>
