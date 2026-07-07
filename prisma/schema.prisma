@@ -59,11 +59,31 @@ model CustomizationField {
   disallowedChars String?
   allowSpaces     Boolean  @default(true)
   countSpaces     Boolean  @default(false)
+  required        Boolean  @default(false)
   position        Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  options         FieldOption[]
+
   @@index([shop, productId])
+}
+
+// A selectable choice for a choice-type field (dropdown, buttons, checkbox).
+// `priceDelta` is a flat amount added to the line price when the option is
+// chosen. label doubles as the stored/submitted value. Text fields have none.
+model FieldOption {
+  id         String   @id @default(cuid())
+  fieldId    String
+  label      String
+  priceDelta Float    @default(0)
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  field      CustomizationField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@index([fieldId])
 }
 
 // fieldId = "" means product-level base price; fieldId = <CustomizationField.id> means per-field pricing

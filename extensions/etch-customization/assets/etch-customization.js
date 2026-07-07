@@ -233,9 +233,62 @@
       label.className = 'etch-customization__label';
       label.textContent = field.label;
 
-      // <input>
-      var input = document.createElement('input');
-      input.type = 'text';
+      // Per-field validation error element (shared by every field type)
+      var fieldError = document.createElement('span');
+      fieldError.id = errorId;
+      fieldError.className = 'etch-customization__field-error';
+      fieldError.setAttribute('role', 'alert');
+      fieldError.hidden = true;
+      fieldErrorEls[field.id] = fieldError;
+
+      // ── Choice field: <select> dropdown ──────────────────────────────────
+      if (field.type === 'dropdown') {
+        renderDropdown(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return; // done with this field (forEach callback)
+      }
+
+      // ── Choice field: button group (single-select) ───────────────────────
+      if (field.type === 'buttons') {
+        renderButtons(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return;
+      }
+
+      // ── Choice field: single checkbox ────────────────────────────────────
+      if (field.type === 'checkbox') {
+        renderCheckbox(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return;
+      }
+
+      // ── Text / paragraph field ───────────────────────────────────────────
+      // Input element — a single-line <input> by default, or a multi-line
+      // <textarea> for "paragraph text" fields. Both expose .value / .maxLength
+      // and fire the same input/keydown events, so all handling below is shared.
+      var input;
+      if (field.type === 'textarea') {
+        input = document.createElement('textarea');
+        input.rows = 3;
+      } else {
+        input = document.createElement('input');
+        input.type = 'text';
+      }
       input.id = uid;
       input.className = 'etch-customization__input';
       // Hidden mirror inside the product form — submits the value even if the block is outside <form>
@@ -257,14 +310,6 @@
         describedBy = hint.id + ' ' + errorId;
       }
       input.setAttribute('aria-describedby', describedBy);
-
-      // Per-field validation error element
-      var fieldError = document.createElement('span');
-      fieldError.id = errorId;
-      fieldError.className = 'etch-customization__field-error';
-      fieldError.setAttribute('role', 'alert');
-      fieldError.hidden = true;
-      fieldErrorEls[field.id] = fieldError;
 
       // Pre-compute sets once so keydown handler is cheap.
       var allowedSet = field.allowedChars ? new Set(Array.from(field.allowedChars)) : null;
@@ -406,6 +451,153 @@
         keepalive: true,
       }).catch(function () {});
     }
+  }
+
+  // Renders a <select> dropdown for a choice field and wires its change event
+  // to per-field validity, the hidden form input, and a price refresh.
+  function renderDropdown(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, onChange) {
+    var select = document.createElement('select');
+    select.id = uid;
+    select.className = 'etch-customization__input etch-customization__select';
+    select.setAttribute('aria-describedby', errorId);
+
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = field.required ? 'Select…' : 'Select… (optional)';
+    select.appendChild(placeholder);
+
+    (field.options || []).forEach(function (opt) {
+      var o = document.createElement('option');
+      o.value = opt.label;
+      o.textContent = opt.priceDelta ? opt.label + ' (+' + formatDollar(opt.priceDelta) + ')' : opt.label;
+      select.appendChild(o);
+    });
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    // Required-but-unselected starts invalid so the add-to-cart button stays disabled.
+    validityMap[field.id] = !field.required;
+
+    select.addEventListener('change', function () {
+      var val = select.value;
+      if (field.required && !val) {
+        fieldError.textContent = 'Please select an option.';
+        fieldError.hidden = false;
+        select.setAttribute('aria-invalid', 'true');
+        validityMap[field.id] = false;
+      } else {
+        fieldError.hidden = true;
+        fieldError.textContent = '';
+        select.removeAttribute('aria-invalid');
+        validityMap[field.id] = true;
+      }
+      updateBtn();
+      hiddenFieldInput.value = val;
+      inputMap[field.id] = val;
+      onChange();
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(select);
+    wrapper.appendChild(fieldError);
+  }
+
+  // Renders a single-select group of buttons for a "buttons" field. Same data
+  // as a dropdown; the chosen option's label is stored like any other choice.
+  function renderButtons(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, onChange) {
+    label.id = uid + '-label';
+    label.removeAttribute('for');
+
+    var group = document.createElement('div');
+    group.className = 'etch-customization__buttons';
+    group.setAttribute('role', 'radiogroup');
+    group.setAttribute('aria-labelledby', label.id);
+    group.setAttribute('aria-describedby', errorId);
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    // Required-but-unselected starts invalid so the add-to-cart button stays disabled.
+    validityMap[field.id] = !field.required;
+
+    function choose(val, btn) {
+      Array.prototype.forEach.call(group.children, function (b) {
+        var on = b === btn;
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.classList.toggle('is-selected', on);
+      });
+      fieldError.hidden = true;
+      fieldError.textContent = '';
+      validityMap[field.id] = true;
+      updateBtn();
+      hiddenFieldInput.value = val;
+      inputMap[field.id] = val;
+      onChange();
+    }
+
+    (field.options || []).forEach(function (opt) {
+      var btn = document.createElement('button');
+      btn.type = 'button'; // never submit the product form
+      btn.className = 'etch-customization__button';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', 'false');
+      btn.textContent = opt.priceDelta ? opt.label + ' (+' + formatDollar(opt.priceDelta) + ')' : opt.label;
+      btn.addEventListener('click', function () { choose(opt.label, btn); });
+      group.appendChild(btn);
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(group);
+    wrapper.appendChild(fieldError);
+  }
+
+  // Renders a single checkbox for a checkbox field. Stores the option label
+  // ("Yes") when ticked, empty when not, so it prices/validates like any option.
+  function renderCheckbox(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, onChange) {
+    var opt = (field.options && field.options[0]) || { label: 'Yes', priceDelta: 0 };
+    var optionLabel = opt.label || 'Yes';
+
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = uid;
+    cb.className = 'etch-customization__checkbox';
+    cb.setAttribute('aria-describedby', errorId);
+
+    label.htmlFor = uid;
+    if (opt.priceDelta) label.textContent = field.label + ' (+' + formatDollar(opt.priceDelta) + ')';
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    // A required checkbox starts unticked → invalid until the shopper ticks it.
+    validityMap[field.id] = !field.required;
+
+    cb.addEventListener('change', function () {
+      if (field.required && !cb.checked) {
+        fieldError.textContent = 'Please tick this box to continue.';
+        fieldError.hidden = false;
+        cb.setAttribute('aria-invalid', 'true');
+        validityMap[field.id] = false;
+      } else {
+        fieldError.hidden = true;
+        fieldError.textContent = '';
+        cb.removeAttribute('aria-invalid');
+        validityMap[field.id] = true;
+      }
+      updateBtn();
+      var val = cb.checked ? optionLabel : '';
+      hiddenFieldInput.value = val;
+      inputMap[field.id] = val;
+      onChange();
+    });
+
+    var row = document.createElement('div');
+    row.className = 'etch-customization__checkbox-row';
+    row.appendChild(cb);
+    row.appendChild(label);
+    wrapper.appendChild(row);
+    wrapper.appendChild(fieldError);
   }
 
   function makeHiddenInput(name, value) {

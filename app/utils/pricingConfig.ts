@@ -5,13 +5,22 @@ import { createHash } from "crypto";
 // Cart Transform function) and to derive a config snapshot ID that gets
 // attached to cart/order line items — see SL-30.
 
+export type PricingConfigOption = {
+  label: string;
+  priceDelta: number;
+};
+
 export type PricingConfigField = {
   id: string;
   label: string;
+  type: string;
+  required: boolean;
   minChars: number | null;
   maxChars: number | null;
   allowedChars: string | null;
   disallowedChars: string | null;
+  // Choice-field options (dropdown/checkbox/buttons). Empty for text fields.
+  options: PricingConfigOption[];
 };
 
 export type PricingConfigCharGroup = {
@@ -31,13 +40,21 @@ export type PricingConfig = {
   rules: PricingConfigRule[];
 };
 
+type DbFieldOption = {
+  label: string;
+  priceDelta: number;
+};
+
 type DbField = {
   id: string;
   label: string;
+  type?: string;
+  required?: boolean;
   minChars: number | null;
   maxChars: number | null;
   allowedChars: string | null;
   disallowedChars: string | null;
+  options?: DbFieldOption[];
 };
 
 type DbCharGroup = {
@@ -60,10 +77,13 @@ export function buildPricingConfig(fields: DbField[], rules: DbPricingRule[]): P
     fields: fields.map((f) => ({
       id: f.id,
       label: f.label,
+      type: f.type ?? "text",
+      required: f.required ?? false,
       minChars: f.minChars,
       maxChars: f.maxChars,
       allowedChars: f.allowedChars,
       disallowedChars: f.disallowedChars,
+      options: (f.options ?? []).map((o) => ({ label: o.label, priceDelta: o.priceDelta })),
     })),
     rules: rules
       .filter((r) => r.fieldId !== "")

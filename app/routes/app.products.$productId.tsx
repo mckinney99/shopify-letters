@@ -18,6 +18,7 @@ import {
   Badge,
   Checkbox,
   Modal,
+  Select,
 } from "@shopify/polaris";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -62,6 +63,7 @@ async function syncPricingMetafield(
     prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
+      include: { options: { orderBy: { position: "asc" } } },
     }),
     prisma.pricingRule.findMany({
       where: { shop, productId: productGid },
@@ -96,6 +98,12 @@ async function syncPricingMetafield(
   }
 }
 
+type FieldOptionData = {
+  id: string;
+  label: string;
+  priceDelta: number;
+};
+
 type FieldData = {
   id: string;
   label: string;
@@ -106,7 +114,9 @@ type FieldData = {
   disallowedChars: string | null;
   allowSpaces: boolean;
   countSpaces: boolean;
+  required: boolean;
   position: number;
+  options: FieldOptionData[];
 };
 
 type CharPriceGroupData = {
@@ -123,6 +133,47 @@ type PricingRuleData = {
   perCharPrice: number;
   charGroups: CharPriceGroupData[];
 };
+
+// Field types offered in the "Field type" selector. `text` is the original
+// single-line input and stays the default so existing fields are unchanged.
+// New types are added here as later stories land (dropdown, checkbox, ...).
+const FIELD_TYPE_OPTIONS = [
+  { label: "Short text", value: "text" },
+  { label: "Paragraph text", value: "textarea" },
+  { label: "Dropdown", value: "dropdown" },
+  { label: "Buttons", value: "buttons" },
+  { label: "Checkbox", value: "checkbox" },
+];
+
+// Choice fields present a fixed list of options instead of free text.
+const CHOICE_TYPES = ["dropdown", "checkbox", "buttons"];
+function isChoiceType(type: string): boolean {
+  return CHOICE_TYPES.includes(type);
+}
+
+// Coerce any submitted field type to a known value, defaulting to "text".
+// Guards against a stale/hand-crafted form posting an unsupported type.
+function normalizeFieldType(value: string | null): string {
+  return FIELD_TYPE_OPTIONS.some((o) => o.value === value) ? (value as string) : "text";
+}
+
+// Parse the JSON options blob posted by the field form into clean rows.
+// Drops blank-label rows and coerces price to a number.
+function parseOptions(raw: string | null): { label: string; priceDelta: number }[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw) as Array<{ label?: unknown; priceDelta?: unknown }>;
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((o) => ({
+        label: typeof o.label === "string" ? o.label.trim() : "",
+        priceDelta: Number(o.priceDelta) || 0,
+      }))
+      .filter((o) => o.label !== "");
+  } catch {
+    return [];
+  }
+}
 
 function validateField(data: Record<string, string>): string | null {
   if (!data.label?.trim()) return "Label is required.";
@@ -148,6 +199,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     prisma.customizationField.findMany({
       where: { shop: session.shop, productId: productGid },
       orderBy: { position: "asc" },
+      include: { options: { orderBy: { position: "asc" } } },
     }),
     prisma.pricingRule.findMany({
       where: { shop: session.shop, productId: productGid },
@@ -194,15 +246,20 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
   if (_action === "create") {
     const label = (form.get("label") as string) ?? "";
+    const type = normalizeFieldType(form.get("type") as string);
     const minChars = (form.get("minChars") as string) ?? "";
     const maxChars = (form.get("maxChars") as string) ?? "";
     const allowedChars = (form.get("allowedChars") as string) ?? "";
     const disallowedChars = (form.get("disallowedChars") as string) ?? "";
     const allowSpaces = form.get("allowSpaces") !== "false";
     const countSpaces = form.get("countSpaces") === "true";
+    const required = form.get("required") === "true";
+    const options = isChoiceType(type) ? parseOptions(form.get("options") as string) : [];
 
     const error = validateField({ label, minChars, maxChars, allowedChars, disallowedChars });
     if (error) return json({ error }, { status: 422 });
+    if (isChoiceType(type) && options.length === 0)
+      return json({ error: "Add at least one option." }, { status: 422 });
 
     const count = await prisma.customizationField.count({
       where: { shop, productId: productGid },
@@ -212,14 +269,18 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         shop,
         productId: productGid,
         label: label.trim(),
-        type: "text",
+        type,
         minChars: minChars ? parseInt(minChars) : null,
         maxChars: maxChars ? parseInt(maxChars) : null,
         allowedChars: allowedChars.trim() || null,
         disallowedChars: disallowedChars.trim() || null,
         allowSpaces,
         countSpaces,
+        required,
         position: count,
+        options: {
+          create: options.map((o, i) => ({ label: o.label, priceDelta: o.priceDelta, position: i })),
+        },
       },
     });
     await syncPricingMetafield(admin, shop, productGid);
@@ -229,28 +290,46 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (_action === "update") {
     const fieldId = form.get("fieldId") as string;
     const label = (form.get("label") as string) ?? "";
+    const type = normalizeFieldType(form.get("type") as string);
     const minChars = (form.get("minChars") as string) ?? "";
     const maxChars = (form.get("maxChars") as string) ?? "";
     const allowedChars = (form.get("allowedChars") as string) ?? "";
     const disallowedChars = (form.get("disallowedChars") as string) ?? "";
     const allowSpaces = form.get("allowSpaces") !== "false";
     const countSpaces = form.get("countSpaces") === "true";
+    const required = form.get("required") === "true";
+    const options = isChoiceType(type) ? parseOptions(form.get("options") as string) : [];
 
     const error = validateField({ label, minChars, maxChars, allowedChars, disallowedChars });
     if (error) return json({ error }, { status: 422 });
+    if (isChoiceType(type) && options.length === 0)
+      return json({ error: "Add at least one option." }, { status: 422 });
 
-    await prisma.customizationField.updateMany({
+    const updated = await prisma.customizationField.updateMany({
       where: { id: fieldId, shop },
       data: {
         label: label.trim(),
+        type,
         minChars: minChars ? parseInt(minChars) : null,
         maxChars: maxChars ? parseInt(maxChars) : null,
         allowedChars: allowedChars.trim() || null,
         disallowedChars: disallowedChars.trim() || null,
         allowSpaces,
         countSpaces,
+        required,
       },
     });
+    // Only touch options if the field is actually owned by this shop.
+    if (updated.count > 0) {
+      // Replace the option set (scoped to this shop's field). Also clears
+      // options when a field is switched away from a choice type.
+      await prisma.fieldOption.deleteMany({ where: { fieldId, field: { shop } } });
+      if (options.length > 0) {
+        await prisma.fieldOption.createMany({
+          data: options.map((o, i) => ({ fieldId, label: o.label, priceDelta: o.priceDelta, position: i })),
+        });
+      }
+    }
     await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
@@ -372,12 +451,29 @@ function FieldForm({
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const [label, setLabel] = useState(field?.label ?? "");
+  const [type, setType] = useState(field?.type ?? "text");
   const [minChars, setMinChars] = useState(field?.minChars?.toString() ?? "");
   const [maxChars, setMaxChars] = useState(field?.maxChars?.toString() ?? "");
   const [allowedChars, setAllowedChars] = useState(field?.allowedChars ?? "");
   const [disallowedChars, setDisallowedChars] = useState(field?.disallowedChars ?? "");
   const [allowSpaces, setAllowSpaces] = useState(field?.allowSpaces ?? true);
   const [countSpaces, setCountSpaces] = useState(field?.countSpaces ?? false);
+  const [required, setRequired] = useState(field?.required ?? false);
+  const initialOptions = (field?.options ?? []).map((o) => ({ label: o.label, priceDelta: String(o.priceDelta) }));
+  const [options, setOptions] = useState<{ label: string; priceDelta: string }[]>(initialOptions);
+  // A checkbox is stored as a single "Yes" option; the merchant only sets its price.
+  const initialCheckboxPrice = field?.options?.[0] ? String(field.options[0].priceDelta) : "";
+  const [checkboxPrice, setCheckboxPrice] = useState(initialCheckboxPrice);
+
+  const listChoice = type === "dropdown" || type === "buttons";
+  const isCheckbox = type === "checkbox";
+  const choice = isChoiceType(type);
+  // What gets posted as the field's options: checkbox collapses to one option.
+  const optionsPayload = isCheckbox ? [{ label: "Yes", priceDelta: checkboxPrice }] : options;
+  const addOption = () => setOptions((prev) => [...prev, { label: "", priceDelta: "" }]);
+  const removeOption = (i: number) => setOptions((prev) => prev.filter((_, idx) => idx !== i));
+  const updateOption = (i: number, key: "label" | "priceDelta", val: string) =>
+    setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)));
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) onClose();
@@ -389,12 +485,16 @@ function FieldForm({
   onDirtyChangeRef.current = onDirtyChange;
   const dirty =
     label !== (field?.label ?? "") ||
+    type !== (field?.type ?? "text") ||
     minChars !== (field?.minChars?.toString() ?? "") ||
     maxChars !== (field?.maxChars?.toString() ?? "") ||
     allowedChars !== (field?.allowedChars ?? "") ||
     disallowedChars !== (field?.disallowedChars ?? "") ||
     allowSpaces !== (field?.allowSpaces ?? true) ||
-    countSpaces !== (field?.countSpaces ?? false);
+    countSpaces !== (field?.countSpaces ?? false) ||
+    required !== (field?.required ?? false) ||
+    checkboxPrice !== initialCheckboxPrice ||
+    JSON.stringify(options) !== JSON.stringify(initialOptions);
   useEffect(() => {
     onDirtyChangeRef.current?.(dirty);
   }, [dirty]);
@@ -407,49 +507,124 @@ function FieldForm({
         <input type="hidden" name="_action" value={actionType} />
         {field && <input type="hidden" name="fieldId" value={field.id} />}
         <input type="hidden" name="label" value={label} />
+        <input type="hidden" name="type" value={type} />
         <input type="hidden" name="minChars" value={minChars} />
         <input type="hidden" name="maxChars" value={maxChars} />
         <input type="hidden" name="allowedChars" value={allowedChars} />
         <input type="hidden" name="disallowedChars" value={disallowedChars} />
         <input type="hidden" name="allowSpaces" value={String(allowSpaces)} />
         <input type="hidden" name="countSpaces" value={String(countSpaces)} />
+        <input type="hidden" name="required" value={String(required)} />
+        <input type="hidden" name="options" value={JSON.stringify(optionsPayload)} />
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
         <FormLayout>
           <TextField label="Label" value={label} onChange={setLabel} autoComplete="off" requiredIndicator />
-          <FormLayout.Group>
-            <TextField label="Min characters" type="number" value={minChars} onChange={setMinChars} autoComplete="off" />
-            <TextField label="Max characters" type="number" value={maxChars} onChange={setMaxChars} autoComplete="off" />
-          </FormLayout.Group>
-          <FormLayout.Group>
-            <TextField
-              label="Allowed characters"
-              helpText="Only these characters will be accepted (leave blank for all)"
-              value={allowedChars}
-              onChange={setAllowedChars}
-              autoComplete="off"
-            />
-            <TextField
-              label="Disallowed characters"
-              helpText="These characters will be rejected (leave blank to allow all)"
-              value={disallowedChars}
-              onChange={setDisallowedChars}
-              autoComplete="off"
-            />
-          </FormLayout.Group>
-          <FormLayout.Group>
-            <Checkbox
-              label="Allow spaces"
-              helpText="Customers can type spaces in this field"
-              checked={allowSpaces}
-              onChange={setAllowSpaces}
-            />
-            <Checkbox
-              label="Count spaces toward price"
-              helpText="When off, spaces are excluded from the billed character count"
-              checked={countSpaces}
-              onChange={setCountSpaces}
-            />
-          </FormLayout.Group>
+          <Select
+            label="Field type"
+            options={FIELD_TYPE_OPTIONS}
+            value={type}
+            onChange={setType}
+            helpText="Short text is one line, paragraph text is a box, dropdown is a list of choices."
+          />
+          {listChoice ? (
+            <>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd">Options</Text>
+                {options.map((opt, i) => (
+                  <InlineStack key={i} gap="200" blockAlign="end" wrap={false}>
+                    <div style={{ flex: 2 }}>
+                      <TextField
+                        label="Choice"
+                        labelHidden
+                        placeholder="e.g. 18 inch"
+                        value={opt.label}
+                        onChange={(v) => updateOption(i, "label", v)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <TextField
+                        label="Extra price"
+                        labelHidden
+                        type="number"
+                        prefix="$"
+                        placeholder="0.00"
+                        value={opt.priceDelta}
+                        onChange={(v) => updateOption(i, "priceDelta", v)}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <Button onClick={() => removeOption(i)} accessibilityLabel="Remove option">Remove</Button>
+                  </InlineStack>
+                ))}
+                <div>
+                  <Button onClick={addOption}>Add option</Button>
+                </div>
+              </BlockStack>
+              <Checkbox
+                label="Required"
+                helpText="Shoppers must choose an option before adding to cart"
+                checked={required}
+                onChange={setRequired}
+              />
+            </>
+          ) : isCheckbox ? (
+            <>
+              <TextField
+                label="Extra price when checked"
+                type="number"
+                prefix="$"
+                placeholder="0.00"
+                helpText="Added to the price when the shopper ticks this box. Leave blank for a free option."
+                value={checkboxPrice}
+                onChange={setCheckboxPrice}
+                autoComplete="off"
+              />
+              <Checkbox
+                label="Required"
+                helpText="Shopper must tick this box before adding to cart (e.g. to accept terms)"
+                checked={required}
+                onChange={setRequired}
+              />
+            </>
+          ) : (
+            <>
+              <FormLayout.Group>
+                <TextField label="Min characters" type="number" value={minChars} onChange={setMinChars} autoComplete="off" />
+                <TextField label="Max characters" type="number" value={maxChars} onChange={setMaxChars} autoComplete="off" />
+              </FormLayout.Group>
+              <FormLayout.Group>
+                <TextField
+                  label="Allowed characters"
+                  helpText="Only these characters will be accepted (leave blank for all)"
+                  value={allowedChars}
+                  onChange={setAllowedChars}
+                  autoComplete="off"
+                />
+                <TextField
+                  label="Disallowed characters"
+                  helpText="These characters will be rejected (leave blank to allow all)"
+                  value={disallowedChars}
+                  onChange={setDisallowedChars}
+                  autoComplete="off"
+                />
+              </FormLayout.Group>
+              <FormLayout.Group>
+                <Checkbox
+                  label="Allow spaces"
+                  helpText="Customers can type spaces in this field"
+                  checked={allowSpaces}
+                  onChange={setAllowSpaces}
+                />
+                <Checkbox
+                  label="Count spaces toward price"
+                  helpText="When off, spaces are excluded from the billed character count"
+                  checked={countSpaces}
+                  onChange={setCountSpaces}
+                />
+              </FormLayout.Group>
+            </>
+          )}
         </FormLayout>
         <InlineStack gap="200">
           <Button variant="primary" submit loading={fetcher.state !== "idle"}>

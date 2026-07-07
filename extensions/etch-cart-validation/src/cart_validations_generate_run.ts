@@ -5,9 +5,16 @@
 
 // ── Types for the metafield payload ──────────────────────────────────────────
 
+type FieldOptionRule = {
+  label: string;
+  priceDelta: number;
+};
+
 type FieldDefinition = {
   id: string;
   label: string;
+  required?: boolean;
+  options?: FieldOptionRule[];
   minChars?: number | null;
   maxChars?: number | null;
   allowedChars?: string | null;
@@ -64,6 +71,16 @@ function normalizeText(input: string): string {
 }
 
 function validateField(rawInput: string, field: FieldDefinition): string[] {
+  // Choice fields (dropdown/checkbox/buttons): the value is an option label.
+  // Enforce required selection and that the value matches a configured option.
+  if (field.options && field.options.length > 0) {
+    const selected = rawInput.trim();
+    if (!selected) {
+      return field.required ? ["Please select an option."] : [];
+    }
+    return field.options.some((o) => o.label === selected) ? [] : ["Invalid selection."];
+  }
+
   const normalized = normalizeText(rawInput);
   const chars = [...normalized]; // codepoint-aware — correct for emoji
   const errors: string[] = [];

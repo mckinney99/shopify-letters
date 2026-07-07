@@ -38,6 +38,44 @@
   outline-offset: 2px;
 }
 
+/* Checkbox field: checkbox and its label sit on one line. */
+.etch-customization__checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.etch-customization__checkbox {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+}
+
+/* Buttons field: a wrap of single-select pills. */
+.etch-customization__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.etch-customization__button {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Selected pill: a thicker ring reads clearly on any theme without
+   guessing a fill color that might clash with the theme's text color. */
+.etch-customization__button.is-selected {
+  box-shadow: inset 0 0 0 2px currentColor;
+  font-weight: 600;
+}
+
 .etch-customization__hint {
   font-size: 0.9375rem;
   opacity: 0.7;
