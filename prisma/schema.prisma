@@ -48,36 +48,47 @@ model ProductConfig {
 }
 
 model CustomizationField {
-  id              String   @id @default(cuid())
-  shop            String
-  productId       String
-  label           String
-  type            String   @default("text")
-  minChars        Int?
-  maxChars        Int?
-  allowedChars    String?
-  disallowedChars String?
-  allowSpaces     Boolean  @default(true)
-  countSpaces     Boolean  @default(false)
-  required        Boolean  @default(false)
-  position        Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  shop             String
+  productId        String
+  label            String
+  type             String   @default("text")
+  minChars         Int?
+  maxChars         Int?
+  allowedChars     String?
+  disallowedChars  String?
+  allowSpaces      Boolean  @default(true)
+  countSpaces      Boolean  @default(false)
+  required         Boolean  @default(false)
+  position         Int      @default(0)
+  // SL-79: body text for text-block / image URL for image-static
+  helpText         String?
+  // SL-80: date field — reject dates in the past
+  dateFutureOnly   Boolean  @default(false)
+  // SL-81: JSON array of font names to offer (text/textarea fields only)
+  fontOptions      String?
+  // SL-82: JSON [{"label":"Gold","color":"#D4AF37"}] of text colors to offer
+  textColorOptions String?
+  // SL-78: MIME filter for upload fields e.g. "image/*" or "*/*"
+  fileAccept       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  options         FieldOption[]
+  options          FieldOption[]
 
   @@index([shop, productId])
 }
 
-// A selectable choice for a choice-type field (dropdown, buttons, checkbox).
-// `priceDelta` is a flat amount added to the line price when the option is
-// chosen. label doubles as the stored/submitted value. Text fields have none.
+// A selectable choice for a choice-type field (dropdown, buttons, checkbox,
+// swatches, image-swatches). `priceDelta` is a flat amount added when the
+// option is chosen. label doubles as the stored/submitted value.
 model FieldOption {
   id          String   @id @default(cuid())
   fieldId     String
   label       String
   priceDelta  Float    @default(0)
   swatchColor String?
+  imageUrl    String?
   position    Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

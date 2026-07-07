@@ -253,6 +253,44 @@
         return; // done with this field (forEach callback)
       }
 
+      // ── Display-only: text block (SL-79) ────────────────────────────────
+      if (field.type === 'text-block') {
+        renderTextBlock(field, wrapper, label);
+        fieldsEl.appendChild(wrapper);
+        return;
+      }
+
+      // ── Display-only: static image (SL-79) ──────────────────────────────
+      if (field.type === 'image-static') {
+        renderImageStatic(field, wrapper, label);
+        fieldsEl.appendChild(wrapper);
+        return;
+      }
+
+      // ── Image swatches (SL-77) ───────────────────────────────────────────
+      if (field.type === 'image-swatches') {
+        renderImageSwatches(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return;
+      }
+
+      // ── File upload field (SL-78) ────────────────────────────────────────
+      if (field.type === 'upload') {
+        renderUpload(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, appUrl, shop, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return;
+      }
+
       // ── Choice field: color swatches (single-select) ────────────────────
       if (field.type === 'swatches') {
         renderSwatches(field, uid, errorId, wrapper, label, fieldError, formTarget,
@@ -284,6 +322,30 @@
             etchInputsEl.value = JSON.stringify(inputMap);
             schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
           });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return;
+      }
+
+      // ── Number field (SL-80) ────────────────────────────────────────────
+      if (field.type === 'number') {
+        renderNumberOrDate(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          }, 'number');
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return;
+      }
+
+      // ── Date field (SL-80) ──────────────────────────────────────────────
+      if (field.type === 'date') {
+        renderNumberOrDate(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          }, 'date');
         fieldsEl.appendChild(wrapper);
         inputMap[field.id] = '';
         return;
@@ -388,6 +450,27 @@
       wrapper.appendChild(input);
       wrapper.appendChild(hint);
       wrapper.appendChild(fieldError);
+
+      // Font chooser (SL-81)
+      if (field.fontOptions) {
+        try {
+          var fonts = JSON.parse(field.fontOptions);
+          if (Array.isArray(fonts) && fonts.length > 0) {
+            renderFontPicker(fonts, input, wrapper);
+          }
+        } catch(e) {}
+      }
+
+      // Text color chooser (SL-82)
+      if (field.textColorOptions) {
+        try {
+          var colors = JSON.parse(field.textColorOptions);
+          if (Array.isArray(colors) && colors.length > 0) {
+            renderColorPicker(colors, input, wrapper);
+          }
+        } catch(e) {}
+      }
+
       fieldsEl.appendChild(wrapper);
 
       inputMap[field.id] = '';
@@ -661,6 +744,277 @@
     row.appendChild(label);
     wrapper.appendChild(row);
     wrapper.appendChild(fieldError);
+  }
+
+  // ── Image swatches (SL-77) ────────────────────────────────────────────────
+  function renderImageSwatches(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, onChange) {
+    label.id = uid + '-label';
+    label.removeAttribute('for');
+
+    var group = document.createElement('div');
+    group.className = 'etch-customization__image-swatches';
+    group.setAttribute('role', 'radiogroup');
+    group.setAttribute('aria-labelledby', label.id);
+    group.setAttribute('aria-describedby', errorId);
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    validityMap[field.id] = !field.required;
+
+    function choose(val, btn) {
+      Array.prototype.forEach.call(group.children, function (b) {
+        var on = b === btn;
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.classList.toggle('is-selected', on);
+      });
+      fieldError.hidden = true;
+      fieldError.textContent = '';
+      validityMap[field.id] = true;
+      updateBtn();
+      hiddenFieldInput.value = val;
+      inputMap[field.id] = val;
+      onChange();
+    }
+
+    (field.options || []).forEach(function (opt) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'etch-customization__image-swatch';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', 'false');
+      var tooltip = opt.label + (opt.priceDelta ? ' (+' + formatDollar(opt.priceDelta) + ')' : '');
+      btn.setAttribute('aria-label', tooltip);
+      btn.title = tooltip;
+      if (opt.imageUrl) {
+        var img = document.createElement('img');
+        img.src = opt.imageUrl;
+        img.alt = opt.label;
+        img.className = 'etch-customization__image-swatch-img';
+        btn.appendChild(img);
+      }
+      var cap = document.createElement('span');
+      cap.className = 'etch-customization__image-swatch-label';
+      cap.textContent = opt.label;
+      btn.appendChild(cap);
+      btn.addEventListener('click', function () { choose(opt.label, btn); });
+      group.appendChild(btn);
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(group);
+    wrapper.appendChild(fieldError);
+  }
+
+  // ── File upload (SL-78) ───────────────────────────────────────────────────
+  function renderUpload(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, appUrl, shop, onChange) {
+    var fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = uid;
+    fileInput.className = 'etch-customization__upload';
+    fileInput.setAttribute('aria-describedby', errorId);
+    if (field.fileAccept && field.fileAccept !== '*/*') fileInput.accept = field.fileAccept;
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    // Required-but-empty starts invalid.
+    validityMap[field.id] = !field.required;
+
+    var statusEl = document.createElement('span');
+    statusEl.className = 'etch-customization__upload-status';
+    statusEl.setAttribute('aria-live', 'polite');
+    statusEl.hidden = true;
+
+    var previewImg = document.createElement('img');
+    previewImg.className = 'etch-customization__upload-preview';
+    previewImg.hidden = true;
+    previewImg.alt = '';
+
+    fileInput.addEventListener('change', function () {
+      var file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+
+      // Show a local preview for images immediately.
+      if (file.type.indexOf('image/') === 0) {
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+          previewImg.src = ev.target.result;
+          previewImg.hidden = false;
+        };
+        reader.readAsDataURL(file);
+      } else {
+        previewImg.hidden = true;
+      }
+
+      statusEl.textContent = 'Uploading…';
+      statusEl.hidden = false;
+      validityMap[field.id] = false;
+      updateBtn();
+
+      var data = new FormData();
+      data.append('shop', shop);
+      data.append('file', file);
+
+      fetch(appUrl + '/api/upload', { method: 'POST', body: data })
+        .then(function (res) { return res.ok ? res.json() : Promise.reject(res.status); })
+        .then(function (json) {
+          if (!json.url) throw new Error('no url');
+          statusEl.textContent = 'Uploaded.';
+          hiddenFieldInput.value = json.url;
+          inputMap[field.id] = json.url;
+          validityMap[field.id] = true;
+          updateBtn();
+          onChange();
+        })
+        .catch(function () {
+          statusEl.textContent = 'Upload failed — please try again.';
+          fieldError.textContent = 'Upload failed.';
+          fieldError.hidden = false;
+          validityMap[field.id] = false;
+          updateBtn();
+        });
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(fileInput);
+    wrapper.appendChild(statusEl);
+    wrapper.appendChild(previewImg);
+    wrapper.appendChild(fieldError);
+  }
+
+  // ── Display-only: text block (SL-79) ─────────────────────────────────────
+  function renderTextBlock(field, wrapper, label) {
+    var p = document.createElement('p');
+    p.className = 'etch-customization__text-block';
+    p.textContent = field.helpText || '';
+    wrapper.appendChild(p);
+  }
+
+  // ── Display-only: static image (SL-79) ───────────────────────────────────
+  function renderImageStatic(field, wrapper, label) {
+    if (!field.helpText) return;
+    var img = document.createElement('img');
+    img.src = field.helpText;
+    img.className = 'etch-customization__image-static';
+    img.alt = field.label || '';
+    wrapper.appendChild(label);
+    wrapper.appendChild(img);
+  }
+
+  // ── Number / date field (SL-80) ───────────────────────────────────────────
+  function renderNumberOrDate(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, onChange, inputType) {
+    var input = document.createElement('input');
+    input.type = inputType;
+    input.id = uid;
+    input.className = 'etch-customization__input';
+    input.setAttribute('aria-describedby', errorId);
+
+    if (inputType === 'number') {
+      if (field.minChars != null) input.min = String(field.minChars);
+      if (field.maxChars != null) input.max = String(field.maxChars);
+    }
+    if (inputType === 'date' && field.dateFutureOnly) {
+      var today = new Date();
+      input.min = today.toISOString().slice(0, 10);
+    }
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    validityMap[field.id] = !field.required;
+
+    input.addEventListener('change', function () {
+      var val = input.value;
+      var err = '';
+      if (!val) {
+        if (field.required) err = 'This field is required.';
+      } else if (inputType === 'number') {
+        var n = Number(val);
+        if (isNaN(n)) { err = 'Must be a number.'; }
+        else if (field.minChars != null && n < field.minChars) { err = 'Must be at least ' + field.minChars + '.'; }
+        else if (field.maxChars != null && n > field.maxChars) { err = 'Must be at most ' + field.maxChars + '.'; }
+      } else if (inputType === 'date' && field.dateFutureOnly) {
+        var d = new Date(val);
+        if (d < new Date()) err = 'Must be a future date.';
+      }
+
+      if (err) {
+        fieldError.textContent = err;
+        fieldError.hidden = false;
+        input.setAttribute('aria-invalid', 'true');
+        validityMap[field.id] = false;
+      } else {
+        fieldError.hidden = true;
+        fieldError.textContent = '';
+        input.removeAttribute('aria-invalid');
+        validityMap[field.id] = true;
+      }
+      updateBtn();
+      hiddenFieldInput.value = val;
+      inputMap[field.id] = val;
+      onChange();
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(input);
+    wrapper.appendChild(fieldError);
+  }
+
+  // ── Font picker (SL-81) ───────────────────────────────────────────────────
+  function renderFontPicker(fonts, textInput, wrapper) {
+    // Load Google Fonts for non-web-safe fonts, then show pill selector.
+    var webSafe = new Set(['Georgia', 'Times New Roman', 'Arial', 'Courier New']);
+    var googleFonts = fonts.filter(function(f) { return !webSafe.has(f); });
+    if (googleFonts.length > 0) {
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=' +
+        googleFonts.map(function(f) { return f.replace(/ /g, '+'); }).join('&family=') + '&display=swap';
+      document.head.appendChild(link);
+    }
+
+    var row = document.createElement('div');
+    row.className = 'etch-customization__font-picker';
+
+    fonts.forEach(function(f) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'etch-customization__font-pill';
+      btn.textContent = f;
+      btn.style.fontFamily = f + ', serif';
+      btn.addEventListener('click', function () {
+        Array.prototype.forEach.call(row.children, function(b) { b.classList.remove('is-selected'); });
+        btn.classList.add('is-selected');
+        textInput.style.fontFamily = f + ', serif';
+      });
+      row.appendChild(btn);
+    });
+
+    wrapper.appendChild(row);
+  }
+
+  // ── Text color picker (SL-82) ─────────────────────────────────────────────
+  function renderColorPicker(colors, textInput, wrapper) {
+    var row = document.createElement('div');
+    row.className = 'etch-customization__color-picker';
+
+    colors.forEach(function(c) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'etch-customization__color-swatch';
+      btn.style.backgroundColor = c.color;
+      btn.title = c.label;
+      btn.setAttribute('aria-label', c.label);
+      btn.addEventListener('click', function () {
+        Array.prototype.forEach.call(row.children, function(b) { b.classList.remove('is-selected'); });
+        btn.classList.add('is-selected');
+        textInput.style.color = c.color;
+      });
+      row.appendChild(btn);
+    });
+
+    wrapper.appendChild(row);
   }
 
   function makeHiddenInput(name, value) {

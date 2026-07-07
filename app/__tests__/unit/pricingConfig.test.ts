@@ -11,6 +11,7 @@ const baseFields = [
     maxChars: 20,
     allowedChars: null,
     disallowedChars: null,
+    dateFutureOnly: false,
     options: [],
   },
 ];

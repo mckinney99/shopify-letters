@@ -13,12 +13,14 @@ type FieldOptionRule = {
 type FieldDefinition = {
   id: string;
   label: string;
+  type?: string;
   required?: boolean;
   options?: FieldOptionRule[];
   minChars?: number | null;
   maxChars?: number | null;
   allowedChars?: string | null;
   disallowedChars?: string | null;
+  dateFutureOnly?: boolean;
 };
 
 type MetafieldPayload = {
@@ -71,8 +73,35 @@ function normalizeText(input: string): string {
 }
 
 function validateField(rawInput: string, field: FieldDefinition): string[] {
-  // Choice fields (dropdown/checkbox/buttons): the value is an option label.
-  // Enforce required selection and that the value matches a configured option.
+  // Display-only elements — no input to validate.
+  if (field.type === "text-block" || field.type === "image-static") return [];
+
+  // Upload fields — only check required.
+  if (field.type === "upload") {
+    return field.required && !rawInput.trim() ? ["Please upload a file."] : [];
+  }
+
+  // Number fields — minChars/maxChars reused as numeric bounds.
+  if (field.type === "number") {
+    if (!rawInput.trim()) return field.required ? ["This field is required."] : [];
+    const n = Number(rawInput);
+    if (isNaN(n)) return ["Must be a number."];
+    const errs: string[] = [];
+    if (field.minChars != null && n < field.minChars) errs.push(`Must be at least ${field.minChars}.`);
+    if (field.maxChars != null && n > field.maxChars) errs.push(`Must be at most ${field.maxChars}.`);
+    return errs;
+  }
+
+  // Date fields — validate format and optional future-only constraint.
+  if (field.type === "date") {
+    if (!rawInput.trim()) return field.required ? ["This field is required."] : [];
+    const d = new Date(rawInput);
+    if (isNaN(d.getTime())) return ["Must be a valid date."];
+    if (field.dateFutureOnly && d < new Date()) return ["Must be a future date."];
+    return [];
+  }
+
+  // Choice fields (dropdown/checkbox/buttons/swatches): the value is an option label.
   if (field.options && field.options.length > 0) {
     const selected = rawInput.trim();
     if (!selected) {

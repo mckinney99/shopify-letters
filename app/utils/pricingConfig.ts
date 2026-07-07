@@ -19,6 +19,7 @@ export type PricingConfigField = {
   maxChars: number | null;
   allowedChars: string | null;
   disallowedChars: string | null;
+  dateFutureOnly?: boolean;
   // Choice-field options (dropdown/checkbox/buttons). Empty for text fields.
   options: PricingConfigOption[];
 };
@@ -54,6 +55,7 @@ type DbField = {
   maxChars: number | null;
   allowedChars: string | null;
   disallowedChars: string | null;
+  dateFutureOnly?: boolean;
   options?: DbFieldOption[];
 };
 
@@ -83,6 +85,7 @@ export function buildPricingConfig(fields: DbField[], rules: DbPricingRule[]): P
       maxChars: f.maxChars,
       allowedChars: f.allowedChars,
       disallowedChars: f.disallowedChars,
+      dateFutureOnly: f.dateFutureOnly ?? false,
       options: (f.options ?? []).map((o) => ({ label: o.label, priceDelta: o.priceDelta })),
     })),
     rules: rules

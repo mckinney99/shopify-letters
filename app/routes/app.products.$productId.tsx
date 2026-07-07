@@ -103,6 +103,7 @@ type FieldOptionData = {
   label: string;
   priceDelta: number;
   swatchColor?: string | null;
+  imageUrl?: string | null;
 };
 
 type FieldData = {
@@ -118,6 +119,11 @@ type FieldData = {
   required: boolean;
   position: number;
   options: FieldOptionData[];
+  helpText?: string | null;
+  dateFutureOnly?: boolean;
+  fontOptions?: string | null;
+  textColorOptions?: string | null;
+  fileAccept?: string | null;
 };
 
 type CharPriceGroupData = {
@@ -135,20 +141,36 @@ type PricingRuleData = {
   charGroups: CharPriceGroupData[];
 };
 
-// Field types offered in the "Field type" selector. `text` is the original
-// single-line input and stays the default so existing fields are unchanged.
-// New types are added here as later stories land (dropdown, checkbox, ...).
 const FIELD_TYPE_OPTIONS = [
   { label: "Short text", value: "text" },
   { label: "Paragraph text", value: "textarea" },
+  { label: "Number", value: "number" },
+  { label: "Date", value: "date" },
   { label: "Dropdown", value: "dropdown" },
   { label: "Buttons", value: "buttons" },
   { label: "Color swatches", value: "swatches" },
+  { label: "Image swatches", value: "image-swatches" },
   { label: "Checkbox", value: "checkbox" },
+  { label: "File upload", value: "upload" },
+  { label: "Text block (display only)", value: "text-block" },
+  { label: "Image (display only)", value: "image-static" },
+];
+
+// Built-in fonts offered for the per-field font chooser (SL-81).
+const BUILT_IN_FONTS = [
+  "Georgia",
+  "Times New Roman",
+  "Arial",
+  "Courier New",
+  "Dancing Script",
+  "Cinzel",
+  "Playfair Display",
+  "Oswald",
+  "Caveat",
 ];
 
 // Choice fields present a fixed list of options instead of free text.
-const CHOICE_TYPES = ["dropdown", "checkbox", "buttons", "swatches"];
+const CHOICE_TYPES = ["dropdown", "checkbox", "buttons", "swatches", "image-swatches"];
 function isChoiceType(type: string): boolean {
   return CHOICE_TYPES.includes(type);
 }
@@ -161,16 +183,17 @@ function normalizeFieldType(value: string | null): string {
 
 // Parse the JSON options blob posted by the field form into clean rows.
 // Drops blank-label rows and coerces price to a number.
-function parseOptions(raw: string | null): { label: string; priceDelta: number; swatchColor?: string }[] {
+function parseOptions(raw: string | null): { label: string; priceDelta: number; swatchColor?: string; imageUrl?: string }[] {
   if (!raw) return [];
   try {
-    const arr = JSON.parse(raw) as Array<{ label?: unknown; priceDelta?: unknown; swatchColor?: unknown }>;
+    const arr = JSON.parse(raw) as Array<{ label?: unknown; priceDelta?: unknown; swatchColor?: unknown; imageUrl?: unknown }>;
     if (!Array.isArray(arr)) return [];
     return arr
       .map((o) => ({
         label: typeof o.label === "string" ? o.label.trim() : "",
         priceDelta: Number(o.priceDelta) || 0,
         swatchColor: typeof o.swatchColor === "string" ? o.swatchColor : undefined,
+        imageUrl: typeof o.imageUrl === "string" ? o.imageUrl : undefined,
       }))
       .filter((o) => o.label !== "");
   } catch {
@@ -257,11 +280,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const allowSpaces = form.get("allowSpaces") !== "false";
     const countSpaces = form.get("countSpaces") === "true";
     const required = form.get("required") === "true";
+    const helpText = (form.get("helpText") as string) ?? "";
+    const dateFutureOnly = form.get("dateFutureOnly") === "true";
+    const fontOptions = (form.get("fontOptions") as string) || null;
+    const textColorOptions = (form.get("textColorOptions") as string) || null;
+    const fileAccept = (form.get("fileAccept") as string) || null;
     const options = isChoiceType(type) ? parseOptions(form.get("options") as string) : [];
 
     const error = validateField({ label, minChars, maxChars, allowedChars, disallowedChars });
     if (error) return json({ error }, { status: 422 });
-    if (isChoiceType(type) && options.length === 0)
+    if (isChoiceType(type) && type !== "checkbox" && options.length === 0)
       return json({ error: "Add at least one option." }, { status: 422 });
 
     const count = await prisma.customizationField.count({
@@ -280,9 +308,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         allowSpaces,
         countSpaces,
         required,
+        helpText: helpText.trim() || null,
+        dateFutureOnly,
+        fontOptions,
+        textColorOptions,
+        fileAccept,
         position: count,
         options: {
-          create: options.map((o, i) => ({ label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, position: i })),
+          create: options.map((o, i) => ({ label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, position: i })),
         },
       },
     });
@@ -301,11 +334,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const allowSpaces = form.get("allowSpaces") !== "false";
     const countSpaces = form.get("countSpaces") === "true";
     const required = form.get("required") === "true";
+    const helpText = (form.get("helpText") as string) ?? "";
+    const dateFutureOnly = form.get("dateFutureOnly") === "true";
+    const fontOptions = (form.get("fontOptions") as string) || null;
+    const textColorOptions = (form.get("textColorOptions") as string) || null;
+    const fileAccept = (form.get("fileAccept") as string) || null;
     const options = isChoiceType(type) ? parseOptions(form.get("options") as string) : [];
 
     const error = validateField({ label, minChars, maxChars, allowedChars, disallowedChars });
     if (error) return json({ error }, { status: 422 });
-    if (isChoiceType(type) && options.length === 0)
+    if (isChoiceType(type) && type !== "checkbox" && options.length === 0)
       return json({ error: "Add at least one option." }, { status: 422 });
 
     const updated = await prisma.customizationField.updateMany({
@@ -320,16 +358,20 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         allowSpaces,
         countSpaces,
         required,
+        helpText: helpText.trim() || null,
+        dateFutureOnly,
+        fontOptions,
+        textColorOptions,
+        fileAccept,
       },
     });
     // Only touch options if the field is actually owned by this shop.
     if (updated.count > 0) {
-      // Replace the option set (scoped to this shop's field). Also clears
-      // options when a field is switched away from a choice type.
+      // Replace the option set. Also clears options when switching away from a choice type.
       await prisma.fieldOption.deleteMany({ where: { fieldId, field: { shop } } });
       if (options.length > 0) {
         await prisma.fieldOption.createMany({
-          data: options.map((o, i) => ({ fieldId, label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, position: i })),
+          data: options.map((o, i) => ({ fieldId, label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, position: i })),
         });
       }
     }
@@ -462,28 +504,57 @@ function FieldForm({
   const [allowSpaces, setAllowSpaces] = useState(field?.allowSpaces ?? true);
   const [countSpaces, setCountSpaces] = useState(field?.countSpaces ?? false);
   const [required, setRequired] = useState(field?.required ?? false);
-  const initialOptions = (field?.options ?? []).map((o) => ({ label: o.label, priceDelta: String(o.priceDelta), swatchColor: o.swatchColor ?? "#000000" }));
-  const [options, setOptions] = useState<{ label: string; priceDelta: string; swatchColor: string }[]>(initialOptions);
-  // A checkbox is stored as a single "Yes" option; the merchant only sets its price.
+  const [helpText, setHelpText] = useState(field?.helpText ?? "");
+  const [dateFutureOnly, setDateFutureOnly] = useState(field?.dateFutureOnly ?? false);
+  const [fileAccept, setFileAccept] = useState(field?.fileAccept ?? "*/*");
+  // Font chooser (SL-81) — stored as JSON array of font names on the field.
+  const initialFonts: string[] = field?.fontOptions ? (JSON.parse(field.fontOptions) as string[]) : [];
+  const [enableFonts, setEnableFonts] = useState(initialFonts.length > 0);
+  const [selectedFonts, setSelectedFonts] = useState<string[]>(initialFonts);
+  const toggleFont = (f: string) =>
+    setSelectedFonts((prev) => prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]);
+  // Text color chooser (SL-82) — stored as JSON array of {label, color}.
+  const initialColors: { label: string; color: string }[] =
+    field?.textColorOptions ? (JSON.parse(field.textColorOptions) as { label: string; color: string }[]) : [];
+  const [enableColors, setEnableColors] = useState(initialColors.length > 0);
+  const [textColors, setTextColors] = useState<{ label: string; color: string }[]>(initialColors);
+  const addColor = () => setTextColors((prev) => [...prev, { label: "", color: "#000000" }]);
+  const removeColor = (i: number) => setTextColors((prev) => prev.filter((_, idx) => idx !== i));
+  const updateColor = (i: number, key: "label" | "color", val: string) =>
+    setTextColors((prev) => prev.map((c, idx) => (idx === i ? { ...c, [key]: val } : c)));
+  // Choice-field options — extend with imageUrl for image-swatches.
+  const initialOptions = (field?.options ?? []).map((o) => ({
+    label: o.label,
+    priceDelta: String(o.priceDelta),
+    swatchColor: o.swatchColor ?? "#000000",
+    imageUrl: o.imageUrl ?? "",
+  }));
+  const [options, setOptions] = useState<{ label: string; priceDelta: string; swatchColor: string; imageUrl: string }[]>(initialOptions);
   const initialCheckboxPrice = field?.options?.[0] ? String(field.options[0].priceDelta) : "";
   const [checkboxPrice, setCheckboxPrice] = useState(initialCheckboxPrice);
 
-  const listChoice = type === "dropdown" || type === "buttons" || type === "swatches";
+  const listChoice = type === "dropdown" || type === "buttons" || type === "swatches" || type === "image-swatches";
   const isCheckbox = type === "checkbox";
+  const isNumber = type === "number";
+  const isDate = type === "date";
+  const isUpload = type === "upload";
+  const isDisplay = type === "text-block" || type === "image-static";
+  const isText = type === "text" || type === "textarea";
   const choice = isChoiceType(type);
-  // What gets posted as the field's options: checkbox collapses to one option.
   const optionsPayload = isCheckbox ? [{ label: "Yes", priceDelta: checkboxPrice }] : options;
-  const addOption = () => setOptions((prev) => [...prev, { label: "", priceDelta: "", swatchColor: "#000000" }]);
+  const addOption = () => setOptions((prev) => [...prev, { label: "", priceDelta: "", swatchColor: "#000000", imageUrl: "" }]);
   const removeOption = (i: number) => setOptions((prev) => prev.filter((_, idx) => idx !== i));
-  const updateOption = (i: number, key: "label" | "priceDelta" | "swatchColor", val: string) =>
+  const updateOption = (i: number, key: "label" | "priceDelta" | "swatchColor" | "imageUrl", val: string) =>
     setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)));
+
+  // Computed hidden values for SL-81 and SL-82.
+  const fontOptionsValue = enableFonts && selectedFonts.length > 0 ? JSON.stringify(selectedFonts) : "";
+  const textColorOptionsValue = enableColors && textColors.length > 0 ? JSON.stringify(textColors) : "";
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) onClose();
   }, [fetcher.state, fetcher.data, onClose]);
 
-  // Report unsaved-change (dirty) state up so the parent can guard tab switches (SL-68).
-  // A ref keeps us immune to onDirtyChange identity churn between renders.
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
   const dirty =
@@ -496,12 +567,14 @@ function FieldForm({
     allowSpaces !== (field?.allowSpaces ?? true) ||
     countSpaces !== (field?.countSpaces ?? false) ||
     required !== (field?.required ?? false) ||
+    helpText !== (field?.helpText ?? "") ||
+    dateFutureOnly !== (field?.dateFutureOnly ?? false) ||
+    fileAccept !== (field?.fileAccept ?? "*/*") ||
+    fontOptionsValue !== (field?.fontOptions ?? "") ||
+    textColorOptionsValue !== (field?.textColorOptions ?? "") ||
     checkboxPrice !== initialCheckboxPrice ||
     JSON.stringify(options) !== JSON.stringify(initialOptions);
-  useEffect(() => {
-    onDirtyChangeRef.current?.(dirty);
-  }, [dirty]);
-  // Clear the flag when the form unmounts (closed, saved, or discarded).
+  useEffect(() => { onDirtyChangeRef.current?.(dirty); }, [dirty]);
   useEffect(() => () => onDirtyChangeRef.current?.(false), []);
 
   return (
@@ -518,6 +591,11 @@ function FieldForm({
         <input type="hidden" name="allowSpaces" value={String(allowSpaces)} />
         <input type="hidden" name="countSpaces" value={String(countSpaces)} />
         <input type="hidden" name="required" value={String(required)} />
+        <input type="hidden" name="helpText" value={helpText} />
+        <input type="hidden" name="dateFutureOnly" value={String(dateFutureOnly)} />
+        <input type="hidden" name="fileAccept" value={fileAccept} />
+        <input type="hidden" name="fontOptions" value={fontOptionsValue} />
+        <input type="hidden" name="textColorOptions" value={textColorOptionsValue} />
         <input type="hidden" name="options" value={JSON.stringify(optionsPayload)} />
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
         <FormLayout>
@@ -527,9 +605,60 @@ function FieldForm({
             options={FIELD_TYPE_OPTIONS}
             value={type}
             onChange={setType}
-            helpText="Short text is one line, paragraph text is a box, dropdown is a list of choices."
+            helpText="Choose how shoppers interact with this field."
           />
-          {listChoice ? (
+
+          {/* ── Display-only elements (SL-79) ─────────────────────────────── */}
+          {isDisplay && (
+            <TextField
+              label={type === "text-block" ? "Content" : "Image URL"}
+              helpText={type === "text-block" ? "This text appears as instructions in your form." : "Paste the URL of an image to display (e.g. a sizing guide)."}
+              value={helpText}
+              onChange={setHelpText}
+              multiline={type === "text-block" ? 3 : undefined}
+              autoComplete="off"
+            />
+          )}
+
+          {/* ── Number field (SL-80) ──────────────────────────────────────── */}
+          {isNumber && (
+            <>
+              <FormLayout.Group>
+                <TextField label="Minimum value" type="number" value={minChars} onChange={setMinChars} autoComplete="off" helpText="Leave blank for no minimum" />
+                <TextField label="Maximum value" type="number" value={maxChars} onChange={setMaxChars} autoComplete="off" helpText="Leave blank for no maximum" />
+              </FormLayout.Group>
+              <Checkbox label="Required" helpText="Shopper must enter a number before adding to cart" checked={required} onChange={setRequired} />
+            </>
+          )}
+
+          {/* ── Date field (SL-80) ────────────────────────────────────────── */}
+          {isDate && (
+            <>
+              <Checkbox label="Future dates only" helpText="Reject dates in the past" checked={dateFutureOnly} onChange={setDateFutureOnly} />
+              <Checkbox label="Required" helpText="Shopper must choose a date before adding to cart" checked={required} onChange={setRequired} />
+            </>
+          )}
+
+          {/* ── Upload field (SL-78) ──────────────────────────────────────── */}
+          {isUpload && (
+            <>
+              <Select
+                label="Accepted file types"
+                options={[
+                  { label: "Any file", value: "*/*" },
+                  { label: "Images only", value: "image/*" },
+                  { label: "PDF only", value: "application/pdf" },
+                  { label: "Images or PDF", value: "image/*,.pdf" },
+                ]}
+                value={fileAccept}
+                onChange={setFileAccept}
+              />
+              <Checkbox label="Required" helpText="Shopper must upload a file before adding to cart" checked={required} onChange={setRequired} />
+            </>
+          )}
+
+          {/* ── Choice fields with option list ────────────────────────────── */}
+          {listChoice && (
             <>
               <BlockStack gap="200">
                 <Text as="p" variant="bodyMd">Options</Text>
@@ -544,11 +673,23 @@ function FieldForm({
                         style={{ width: "2.25rem", height: "2.25rem", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", flexShrink: 0 }}
                       />
                     )}
+                    {type === "image-swatches" && (
+                      <div style={{ flex: 2 }}>
+                        <TextField
+                          label="Image URL"
+                          labelHidden
+                          placeholder="https://... (image URL)"
+                          value={opt.imageUrl}
+                          onChange={(v) => updateOption(i, "imageUrl", v)}
+                          autoComplete="off"
+                        />
+                      </div>
+                    )}
                     <div style={{ flex: 2 }}>
                       <TextField
                         label="Choice"
                         labelHidden
-                        placeholder={type === "swatches" ? "e.g. Gold" : "e.g. 18 inch"}
+                        placeholder={type === "swatches" ? "e.g. Gold" : type === "image-swatches" ? "e.g. Floral" : "e.g. 18 inch"}
                         value={opt.label}
                         onChange={(v) => updateOption(i, "label", v)}
                         autoComplete="off"
@@ -569,18 +710,14 @@ function FieldForm({
                     <Button onClick={() => removeOption(i)} accessibilityLabel="Remove option">Remove</Button>
                   </InlineStack>
                 ))}
-                <div>
-                  <Button onClick={addOption}>Add option</Button>
-                </div>
+                <div><Button onClick={addOption}>Add option</Button></div>
               </BlockStack>
-              <Checkbox
-                label="Required"
-                helpText="Shoppers must choose an option before adding to cart"
-                checked={required}
-                onChange={setRequired}
-              />
+              <Checkbox label="Required" helpText="Shoppers must choose an option before adding to cart" checked={required} onChange={setRequired} />
             </>
-          ) : isCheckbox ? (
+          )}
+
+          {/* ── Checkbox field ────────────────────────────────────────────── */}
+          {isCheckbox && (
             <>
               <TextField
                 label="Extra price when checked"
@@ -592,49 +729,68 @@ function FieldForm({
                 onChange={setCheckboxPrice}
                 autoComplete="off"
               />
-              <Checkbox
-                label="Required"
-                helpText="Shopper must tick this box before adding to cart (e.g. to accept terms)"
-                checked={required}
-                onChange={setRequired}
-              />
+              <Checkbox label="Required" helpText="Shopper must tick this box before adding to cart (e.g. to accept terms)" checked={required} onChange={setRequired} />
             </>
-          ) : (
+          )}
+
+          {/* ── Text / paragraph field ────────────────────────────────────── */}
+          {isText && (
             <>
               <FormLayout.Group>
                 <TextField label="Min characters" type="number" value={minChars} onChange={setMinChars} autoComplete="off" />
                 <TextField label="Max characters" type="number" value={maxChars} onChange={setMaxChars} autoComplete="off" />
               </FormLayout.Group>
               <FormLayout.Group>
-                <TextField
-                  label="Allowed characters"
-                  helpText="Only these characters will be accepted (leave blank for all)"
-                  value={allowedChars}
-                  onChange={setAllowedChars}
-                  autoComplete="off"
-                />
-                <TextField
-                  label="Disallowed characters"
-                  helpText="These characters will be rejected (leave blank to allow all)"
-                  value={disallowedChars}
-                  onChange={setDisallowedChars}
-                  autoComplete="off"
-                />
+                <TextField label="Allowed characters" helpText="Only these characters will be accepted (leave blank for all)" value={allowedChars} onChange={setAllowedChars} autoComplete="off" />
+                <TextField label="Disallowed characters" helpText="These characters will be rejected (leave blank to allow all)" value={disallowedChars} onChange={setDisallowedChars} autoComplete="off" />
               </FormLayout.Group>
               <FormLayout.Group>
-                <Checkbox
-                  label="Allow spaces"
-                  helpText="Customers can type spaces in this field"
-                  checked={allowSpaces}
-                  onChange={setAllowSpaces}
-                />
-                <Checkbox
-                  label="Count spaces toward price"
-                  helpText="When off, spaces are excluded from the billed character count"
-                  checked={countSpaces}
-                  onChange={setCountSpaces}
-                />
+                <Checkbox label="Allow spaces" helpText="Customers can type spaces in this field" checked={allowSpaces} onChange={setAllowSpaces} />
+                <Checkbox label="Count spaces toward price" helpText="When off, spaces are excluded from the billed character count" checked={countSpaces} onChange={setCountSpaces} />
               </FormLayout.Group>
+              {/* Font chooser (SL-81) */}
+              <Checkbox
+                label="Let shoppers choose a font"
+                helpText="Show a font picker beside this field"
+                checked={enableFonts}
+                onChange={(v) => { setEnableFonts(v); if (!v) setSelectedFonts([]); }}
+              />
+              {enableFonts && (
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Fonts to offer</Text>
+                  {BUILT_IN_FONTS.map((f) => (
+                    <Checkbox key={f} label={f} checked={selectedFonts.includes(f)} onChange={() => toggleFont(f)} />
+                  ))}
+                </BlockStack>
+              )}
+              {/* Text color chooser (SL-82) */}
+              <Checkbox
+                label="Let shoppers choose a text color"
+                helpText="Show color swatches beside this field"
+                checked={enableColors}
+                onChange={(v) => { setEnableColors(v); if (!v) setTextColors([]); }}
+              />
+              {enableColors && (
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm" tone="subdued">Colors to offer</Text>
+                  {textColors.map((c, i) => (
+                    <InlineStack key={i} gap="200" blockAlign="end" wrap={false}>
+                      <input
+                        type="color"
+                        value={c.color}
+                        onChange={(e) => updateColor(i, "color", e.target.value)}
+                        aria-label="Color"
+                        style={{ width: "2.25rem", height: "2.25rem", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <TextField label="Name" labelHidden placeholder="e.g. Gold" value={c.label} onChange={(v) => updateColor(i, "label", v)} autoComplete="off" />
+                      </div>
+                      <Button onClick={() => removeColor(i)} accessibilityLabel="Remove color">Remove</Button>
+                    </InlineStack>
+                  ))}
+                  <div><Button onClick={addColor}>Add color</Button></div>
+                </BlockStack>
+              )}
             </>
           )}
         </FormLayout>

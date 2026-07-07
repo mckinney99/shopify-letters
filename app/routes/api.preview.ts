@@ -53,7 +53,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         id: true, label: true, type: true, required: true,
         minChars: true, maxChars: true, allowedChars: true, disallowedChars: true,
         allowSpaces: true, countSpaces: true,
-        options: { select: { label: true, priceDelta: true, swatchColor: true }, orderBy: { position: "asc" } },
+        helpText: true, dateFutureOnly: true, fontOptions: true, textColorOptions: true, fileAccept: true,
+        options: { select: { label: true, priceDelta: true, swatchColor: true, imageUrl: true }, orderBy: { position: "asc" } },
       },
     }),
     prisma.pricingRule.findMany({
@@ -79,6 +80,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     allowSpaces: f.allowSpaces,
     countSpaces: f.countSpaces,
     options: f.options,
+    helpText: f.helpText,
+    dateFutureOnly: f.dateFutureOnly,
+    fontOptions: f.fontOptions,
+    textColorOptions: f.textColorOptions,
+    fileAccept: f.fileAccept,
     perCharPrice: ruleByFieldId[f.id]?.perCharPrice ?? null,
     charGroups: ruleByFieldId[f.id]?.charGroups ?? [],
   }));
@@ -157,6 +163,42 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   for (const dbField of dbFields) {
     const raw = typeof fieldValues[dbField.id] === "string" ? fieldValues[dbField.id] : "";
+
+    // Display-only elements — no input, no pricing, no validation.
+    if (dbField.type === "text-block" || dbField.type === "image-static") continue;
+
+    // Upload fields — validate required (value is the uploaded URL).
+    if (dbField.type === "upload") {
+      if (dbField.required && !raw.trim()) allErrors.push(`${dbField.label}: Please upload a file.`);
+      continue;
+    }
+
+    // Number fields — validate numeric bounds (minChars/maxChars reused as min/max value).
+    if (dbField.type === "number") {
+      if (raw.trim() === "") {
+        if (dbField.required) allErrors.push(`${dbField.label}: This field is required.`);
+      } else {
+        const n = Number(raw);
+        if (isNaN(n)) allErrors.push(`${dbField.label}: Must be a number.`);
+        else {
+          if (dbField.minChars != null && n < dbField.minChars) allErrors.push(`${dbField.label}: Must be at least ${dbField.minChars}.`);
+          if (dbField.maxChars != null && n > dbField.maxChars) allErrors.push(`${dbField.label}: Must be at most ${dbField.maxChars}.`);
+        }
+      }
+      continue;
+    }
+
+    // Date fields — validate format and optional future-only constraint.
+    if (dbField.type === "date") {
+      if (raw.trim() === "") {
+        if (dbField.required) allErrors.push(`${dbField.label}: This field is required.`);
+      } else {
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) allErrors.push(`${dbField.label}: Must be a valid date.`);
+        else if (dbField.dateFutureOnly && d < new Date()) allErrors.push(`${dbField.label}: Must be a future date.`);
+      }
+      continue;
+    }
 
     // Choice fields carry a selected option label rather than free text.
     if (dbField.options && dbField.options.length > 0) {
