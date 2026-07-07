@@ -102,6 +102,7 @@ type FieldOptionData = {
   id: string;
   label: string;
   priceDelta: number;
+  swatchColor?: string | null;
 };
 
 type FieldData = {
@@ -142,11 +143,12 @@ const FIELD_TYPE_OPTIONS = [
   { label: "Paragraph text", value: "textarea" },
   { label: "Dropdown", value: "dropdown" },
   { label: "Buttons", value: "buttons" },
+  { label: "Color swatches", value: "swatches" },
   { label: "Checkbox", value: "checkbox" },
 ];
 
 // Choice fields present a fixed list of options instead of free text.
-const CHOICE_TYPES = ["dropdown", "checkbox", "buttons"];
+const CHOICE_TYPES = ["dropdown", "checkbox", "buttons", "swatches"];
 function isChoiceType(type: string): boolean {
   return CHOICE_TYPES.includes(type);
 }
@@ -159,15 +161,16 @@ function normalizeFieldType(value: string | null): string {
 
 // Parse the JSON options blob posted by the field form into clean rows.
 // Drops blank-label rows and coerces price to a number.
-function parseOptions(raw: string | null): { label: string; priceDelta: number }[] {
+function parseOptions(raw: string | null): { label: string; priceDelta: number; swatchColor?: string }[] {
   if (!raw) return [];
   try {
-    const arr = JSON.parse(raw) as Array<{ label?: unknown; priceDelta?: unknown }>;
+    const arr = JSON.parse(raw) as Array<{ label?: unknown; priceDelta?: unknown; swatchColor?: unknown }>;
     if (!Array.isArray(arr)) return [];
     return arr
       .map((o) => ({
         label: typeof o.label === "string" ? o.label.trim() : "",
         priceDelta: Number(o.priceDelta) || 0,
+        swatchColor: typeof o.swatchColor === "string" ? o.swatchColor : undefined,
       }))
       .filter((o) => o.label !== "");
   } catch {
@@ -279,7 +282,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         required,
         position: count,
         options: {
-          create: options.map((o, i) => ({ label: o.label, priceDelta: o.priceDelta, position: i })),
+          create: options.map((o, i) => ({ label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, position: i })),
         },
       },
     });
@@ -326,7 +329,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       await prisma.fieldOption.deleteMany({ where: { fieldId, field: { shop } } });
       if (options.length > 0) {
         await prisma.fieldOption.createMany({
-          data: options.map((o, i) => ({ fieldId, label: o.label, priceDelta: o.priceDelta, position: i })),
+          data: options.map((o, i) => ({ fieldId, label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, position: i })),
         });
       }
     }
@@ -459,20 +462,20 @@ function FieldForm({
   const [allowSpaces, setAllowSpaces] = useState(field?.allowSpaces ?? true);
   const [countSpaces, setCountSpaces] = useState(field?.countSpaces ?? false);
   const [required, setRequired] = useState(field?.required ?? false);
-  const initialOptions = (field?.options ?? []).map((o) => ({ label: o.label, priceDelta: String(o.priceDelta) }));
-  const [options, setOptions] = useState<{ label: string; priceDelta: string }[]>(initialOptions);
+  const initialOptions = (field?.options ?? []).map((o) => ({ label: o.label, priceDelta: String(o.priceDelta), swatchColor: o.swatchColor ?? "#000000" }));
+  const [options, setOptions] = useState<{ label: string; priceDelta: string; swatchColor: string }[]>(initialOptions);
   // A checkbox is stored as a single "Yes" option; the merchant only sets its price.
   const initialCheckboxPrice = field?.options?.[0] ? String(field.options[0].priceDelta) : "";
   const [checkboxPrice, setCheckboxPrice] = useState(initialCheckboxPrice);
 
-  const listChoice = type === "dropdown" || type === "buttons";
+  const listChoice = type === "dropdown" || type === "buttons" || type === "swatches";
   const isCheckbox = type === "checkbox";
   const choice = isChoiceType(type);
   // What gets posted as the field's options: checkbox collapses to one option.
   const optionsPayload = isCheckbox ? [{ label: "Yes", priceDelta: checkboxPrice }] : options;
-  const addOption = () => setOptions((prev) => [...prev, { label: "", priceDelta: "" }]);
+  const addOption = () => setOptions((prev) => [...prev, { label: "", priceDelta: "", swatchColor: "#000000" }]);
   const removeOption = (i: number) => setOptions((prev) => prev.filter((_, idx) => idx !== i));
-  const updateOption = (i: number, key: "label" | "priceDelta", val: string) =>
+  const updateOption = (i: number, key: "label" | "priceDelta" | "swatchColor", val: string) =>
     setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)));
 
   useEffect(() => {
@@ -532,11 +535,20 @@ function FieldForm({
                 <Text as="p" variant="bodyMd">Options</Text>
                 {options.map((opt, i) => (
                   <InlineStack key={i} gap="200" blockAlign="end" wrap={false}>
+                    {type === "swatches" && (
+                      <input
+                        type="color"
+                        value={opt.swatchColor || "#000000"}
+                        onChange={(e) => updateOption(i, "swatchColor", e.target.value)}
+                        aria-label="Swatch color"
+                        style={{ width: "2.25rem", height: "2.25rem", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", flexShrink: 0 }}
+                      />
+                    )}
                     <div style={{ flex: 2 }}>
                       <TextField
                         label="Choice"
                         labelHidden
-                        placeholder="e.g. 18 inch"
+                        placeholder={type === "swatches" ? "e.g. Gold" : "e.g. 18 inch"}
                         value={opt.label}
                         onChange={(v) => updateOption(i, "label", v)}
                         autoComplete="off"

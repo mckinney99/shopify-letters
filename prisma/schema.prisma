@@ -73,13 +73,14 @@ model CustomizationField {
 // `priceDelta` is a flat amount added to the line price when the option is
 // chosen. label doubles as the stored/submitted value. Text fields have none.
 model FieldOption {
-  id         String   @id @default(cuid())
-  fieldId    String
-  label      String
-  priceDelta Float    @default(0)
-  position   Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  fieldId     String
+  label       String
+  priceDelta  Float    @default(0)
+  swatchColor String?
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   field      CustomizationField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
 
