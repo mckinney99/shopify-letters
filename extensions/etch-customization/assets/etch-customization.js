@@ -253,6 +253,18 @@
         return; // done with this field (forEach callback)
       }
 
+      // ── Choice field: single checkbox ────────────────────────────────────
+      if (field.type === 'checkbox') {
+        renderCheckbox(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return;
+      }
+
       // ── Text / paragraph field ───────────────────────────────────────────
       // Input element — a single-line <input> by default, or a multi-line
       // <textarea> for "paragraph text" fields. Both expose .value / .maxLength
@@ -476,6 +488,54 @@
 
     wrapper.appendChild(label);
     wrapper.appendChild(select);
+    wrapper.appendChild(fieldError);
+  }
+
+  // Renders a single checkbox for a checkbox field. Stores the option label
+  // ("Yes") when ticked, empty when not, so it prices/validates like any option.
+  function renderCheckbox(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, onChange) {
+    var opt = (field.options && field.options[0]) || { label: 'Yes', priceDelta: 0 };
+    var optionLabel = opt.label || 'Yes';
+
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = uid;
+    cb.className = 'etch-customization__checkbox';
+    cb.setAttribute('aria-describedby', errorId);
+
+    label.htmlFor = uid;
+    if (opt.priceDelta) label.textContent = field.label + ' (+' + formatDollar(opt.priceDelta) + ')';
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    // A required checkbox starts unticked → invalid until the shopper ticks it.
+    validityMap[field.id] = !field.required;
+
+    cb.addEventListener('change', function () {
+      if (field.required && !cb.checked) {
+        fieldError.textContent = 'Please tick this box to continue.';
+        fieldError.hidden = false;
+        cb.setAttribute('aria-invalid', 'true');
+        validityMap[field.id] = false;
+      } else {
+        fieldError.hidden = true;
+        fieldError.textContent = '';
+        cb.removeAttribute('aria-invalid');
+        validityMap[field.id] = true;
+      }
+      updateBtn();
+      var val = cb.checked ? optionLabel : '';
+      hiddenFieldInput.value = val;
+      inputMap[field.id] = val;
+      onChange();
+    });
+
+    var row = document.createElement('div');
+    row.className = 'etch-customization__checkbox-row';
+    row.appendChild(cb);
+    row.appendChild(label);
+    wrapper.appendChild(row);
     wrapper.appendChild(fieldError);
   }
 

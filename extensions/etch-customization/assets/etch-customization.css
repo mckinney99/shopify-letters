@@ -38,6 +38,19 @@
   outline-offset: 2px;
 }
 
+/* Checkbox field: checkbox and its label sit on one line. */
+.etch-customization__checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.etch-customization__checkbox {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+}
+
 .etch-customization__hint {
   font-size: 0.9375rem;
   opacity: 0.7;

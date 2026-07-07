@@ -141,6 +141,7 @@ const FIELD_TYPE_OPTIONS = [
   { label: "Short text", value: "text" },
   { label: "Paragraph text", value: "textarea" },
   { label: "Dropdown", value: "dropdown" },
+  { label: "Checkbox", value: "checkbox" },
 ];
 
 // Choice fields present a fixed list of options instead of free text.
@@ -257,7 +258,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const error = validateField({ label, minChars, maxChars, allowedChars, disallowedChars });
     if (error) return json({ error }, { status: 422 });
     if (isChoiceType(type) && options.length === 0)
-      return json({ error: "Add at least one option for a dropdown field." }, { status: 422 });
+      return json({ error: "Add at least one option." }, { status: 422 });
 
     const count = await prisma.customizationField.count({
       where: { shop, productId: productGid },
@@ -301,7 +302,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const error = validateField({ label, minChars, maxChars, allowedChars, disallowedChars });
     if (error) return json({ error }, { status: 422 });
     if (isChoiceType(type) && options.length === 0)
-      return json({ error: "Add at least one option for a dropdown field." }, { status: 422 });
+      return json({ error: "Add at least one option." }, { status: 422 });
 
     const updated = await prisma.customizationField.updateMany({
       where: { id: fieldId, shop },
@@ -459,8 +460,15 @@ function FieldForm({
   const [required, setRequired] = useState(field?.required ?? false);
   const initialOptions = (field?.options ?? []).map((o) => ({ label: o.label, priceDelta: String(o.priceDelta) }));
   const [options, setOptions] = useState<{ label: string; priceDelta: string }[]>(initialOptions);
+  // A checkbox is stored as a single "Yes" option; the merchant only sets its price.
+  const initialCheckboxPrice = field?.options?.[0] ? String(field.options[0].priceDelta) : "";
+  const [checkboxPrice, setCheckboxPrice] = useState(initialCheckboxPrice);
 
+  const listChoice = type === "dropdown" || type === "buttons";
+  const isCheckbox = type === "checkbox";
   const choice = isChoiceType(type);
+  // What gets posted as the field's options: checkbox collapses to one option.
+  const optionsPayload = isCheckbox ? [{ label: "Yes", priceDelta: checkboxPrice }] : options;
   const addOption = () => setOptions((prev) => [...prev, { label: "", priceDelta: "" }]);
   const removeOption = (i: number) => setOptions((prev) => prev.filter((_, idx) => idx !== i));
   const updateOption = (i: number, key: "label" | "priceDelta", val: string) =>
@@ -484,6 +492,7 @@ function FieldForm({
     allowSpaces !== (field?.allowSpaces ?? true) ||
     countSpaces !== (field?.countSpaces ?? false) ||
     required !== (field?.required ?? false) ||
+    checkboxPrice !== initialCheckboxPrice ||
     JSON.stringify(options) !== JSON.stringify(initialOptions);
   useEffect(() => {
     onDirtyChangeRef.current?.(dirty);
@@ -505,7 +514,7 @@ function FieldForm({
         <input type="hidden" name="allowSpaces" value={String(allowSpaces)} />
         <input type="hidden" name="countSpaces" value={String(countSpaces)} />
         <input type="hidden" name="required" value={String(required)} />
-        <input type="hidden" name="options" value={JSON.stringify(options)} />
+        <input type="hidden" name="options" value={JSON.stringify(optionsPayload)} />
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
         <FormLayout>
           <TextField label="Label" value={label} onChange={setLabel} autoComplete="off" requiredIndicator />
@@ -516,7 +525,7 @@ function FieldForm({
             onChange={setType}
             helpText="Short text is one line, paragraph text is a box, dropdown is a list of choices."
           />
-          {choice ? (
+          {listChoice ? (
             <>
               <BlockStack gap="200">
                 <Text as="p" variant="bodyMd">Options</Text>
@@ -554,6 +563,25 @@ function FieldForm({
               <Checkbox
                 label="Required"
                 helpText="Shoppers must choose an option before adding to cart"
+                checked={required}
+                onChange={setRequired}
+              />
+            </>
+          ) : isCheckbox ? (
+            <>
+              <TextField
+                label="Extra price when checked"
+                type="number"
+                prefix="$"
+                placeholder="0.00"
+                helpText="Added to the price when the shopper ticks this box. Leave blank for a free option."
+                value={checkboxPrice}
+                onChange={setCheckboxPrice}
+                autoComplete="off"
+              />
+              <Checkbox
+                label="Required"
+                helpText="Shopper must tick this box before adding to cart (e.g. to accept terms)"
                 checked={required}
                 onChange={setRequired}
               />
