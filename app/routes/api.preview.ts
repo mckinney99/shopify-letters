@@ -49,7 +49,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
-      select: { id: true, label: true, type: true, minChars: true, maxChars: true, allowedChars: true, disallowedChars: true, allowSpaces: true, countSpaces: true },
+      select: {
+        id: true, label: true, type: true, required: true,
+        minChars: true, maxChars: true, allowedChars: true, disallowedChars: true,
+        allowSpaces: true, countSpaces: true,
+        options: { select: { label: true, priceDelta: true }, orderBy: { position: "asc" } },
+      },
     }),
     prisma.pricingRule.findMany({
       where: { shop, productId: productGid, fieldId: { not: "" } },
@@ -66,12 +71,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     id: f.id,
     label: f.label,
     type: f.type,
+    required: f.required,
     minChars: f.minChars,
     maxChars: f.maxChars,
     allowedChars: f.allowedChars,
     disallowedChars: f.disallowedChars,
     allowSpaces: f.allowSpaces,
     countSpaces: f.countSpaces,
+    options: f.options,
     perCharPrice: ruleByFieldId[f.id]?.perCharPrice ?? null,
     charGroups: ruleByFieldId[f.id]?.charGroups ?? [],
   }));
@@ -126,6 +133,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
+      include: { options: { orderBy: { position: "asc" } } },
     }),
     prisma.pricingRule.findMany({
       where: { shop, productId: productGid },
@@ -143,9 +151,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Normalize each field and collect errors
   const allErrors: string[] = [];
   const fieldInputs: FieldInput[] = [];
+  // Flat surcharge from selected choice-field options (dropdown/checkbox/buttons).
+  // Mirrors optionDeltaMinor() in the cart transform so preview == enforced price.
+  let optionDeltaMinor = 0;
 
   for (const dbField of dbFields) {
     const raw = typeof fieldValues[dbField.id] === "string" ? fieldValues[dbField.id] : "";
+
+    // Choice fields carry a selected option label rather than free text.
+    if (dbField.options && dbField.options.length > 0) {
+      const selected = raw.trim();
+      if (!selected) {
+        if (dbField.required) allErrors.push(`${dbField.label}: Please select an option.`);
+      } else {
+        const opt = dbField.options.find((o) => o.label === selected);
+        if (!opt) allErrors.push(`${dbField.label}: Invalid selection.`);
+        else optionDeltaMinor += Math.round(opt.priceDelta * 100);
+      }
+      continue; // no per-character pricing for choice fields
+    }
+
     const fieldRule = pricingRules.find((r) => r.fieldId === dbField.id);
     const rules: FieldRules = {
       minChars: dbField.minChars,
@@ -185,6 +210,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const result = calculateProductPrice(fieldInputs, ruleInputs);
   for (const e of result.validationErrors) allErrors.push(e);
 
+  // Fold in choice-option surcharges (kept out of the per-char engine so the
+  // well-tested char pricing stays untouched). Clamp mirrors the engine's cap.
+  const MAX_PRICE_MINOR = 9_999_999;
+  const totalPriceMinor = Math.min(result.priceMinor + optionDeltaMinor, MAX_PRICE_MINOR);
+
   // Snapshot ID for the rules used to calculate this price — attached to the
   // cart line item so support can later verify which config version produced
   // a given price (see SL-30).
@@ -209,7 +239,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     correlationId: typeof correlationId === "string" ? correlationId : null,
     inputHash,
     valid: allErrors.length === 0,
-    priceMinor: result.priceMinor,
+    priceMinor: totalPriceMinor,
     latencyMs,
   });
 
@@ -217,8 +247,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     {
       valid: allErrors.length === 0,
       errors: allErrors,
-      price: result.priceMinor,
-      priceFormatted: `$${(result.priceMinor / 100).toFixed(2)}`,
+      price: totalPriceMinor,
+      priceFormatted: `$${(totalPriceMinor / 100).toFixed(2)}`,
       breakdown: result.breakdown,
       configVersion,
     },

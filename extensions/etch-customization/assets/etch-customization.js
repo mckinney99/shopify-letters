@@ -233,6 +233,27 @@
       label.className = 'etch-customization__label';
       label.textContent = field.label;
 
+      // Per-field validation error element (shared by every field type)
+      var fieldError = document.createElement('span');
+      fieldError.id = errorId;
+      fieldError.className = 'etch-customization__field-error';
+      fieldError.setAttribute('role', 'alert');
+      fieldError.hidden = true;
+      fieldErrorEls[field.id] = fieldError;
+
+      // ── Choice field: <select> dropdown ──────────────────────────────────
+      if (field.type === 'dropdown') {
+        renderDropdown(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return; // done with this field (forEach callback)
+      }
+
+      // ── Text / paragraph field ───────────────────────────────────────────
       // Input element — a single-line <input> by default, or a multi-line
       // <textarea> for "paragraph text" fields. Both expose .value / .maxLength
       // and fire the same input/keydown events, so all handling below is shared.
@@ -265,14 +286,6 @@
         describedBy = hint.id + ' ' + errorId;
       }
       input.setAttribute('aria-describedby', describedBy);
-
-      // Per-field validation error element
-      var fieldError = document.createElement('span');
-      fieldError.id = errorId;
-      fieldError.className = 'etch-customization__field-error';
-      fieldError.setAttribute('role', 'alert');
-      fieldError.hidden = true;
-      fieldErrorEls[field.id] = fieldError;
 
       // Pre-compute sets once so keydown handler is cheap.
       var allowedSet = field.allowedChars ? new Set(Array.from(field.allowedChars)) : null;
@@ -414,6 +427,56 @@
         keepalive: true,
       }).catch(function () {});
     }
+  }
+
+  // Renders a <select> dropdown for a choice field and wires its change event
+  // to per-field validity, the hidden form input, and a price refresh.
+  function renderDropdown(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, onChange) {
+    var select = document.createElement('select');
+    select.id = uid;
+    select.className = 'etch-customization__input etch-customization__select';
+    select.setAttribute('aria-describedby', errorId);
+
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = field.required ? 'Select…' : 'Select… (optional)';
+    select.appendChild(placeholder);
+
+    (field.options || []).forEach(function (opt) {
+      var o = document.createElement('option');
+      o.value = opt.label;
+      o.textContent = opt.priceDelta ? opt.label + ' (+' + formatDollar(opt.priceDelta) + ')' : opt.label;
+      select.appendChild(o);
+    });
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    // Required-but-unselected starts invalid so the add-to-cart button stays disabled.
+    validityMap[field.id] = !field.required;
+
+    select.addEventListener('change', function () {
+      var val = select.value;
+      if (field.required && !val) {
+        fieldError.textContent = 'Please select an option.';
+        fieldError.hidden = false;
+        select.setAttribute('aria-invalid', 'true');
+        validityMap[field.id] = false;
+      } else {
+        fieldError.hidden = true;
+        fieldError.textContent = '';
+        select.removeAttribute('aria-invalid');
+        validityMap[field.id] = true;
+      }
+      updateBtn();
+      hiddenFieldInput.value = val;
+      inputMap[field.id] = val;
+      onChange();
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(select);
+    wrapper.appendChild(fieldError);
   }
 
   function makeHiddenInput(name, value) {

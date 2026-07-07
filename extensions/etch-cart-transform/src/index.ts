@@ -18,9 +18,17 @@ type FieldPricingRule = {
   charGroups: CharGroupRule[];
 };
 
+type FieldOptionRule = {
+  label: string;
+  priceDelta: number;
+};
+
 type FieldDefinition = {
   id: string;
   label: string;
+  // Present on choice fields (dropdown/checkbox/buttons). The selected value
+  // (an option label) travels in _etch_inputs; its priceDelta is added here.
+  options?: FieldOptionRule[];
 };
 
 type MetafieldPayload = {
@@ -97,6 +105,24 @@ function calculatePrice(
   return total;
 }
 
+// Flat surcharge from selected choice-field options. The stored value in
+// _etch_inputs is the chosen option's label; we add that option's priceDelta.
+// Must stay in sync with the option pricing in app/routes/api.preview.ts.
+function optionDeltaMinor(
+  fields: FieldDefinition[],
+  etchInputs: Record<string, string>
+): number {
+  let total = 0;
+  for (const field of fields) {
+    if (!field.options || field.options.length === 0) continue;
+    const selected = etchInputs[field.id];
+    if (!selected) continue;
+    const option = field.options.find((o) => o.label === selected);
+    if (option) total += toCents(option.priceDelta);
+  }
+  return total;
+}
+
 // ── Structured logging — see SL-31 ────────────────────────────────────────────
 // Every line that carries an Etch pricing metafield gets exactly one JSON log
 // line, regardless of outcome, so support can query by correlationId across
@@ -167,7 +193,9 @@ export function run(input: Input): unknown {
       }));
 
       const baseMinor = Math.round(parseFloat(line.cost.amountPerQuantity.amount) * 100);
-      const enforcedMinor = calculatePrice(fieldInputs, payload.rules, baseMinor);
+      let enforcedMinor = calculatePrice(fieldInputs, payload.rules, baseMinor);
+      enforcedMinor += optionDeltaMinor(payload.fields, etchInputs);
+      if (enforcedMinor > MAX_PRICE_MINOR) enforcedMinor = MAX_PRICE_MINOR;
       const enforcedAmount = (enforcedMinor / 100).toFixed(2);
 
       logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: enforcedMinor, pass: true });

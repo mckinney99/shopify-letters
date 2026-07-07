@@ -5,10 +5,13 @@ const baseFields = [
   {
     id: "field-1",
     label: "Engraving",
+    type: "text",
+    required: false,
     minChars: 1,
     maxChars: 20,
     allowedChars: null,
     disallowedChars: null,
+    options: [],
   },
 ];
 
