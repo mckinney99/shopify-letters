@@ -253,6 +253,18 @@
         return; // done with this field (forEach callback)
       }
 
+      // ── Choice field: button group (single-select) ───────────────────────
+      if (field.type === 'buttons') {
+        renderButtons(field, uid, errorId, wrapper, label, fieldError, formTarget,
+          validityMap, inputMap, updateBtn, function () {
+            etchInputsEl.value = JSON.stringify(inputMap);
+            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+          });
+        fieldsEl.appendChild(wrapper);
+        inputMap[field.id] = '';
+        return;
+      }
+
       // ── Choice field: single checkbox ────────────────────────────────────
       if (field.type === 'checkbox') {
         renderCheckbox(field, uid, errorId, wrapper, label, fieldError, formTarget,
@@ -488,6 +500,55 @@
 
     wrapper.appendChild(label);
     wrapper.appendChild(select);
+    wrapper.appendChild(fieldError);
+  }
+
+  // Renders a single-select group of buttons for a "buttons" field. Same data
+  // as a dropdown; the chosen option's label is stored like any other choice.
+  function renderButtons(field, uid, errorId, wrapper, label, fieldError, formTarget, validityMap, inputMap, updateBtn, onChange) {
+    label.id = uid + '-label';
+    label.removeAttribute('for');
+
+    var group = document.createElement('div');
+    group.className = 'etch-customization__buttons';
+    group.setAttribute('role', 'radiogroup');
+    group.setAttribute('aria-labelledby', label.id);
+    group.setAttribute('aria-describedby', errorId);
+
+    var hiddenFieldInput = makeHiddenInput('properties[' + field.label + ']', '');
+    formTarget.appendChild(hiddenFieldInput);
+
+    // Required-but-unselected starts invalid so the add-to-cart button stays disabled.
+    validityMap[field.id] = !field.required;
+
+    function choose(val, btn) {
+      Array.prototype.forEach.call(group.children, function (b) {
+        var on = b === btn;
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.classList.toggle('is-selected', on);
+      });
+      fieldError.hidden = true;
+      fieldError.textContent = '';
+      validityMap[field.id] = true;
+      updateBtn();
+      hiddenFieldInput.value = val;
+      inputMap[field.id] = val;
+      onChange();
+    }
+
+    (field.options || []).forEach(function (opt) {
+      var btn = document.createElement('button');
+      btn.type = 'button'; // never submit the product form
+      btn.className = 'etch-customization__button';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', 'false');
+      btn.textContent = opt.priceDelta ? opt.label + ' (+' + formatDollar(opt.priceDelta) + ')' : opt.label;
+      btn.addEventListener('click', function () { choose(opt.label, btn); });
+      group.appendChild(btn);
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(group);
     wrapper.appendChild(fieldError);
   }
 

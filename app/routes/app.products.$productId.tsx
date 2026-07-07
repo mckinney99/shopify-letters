@@ -141,6 +141,7 @@ const FIELD_TYPE_OPTIONS = [
   { label: "Short text", value: "text" },
   { label: "Paragraph text", value: "textarea" },
   { label: "Dropdown", value: "dropdown" },
+  { label: "Buttons", value: "buttons" },
   { label: "Checkbox", value: "checkbox" },
 ];
 
