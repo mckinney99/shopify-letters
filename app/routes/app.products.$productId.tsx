@@ -18,6 +18,7 @@ import {
   Badge,
   Checkbox,
   Modal,
+  Select,
 } from "@shopify/polaris";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -124,6 +125,20 @@ type PricingRuleData = {
   charGroups: CharPriceGroupData[];
 };
 
+// Field types offered in the "Field type" selector. `text` is the original
+// single-line input and stays the default so existing fields are unchanged.
+// New types are added here as later stories land (dropdown, checkbox, ...).
+const FIELD_TYPE_OPTIONS = [
+  { label: "Short text", value: "text" },
+  { label: "Paragraph text", value: "textarea" },
+];
+
+// Coerce any submitted field type to a known value, defaulting to "text".
+// Guards against a stale/hand-crafted form posting an unsupported type.
+function normalizeFieldType(value: string | null): string {
+  return FIELD_TYPE_OPTIONS.some((o) => o.value === value) ? (value as string) : "text";
+}
+
 function validateField(data: Record<string, string>): string | null {
   if (!data.label?.trim()) return "Label is required.";
   const min = data.minChars ? parseInt(data.minChars) : null;
@@ -194,6 +209,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
   if (_action === "create") {
     const label = (form.get("label") as string) ?? "";
+    const type = normalizeFieldType(form.get("type") as string);
     const minChars = (form.get("minChars") as string) ?? "";
     const maxChars = (form.get("maxChars") as string) ?? "";
     const allowedChars = (form.get("allowedChars") as string) ?? "";
@@ -212,7 +228,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         shop,
         productId: productGid,
         label: label.trim(),
-        type: "text",
+        type,
         minChars: minChars ? parseInt(minChars) : null,
         maxChars: maxChars ? parseInt(maxChars) : null,
         allowedChars: allowedChars.trim() || null,
@@ -229,6 +245,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (_action === "update") {
     const fieldId = form.get("fieldId") as string;
     const label = (form.get("label") as string) ?? "";
+    const type = normalizeFieldType(form.get("type") as string);
     const minChars = (form.get("minChars") as string) ?? "";
     const maxChars = (form.get("maxChars") as string) ?? "";
     const allowedChars = (form.get("allowedChars") as string) ?? "";
@@ -243,6 +260,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       where: { id: fieldId, shop },
       data: {
         label: label.trim(),
+        type,
         minChars: minChars ? parseInt(minChars) : null,
         maxChars: maxChars ? parseInt(maxChars) : null,
         allowedChars: allowedChars.trim() || null,
@@ -372,6 +390,7 @@ function FieldForm({
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const [label, setLabel] = useState(field?.label ?? "");
+  const [type, setType] = useState(field?.type ?? "text");
   const [minChars, setMinChars] = useState(field?.minChars?.toString() ?? "");
   const [maxChars, setMaxChars] = useState(field?.maxChars?.toString() ?? "");
   const [allowedChars, setAllowedChars] = useState(field?.allowedChars ?? "");
@@ -389,6 +408,7 @@ function FieldForm({
   onDirtyChangeRef.current = onDirtyChange;
   const dirty =
     label !== (field?.label ?? "") ||
+    type !== (field?.type ?? "text") ||
     minChars !== (field?.minChars?.toString() ?? "") ||
     maxChars !== (field?.maxChars?.toString() ?? "") ||
     allowedChars !== (field?.allowedChars ?? "") ||
@@ -407,6 +427,7 @@ function FieldForm({
         <input type="hidden" name="_action" value={actionType} />
         {field && <input type="hidden" name="fieldId" value={field.id} />}
         <input type="hidden" name="label" value={label} />
+        <input type="hidden" name="type" value={type} />
         <input type="hidden" name="minChars" value={minChars} />
         <input type="hidden" name="maxChars" value={maxChars} />
         <input type="hidden" name="allowedChars" value={allowedChars} />
@@ -416,6 +437,13 @@ function FieldForm({
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
         <FormLayout>
           <TextField label="Label" value={label} onChange={setLabel} autoComplete="off" requiredIndicator />
+          <Select
+            label="Field type"
+            options={FIELD_TYPE_OPTIONS}
+            value={type}
+            onChange={setType}
+            helpText="Short text is a single line; paragraph text is a multi-line box."
+          />
           <FormLayout.Group>
             <TextField label="Min characters" type="number" value={minChars} onChange={setMinChars} autoComplete="off" />
             <TextField label="Max characters" type="number" value={maxChars} onChange={setMaxChars} autoComplete="off" />

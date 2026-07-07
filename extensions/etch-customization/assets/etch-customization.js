@@ -233,9 +233,17 @@
       label.className = 'etch-customization__label';
       label.textContent = field.label;
 
-      // <input>
-      var input = document.createElement('input');
-      input.type = 'text';
+      // Input element — a single-line <input> by default, or a multi-line
+      // <textarea> for "paragraph text" fields. Both expose .value / .maxLength
+      // and fire the same input/keydown events, so all handling below is shared.
+      var input;
+      if (field.type === 'textarea') {
+        input = document.createElement('textarea');
+        input.rows = 3;
+      } else {
+        input = document.createElement('input');
+        input.type = 'text';
+      }
       input.id = uid;
       input.className = 'etch-customization__input';
       // Hidden mirror inside the product form — submits the value even if the block is outside <form>

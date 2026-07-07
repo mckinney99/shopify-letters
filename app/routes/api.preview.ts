@@ -49,7 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
-      select: { id: true, label: true, minChars: true, maxChars: true, allowedChars: true, disallowedChars: true, allowSpaces: true, countSpaces: true },
+      select: { id: true, label: true, type: true, minChars: true, maxChars: true, allowedChars: true, disallowedChars: true, allowSpaces: true, countSpaces: true },
     }),
     prisma.pricingRule.findMany({
       where: { shop, productId: productGid, fieldId: { not: "" } },
@@ -65,6 +65,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const fields = dbFields.map((f) => ({
     id: f.id,
     label: f.label,
+    type: f.type,
     minChars: f.minChars,
     maxChars: f.maxChars,
     allowedChars: f.allowedChars,
