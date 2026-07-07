@@ -53,7 +53,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         id: true, label: true, type: true, required: true,
         minChars: true, maxChars: true, allowedChars: true, disallowedChars: true,
         allowSpaces: true, countSpaces: true,
-        options: { select: { label: true, priceDelta: true }, orderBy: { position: "asc" } },
+        options: { select: { label: true, priceDelta: true, swatchColor: true }, orderBy: { position: "asc" } },
       },
     }),
     prisma.pricingRule.findMany({

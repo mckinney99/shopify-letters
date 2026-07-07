@@ -51,6 +51,30 @@
   flex: none;
 }
 
+/* Swatches field: a wrap of colored circles. */
+.etch-customization__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.etch-customization__swatch {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  padding: 0;
+  background: #ccc;
+  cursor: pointer;
+  flex: none;
+}
+
+/* Ring outside the circle so the color fill stays visible. */
+.etch-customization__swatch.is-selected {
+  outline: 3px solid currentColor;
+  outline-offset: 2px;
+}
+
 /* Buttons field: a wrap of single-select pills. */
 .etch-customization__buttons {
   display: flex;
