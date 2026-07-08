@@ -16,6 +16,8 @@ const baseRules = [
   {
     fieldId: "field-1",
     perCharPrice: 0.5,
+    mode: "per_char",
+    amount: 0,
     charGroups: [{ label: "Emoji", characters: "😀😎", pricePerChar: 1 }],
   },
 ];

@@ -14,11 +14,19 @@ type FieldDefinition = {
   disallowedChars?: string | null;
 };
 
+type FieldCondition = {
+  fieldId: string;
+  triggerFieldId: string;
+  operator: string;
+  value: string;
+};
+
 type MetafieldPayload = {
   // Shop domain — Input.shop only exposes localTime/metafield, not an
   // identifier, so it travels via this payload instead (see SL-31).
   shop?: string;
   fields: FieldDefinition[];
+  conditions?: FieldCondition[];
 };
 
 // ── Types for the Shopify Function input (mirrors cart_validations_generate_run.graphql) ──
@@ -55,6 +63,18 @@ type ValidationError = {
 type CartValidationsGenerateRunResult = {
   operations: Array<{ validationAdd: { errors: ValidationError[] } }>;
 };
+
+// SL-85: skip validation for conditionally hidden fields.
+function isFieldActive(
+  fieldId: string,
+  etchInputs: Record<string, string>,
+  conditions: FieldCondition[]
+): boolean {
+  const cond = conditions.find((c) => c.fieldId === fieldId);
+  if (!cond) return true;
+  const triggerValue = (etchInputs[cond.triggerFieldId] ?? "").trim();
+  return cond.operator === "equals" ? triggerValue === cond.value : true;
+}
 
 // ── Validation logic — port of normalizeText/normalizeInput from app/utils/normalize.ts ──
 // Must stay in sync with normalizeInput in normalize.ts.
@@ -145,7 +165,9 @@ export function cartValidationsGenerateRun(input: Input): CartValidationsGenerat
     } else {
       try {
         const etchInputs = JSON.parse(attributeRaw) as Record<string, string>;
+        const conditions = payload.conditions ?? [];
         for (const field of payload.fields) {
+          if (!isFieldActive(field.id, etchInputs, conditions)) continue;
           for (const message of validateField(etchInputs[field.id] ?? "", field)) {
             lineErrors.push(`"${productTitle}" — ${field.label}: ${message}`);
           }

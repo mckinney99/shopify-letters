@@ -47,7 +47,7 @@
           return;
         }
         loadingEl.hidden = true;
-        renderFields(container, data.fields, shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency);
+        renderFields(container, data.fields, data.conditions || [], shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency);
         fieldsEl.hidden = false;
       })
       .catch(function () {
@@ -57,7 +57,7 @@
       });
   }
 
-  function renderFields(container, fields, shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency) {
+  function renderFields(container, fields, conditions, shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency) {
     var blockId = container.id;
     var heading = container.dataset.heading;
 
@@ -324,7 +324,7 @@
         // Keep the bundled JSON attribute in sync so the Cart Transform function
         // can read all field values via a single attribute(key: "_etch_inputs") query.
         etchInputsEl.value = JSON.stringify(inputMap);
-        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl, getBaseMinor());
       });
 
       wrapper.appendChild(label);
@@ -336,8 +336,53 @@
       inputMap[field.id] = '';
     });
 
+    // SL-85: evaluate conditions on each input change; show/hide dependent fields.
+    var fieldWrappers = {}; // fieldId -> wrapper element
+    fieldsEl.querySelectorAll('.etch-customization__field').forEach(function(wrapper, i) {
+      fieldWrappers[fields[i].id] = wrapper;
+    });
+
+    function evaluateConditions() {
+      conditions.forEach(function(cond) {
+        var wrapper = fieldWrappers[cond.fieldId];
+        if (!wrapper) return;
+        var triggerValue = (inputMap[cond.triggerFieldId] || '').trim();
+        var active = cond.operator === 'equals'
+          ? triggerValue === cond.value
+          : true;
+        wrapper.hidden = !active;
+        if (!active) {
+          // Clear the hidden field's value so it doesn't influence pricing or validation.
+          var inp = wrapper.querySelector('input');
+          if (inp && inp.value) {
+            inp.value = '';
+            inputMap[cond.fieldId] = '';
+            var hiddenMirror = formTarget.querySelector('input[name="properties[' + fields.find(function(f){return f.id===cond.fieldId;})?.label + ']"]');
+            if (hiddenMirror) hiddenMirror.value = '';
+          }
+          validityMap[cond.fieldId] = true; // hidden = not blocking
+        }
+      });
+      etchInputsEl.value = JSON.stringify(inputMap);
+    }
+
+    // Re-run condition evaluation whenever any input changes by patching the
+    // existing input event handlers (conditions is evaluated after each input fires).
+    var originalSchedule = schedulePreview;
+    function scheduleWithConditions(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice) {
+      evaluateConditions();
+      originalSchedule(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice);
+    }
+
+    // Re-attach input events to also call condition evaluation. The events were
+    // already attached in the forEach above, so we patch via a one-time wrapper.
+    fieldsEl.addEventListener('input', function() { evaluateConditions(); }, true);
+
+    // Initial evaluation on load
+    evaluateConditions();
+
     // Static per-character pricing summary — shows rates, not calculated totals
-    var pricedFields = fields.filter(function(f) { return f.perCharPrice != null; });
+    var pricedFields = fields.filter(function(f) { return f.perCharPrice != null && (f.mode == null || f.mode === 'per_char'); });
     if (pricedFields.length > 0) {
       var pricingInfoEl = document.createElement('div');
       pricingInfoEl.className = 'etch-customization__pricing-info';
@@ -367,7 +412,7 @@
     // Initial button state: disabled until price loads
     updateBtn();
 
-    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl, getBaseMinor());
   }
 
   // RFC 4122-ish v4 UUID, with a non-crypto fallback for older browsers.
@@ -464,18 +509,18 @@
   }
 
   var debounceTimer;
-  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice) {
+  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice, baseMinor) {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
-      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice);
+      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice, baseMinor);
     }, 350);
   }
 
-  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice) {
+  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice, baseMinor) {
     fetch(appUrl + '/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shop: shop, productId: productId, fields: inputMap, correlationId: correlationId }),
+      body: JSON.stringify({ shop: shop, productId: productId, fields: inputMap, correlationId: correlationId, baseMinor: baseMinor != null ? baseMinor : null }),
     })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {

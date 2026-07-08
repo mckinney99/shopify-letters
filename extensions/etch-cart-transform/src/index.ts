@@ -15,7 +15,16 @@ type CharGroupRule = {
 type FieldPricingRule = {
   fieldId: string;
   perCharPrice: number;
+  mode?: string; // per_char | flat | percent
+  amount?: number;
   charGroups: CharGroupRule[];
+};
+
+type FieldCondition = {
+  fieldId: string;
+  triggerFieldId: string;
+  operator: string;
+  value: string;
 };
 
 type FieldDefinition = {
@@ -29,6 +38,7 @@ type MetafieldPayload = {
   shop?: string;
   fields: FieldDefinition[];
   rules: FieldPricingRule[];
+  conditions?: FieldCondition[];
 };
 
 // ── Types for the Shopify Function input (mirrors input.graphql) ──────────────
@@ -75,20 +85,44 @@ function toCents(dollars: number): number {
 
 const MAX_PRICE_MINOR = 9_999_999;
 
+function isFieldActive(
+  fieldId: string,
+  fieldInputs: Array<{ fieldId: string; normalizedText: string }>,
+  conditions: FieldCondition[]
+): boolean {
+  const cond = conditions.find((c) => c.fieldId === fieldId);
+  if (!cond) return true;
+  const trigger = fieldInputs.find((f) => f.fieldId === cond.triggerFieldId);
+  return cond.operator === "equals"
+    ? (trigger?.normalizedText ?? "").trim() === cond.value
+    : true;
+}
+
 function calculatePrice(
   fieldInputs: Array<{ fieldId: string; normalizedText: string }>,
   rules: FieldPricingRule[],
-  baseMinor: number
+  baseMinor: number,
+  conditions: FieldCondition[] = []
 ): number {
   let total = baseMinor;
 
   for (const input of fieldInputs) {
+    if (!isFieldActive(input.fieldId, fieldInputs, conditions)) continue;
     const rule = rules.find((r) => r.fieldId === input.fieldId);
     if (!rule) continue;
-    const chars = [...input.normalizedText]; // codepoint-aware — correct for emoji
-    for (const char of chars) {
-      const group = rule.charGroups.find((g) => g.characters.includes(char));
-      total += toCents(group ? group.pricePerChar : rule.perCharPrice);
+    const mode = rule.mode ?? "per_char";
+    const hasValue = input.normalizedText.length > 0;
+    if (mode === "flat") {
+      if (hasValue) total += toCents(rule.amount ?? 0);
+    } else if (mode === "percent") {
+      if (hasValue) total += Math.round((rule.amount ?? 0) / 100 * baseMinor);
+    } else {
+      // per_char
+      const chars = [...input.normalizedText]; // codepoint-aware — correct for emoji
+      for (const char of chars) {
+        const group = rule.charGroups.find((g) => g.characters.includes(char));
+        total += toCents(group ? group.pricePerChar : rule.perCharPrice);
+      }
     }
   }
 
@@ -167,7 +201,7 @@ export function run(input: Input): unknown {
       }));
 
       const baseMinor = Math.round(parseFloat(line.cost.amountPerQuantity.amount) * 100);
-      const enforcedMinor = calculatePrice(fieldInputs, payload.rules, baseMinor);
+      const enforcedMinor = calculatePrice(fieldInputs, payload.rules, baseMinor, payload.conditions ?? []);
       const enforcedAmount = (enforcedMinor / 100).toFixed(2);
 
       logEnforcement({ event: "checkout_price_enforcement", shop, productId, correlationId, enforcedPriceMinor: enforcedMinor, pass: true });

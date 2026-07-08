@@ -48,22 +48,46 @@ model ProductConfig {
 }
 
 model CustomizationField {
-  id              String   @id @default(cuid())
-  shop            String
-  productId       String
-  label           String
-  type            String   @default("text")
-  minChars        Int?
-  maxChars        Int?
-  allowedChars    String?
-  disallowedChars String?
-  allowSpaces     Boolean  @default(true)
-  countSpaces     Boolean  @default(false)
-  position        Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  shop             String
+  productId        String
+  label            String
+  type             String   @default("text")
+  minChars         Int?
+  maxChars         Int?
+  allowedChars     String?
+  disallowedChars  String?
+  allowSpaces      Boolean  @default(true)
+  countSpaces      Boolean  @default(false)
+  required         Boolean  @default(false)
+  position         Int      @default(0)
+  helpText         String?
+  dateFutureOnly   Boolean  @default(false)
+  fontOptions      String?
+  textColorOptions String?
+  fileAccept       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  options          FieldOption[]
 
   @@index([shop, productId])
+}
+
+model FieldOption {
+  id          String   @id @default(cuid())
+  fieldId     String
+  label       String
+  priceDelta  Float    @default(0)
+  swatchColor String?
+  imageUrl    String?
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  field      CustomizationField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@index([fieldId])
 }
 
 // fieldId = "" means product-level base price; fieldId = <CustomizationField.id> means per-field pricing
@@ -74,11 +98,29 @@ model PricingRule {
   fieldId      String
   basePrice    Float          @default(0)
   perCharPrice Float          @default(0)
+  mode         String         @default("per_char") // per_char | flat | percent
+  amount       Float          @default(0)          // flat $ or percent (0-100) for non-per_char modes
   charGroups   CharPriceGroup[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
   @@unique([shop, productId, fieldId])
+  @@index([shop, productId])
+}
+
+// SL-85: show/hide a field based on another field's value.
+// fieldId is the dependent (hidden) field; triggerFieldId drives visibility.
+model FieldCondition {
+  id             String   @id @default(cuid())
+  shop           String
+  productId      String
+  fieldId        String
+  triggerFieldId String
+  operator       String   @default("equals")
+  value          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   @@index([shop, productId])
 }
 

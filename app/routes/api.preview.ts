@@ -3,7 +3,7 @@ import { json } from "@remix-run/node";
 import prisma from "../db.server";
 import { normalizeInput } from "../utils/normalize";
 import { calculateProductPrice } from "../utils/pricing";
-import type { FieldInput, FieldPricingRule } from "../utils/pricing";
+import type { FieldInput, FieldPricingRule, PricingCondition } from "../utils/pricing";
 import type { FieldRules } from "../utils/normalize";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
 import { logEvent, shortHash } from "../utils/log";
@@ -41,7 +41,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const productGid = `gid://shopify/Product/${productId}`;
-  const [config, dbFields, pricingRules] = await Promise.all([
+  const [config, dbFields, pricingRules, conditions] = await Promise.all([
     prisma.productConfig.findUnique({
       where: { shop_productId: { shop, productId: productGid } },
       select: { published: true },
@@ -53,7 +53,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }),
     prisma.pricingRule.findMany({
       where: { shop, productId: productGid, fieldId: { not: "" } },
-      select: { fieldId: true, perCharPrice: true, charGroups: { select: { label: true, pricePerChar: true } } },
+      select: { fieldId: true, perCharPrice: true, mode: true, amount: true, charGroups: { select: { label: true, pricePerChar: true } } },
+    }),
+    prisma.fieldCondition.findMany({
+      where: { shop, productId: productGid },
+      select: { fieldId: true, triggerFieldId: true, operator: true, value: true },
     }),
   ]);
 
@@ -72,10 +76,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     allowSpaces: f.allowSpaces,
     countSpaces: f.countSpaces,
     perCharPrice: ruleByFieldId[f.id]?.perCharPrice ?? null,
+    mode: ruleByFieldId[f.id]?.mode ?? "per_char",
+    amount: ruleByFieldId[f.id]?.amount ?? 0,
     charGroups: ruleByFieldId[f.id]?.charGroups ?? [],
   }));
 
-  return json({ fields }, { headers: CORS_HEADERS });
+  return json({ fields, conditions }, { headers: CORS_HEADERS });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -90,14 +96,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const startedAt = Date.now();
 
-  let body: { shop?: unknown; productId?: unknown; fields?: unknown; correlationId?: unknown };
+  let body: { shop?: unknown; productId?: unknown; fields?: unknown; correlationId?: unknown; baseMinor?: unknown };
   try {
     body = await request.json();
   } catch {
     return json({ error: "Invalid JSON body" }, { status: 400, headers: CORS_HEADERS });
   }
 
-  const { shop, productId, fields, correlationId } = body;
+  const { shop, productId, fields, correlationId, baseMinor } = body;
 
   if (typeof shop !== "string" || !shop) {
     return json({ error: "Missing or invalid shop" }, { status: 400, headers: CORS_HEADERS });
@@ -117,7 +123,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const productGid = `gid://shopify/Product/${productId}`;
 
-  const [config, dbFields, pricingRules] = await Promise.all([
+  const productBaseMinor = typeof baseMinor === "number" && baseMinor >= 0 ? Math.round(baseMinor) : 0;
+
+  const [config, dbFields, pricingRules, dbConditions] = await Promise.all([
     prisma.productConfig.findUnique({
       where: { shop_productId: { shop, productId: productGid } },
       select: { published: true },
@@ -129,6 +137,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     prisma.pricingRule.findMany({
       where: { shop, productId: productGid },
       include: { charGroups: true },
+    }),
+    prisma.fieldCondition.findMany({
+      where: { shop, productId: productGid },
+      select: { fieldId: true, triggerFieldId: true, operator: true, value: true },
     }),
   ]);
 
@@ -174,6 +186,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       fieldId: r.fieldId,
       basePrice: 0,
       perCharPrice: r.perCharPrice,
+      mode: (r.mode as "per_char" | "flat" | "percent") ?? "per_char",
+      amount: r.amount ?? 0,
       charGroups: r.charGroups.map((g) => ({
         label: g.label,
         characters: g.characters,
@@ -181,13 +195,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       })),
     }));
 
-  const result = calculateProductPrice(fieldInputs, ruleInputs);
+  const conditions: PricingCondition[] = dbConditions;
+  const result = calculateProductPrice(fieldInputs, ruleInputs, productBaseMinor, conditions);
   for (const e of result.validationErrors) allErrors.push(e);
 
   // Snapshot ID for the rules used to calculate this price — attached to the
   // cart line item so support can later verify which config version produced
   // a given price (see SL-30).
-  const configVersion = computeConfigVersion(buildPricingConfig(dbFields, pricingRules));
+  const configVersion = computeConfigVersion(buildPricingConfig(dbFields, pricingRules, dbConditions));
 
   // Hash of the customer's raw input — lets support correlate a disputed
   // price with what was actually typed, without logging the input itself.
