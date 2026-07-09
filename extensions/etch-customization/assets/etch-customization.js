@@ -1253,6 +1253,19 @@
   // multiple blocks of this type (each block includes its own <script> tag).
   document.querySelectorAll('.etch-customization:not([data-etch-init])').forEach(function(container) {
     container.setAttribute('data-etch-init', '1');
+    if (container.dataset.embed === 'true') {
+      // App-embed mode: div is rendered at </body>. Move it after the product form
+      // so it sits naturally in the page flow. Tries several common selectors in
+      // order of specificity; falls back to showing in-place if nothing matches.
+      var anchor =
+        document.querySelector('product-form') ||
+        document.querySelector('form[action*="/cart/add"]') ||
+        document.querySelector('.product-form');
+      if (anchor) {
+        anchor.insertAdjacentElement('afterend', container);
+      }
+      container.removeAttribute('hidden');
+    }
     initBlock(container);
   });
 })();

@@ -17,7 +17,7 @@ import {
 } from "@shopify/polaris";
 import { CheckCircleIcon, MinusCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { buildThemeEditorDeepLink } from "../utils/themeEditor";
+import { buildAppEmbedDeepLink } from "../utils/themeEditor";
 import prisma from "../db.server";
 import { useState, useEffect } from "react";
 
@@ -61,13 +61,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     checkWidgetActivated(session.shop, session.accessToken ?? ""),
   ]);
 
-  const themeEditorUrl =
-    buildThemeEditorDeepLink({
+  const activateUrl =
+    buildAppEmbedDeepLink({
       shop: session.shop,
       extensionUuid: process.env.SHOPIFY_THEME_APP_EXTENSION_UUID,
-    }) ?? `https://${session.shop}/admin/themes/current/editor`;
+    }) ?? `https://${session.shop}/admin/themes/current/editor?context=apps`;
 
-  return json({ enabledCount, publishedCount, widgetActivated, themeEditorUrl, shop: session.shop });
+  return json({ enabledCount, publishedCount, widgetActivated, activateUrl, shop: session.shop });
 };
 
 type StepRowProps = {
@@ -113,7 +113,7 @@ function StepRow({ done, title, description, actionLabel, actionUrl, external }:
 const DISMISSED_KEY = "etch_setup_guide_dismissed";
 
 export default function Index() {
-  const { enabledCount, publishedCount, widgetActivated, themeEditorUrl, shop } =
+  const { enabledCount, publishedCount, widgetActivated, activateUrl, shop } =
     useLoaderData<typeof loader>();
 
   const [dismissed, setDismissed] = useState(false);
@@ -126,9 +126,9 @@ export default function Index() {
     {
       done: widgetActivated,
       title: "Activate the Etch widget in your theme",
-      description: "Open your theme editor and add the Etch widget to your product page template.",
-      actionLabel: "Open theme editor",
-      actionUrl: themeEditorUrl,
+      description: 'In the theme editor, go to App embeds and toggle "Etch Customization" on — one click and you\'re live.',
+      actionLabel: "Activate widget",
+      actionUrl: activateUrl,
       external: true,
     },
     {

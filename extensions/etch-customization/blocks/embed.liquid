@@ -1,0 +1,58 @@
+{%- comment -%}
+  App-embed block (target: body). Toggled on/off from the theme editor's
+  "App embeds" panel — no manual block placement needed by the merchant.
+  On product pages, the JS repositions this div after the product form.
+{%- endcomment -%}
+
+{% if product %}
+{%- liquid
+  assign numeric_product_id = product.id
+  assign shop_domain = shop.permanent_domain
+-%}
+{%- capture variant_prices_json -%}[{%- for v in product.variants -%}{"id":{{ v.id }},"price":{{ v.price }}}{%- unless forloop.last -%},{%- endunless -%}{%- endfor -%}]{%- endcapture -%}
+<div
+  id="etch-embed-{{ block.id }}"
+  class="etch-customization"
+  data-embed="true"
+  data-shop="{{ shop_domain | escape }}"
+  data-product-id="{{ numeric_product_id }}"
+  data-app-url="{{ block.settings.app_url | escape }}"
+  data-heading="{{ block.settings.heading | escape }}"
+  data-variant-prices="{{ variant_prices_json | escape }}"
+  data-currency="{{ shop.currency | escape }}"
+  {{ block.shopify_attributes }}
+  hidden
+>
+  <p class="etch-customization__loading" aria-live="polite">
+    Loading customization options&hellip;
+  </p>
+  <div class="etch-customization__fields" hidden></div>
+  <p class="etch-customization__error" role="alert" hidden></p>
+  <p class="etch-customization__price" aria-live="polite" hidden></p>
+</div>
+
+{{ 'etch-customization.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'etch-customization.js' | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Etch Customization",
+  "target": "body",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Personalize your item"
+    },
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "App URL",
+      "default": "https://etch.direct",
+      "info": "The URL of your Etch app. Do not change unless instructed."
+    }
+  ]
+}
+{% endschema %}
