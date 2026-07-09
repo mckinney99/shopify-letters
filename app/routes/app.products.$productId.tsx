@@ -233,7 +233,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const productGid = `gid://shopify/Product/${params.productId}`;
 
-  const [productRes, fields, pricingRules, conditions, config] = await Promise.all([
+  const [productRes, fields, pricingRules, conditions, config, fontAssets, colorSets, imageAssets, optionSets] = await Promise.all([
     admin.graphql(PRODUCT_QUERY, { variables: { id: productGid } }),
     prisma.customizationField.findMany({
       where: { shop: session.shop, productId: productGid },
@@ -251,6 +251,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       where: { shop_productId: { shop: session.shop, productId: productGid } },
       select: { published: true },
     }),
+    prisma.fontAsset.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, select: { id: true, name: true, url: true } }),
+    prisma.colorSet.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, include: { entries: { orderBy: { position: "asc" } } } }),
+    prisma.imageAsset.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, select: { id: true, name: true, url: true } }),
+    prisma.optionSet.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, include: { entries: { orderBy: { position: "asc" } } } }),
   ]);
 
   const { data } = await productRes.json();
@@ -269,6 +273,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     pricingRules,
     conditions,
     variantPrices,
+    assets: { fonts: fontAssets, colorSets, images: imageAssets, optionSets },
     // One-click theme-editor link to add the Etch widget to the product page.
     // Upgraded to pre-add the app block when the extension UUID is configured. See SL-70.
     themeEditorDeepLink: buildThemeEditorDeepLink({
@@ -527,16 +532,25 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
 // ── Field components ──────────────────────────────────────────────────────────
 
+type AssetLibrary = {
+  fonts: { id: string; name: string; url: string }[];
+  colorSets: { id: string; name: string; entries: { id: string; label: string; color: string; position: number }[] }[];
+  images: { id: string; name: string; url: string }[];
+  optionSets: { id: string; name: string; entries: { id: string; label: string; priceDelta: number; position: number }[] }[];
+};
+
 function FieldForm({
   field,
   actionType,
   onClose,
   onDirtyChange,
+  assets,
 }: {
   field?: FieldData;
   actionType: "create" | "update";
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  assets?: AssetLibrary;
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const [label, setLabel] = useState(field?.label ?? "");
@@ -705,7 +719,60 @@ function FieldForm({
           {listChoice && (
             <>
               <BlockStack gap="200">
-                <Text as="p" variant="bodyMd">Options</Text>
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="bodyMd">Options</Text>
+                  {assets && type !== "image-swatches" && type !== "swatches" && assets.optionSets.length > 0 && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="span" variant="bodySm" tone="subdued">Load from library:</Text>
+                      <select
+                        onChange={(e) => {
+                          const os = assets.optionSets.find((s) => s.id === e.target.value);
+                          if (os) setOptions(os.entries.map((en) => ({ label: en.label, priceDelta: String(en.priceDelta), swatchColor: "#000000", imageUrl: "" })));
+                          e.target.value = "";
+                        }}
+                        style={{ fontSize: "0.8125rem" }}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Choose an option set…</option>
+                        {assets.optionSets.map((os) => <option key={os.id} value={os.id}>{os.name}</option>)}
+                      </select>
+                    </InlineStack>
+                  )}
+                  {assets && type === "swatches" && assets.colorSets.length > 0 && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="span" variant="bodySm" tone="subdued">Load from library:</Text>
+                      <select
+                        onChange={(e) => {
+                          const cs = assets.colorSets.find((s) => s.id === e.target.value);
+                          if (cs) setOptions(cs.entries.map((en) => ({ label: en.label, priceDelta: "0", swatchColor: en.color, imageUrl: "" })));
+                          e.target.value = "";
+                        }}
+                        style={{ fontSize: "0.8125rem" }}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Choose a color set…</option>
+                        {assets.colorSets.map((cs) => <option key={cs.id} value={cs.id}>{cs.name}</option>)}
+                      </select>
+                    </InlineStack>
+                  )}
+                  {assets && type === "image-swatches" && assets.images.length > 0 && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="span" variant="bodySm" tone="subdued">Load from library:</Text>
+                      <select
+                        onChange={(e) => {
+                          const img = assets.images.find((im) => im.id === e.target.value);
+                          if (img) setOptions((prev) => [...prev, { label: img.name, priceDelta: "0", swatchColor: "#000000", imageUrl: img.url }]);
+                          e.target.value = "";
+                        }}
+                        style={{ fontSize: "0.8125rem" }}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Add image from library…</option>
+                        {assets.images.map((im) => <option key={im.id} value={im.id}>{im.name}</option>)}
+                      </select>
+                    </InlineStack>
+                  )}
+                </InlineStack>
                 {options.map((opt, i) => (
                   <InlineStack key={i} gap="200" blockAlign="end" wrap={false}>
                     {type === "swatches" && (
@@ -805,6 +872,16 @@ function FieldForm({
                   {BUILT_IN_FONTS.map((f) => (
                     <Checkbox key={f} label={f} checked={selectedFonts.includes(f)} onChange={() => toggleFont(f)} />
                   ))}
+                  {assets && assets.fonts.length > 0 && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="span" variant="bodySm" tone="subdued">From library:</Text>
+                      {assets.fonts.filter((f) => !selectedFonts.includes(f.name)).map((f) => (
+                        <Button key={f.id} size="slim" variant="plain" onClick={() => setSelectedFonts((prev) => [...prev, f.name])}>
+                          + {f.name}
+                        </Button>
+                      ))}
+                    </InlineStack>
+                  )}
                 </BlockStack>
               )}
               {/* Text color chooser (SL-82) */}
@@ -817,6 +894,23 @@ function FieldForm({
               {enableColors && (
                 <BlockStack gap="200">
                   <Text as="p" variant="bodySm" tone="subdued">Colors to offer</Text>
+                  {assets && assets.colorSets.length > 0 && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="span" variant="bodySm" tone="subdued">Load from library:</Text>
+                      <select
+                        onChange={(e) => {
+                          const cs = assets.colorSets.find((s) => s.id === e.target.value);
+                          if (cs) setTextColors(cs.entries.map((en) => ({ label: en.label, color: en.color })));
+                          e.target.value = "";
+                        }}
+                        style={{ fontSize: "0.8125rem" }}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Choose a color set…</option>
+                        {assets.colorSets.map((cs) => <option key={cs.id} value={cs.id}>{cs.name}</option>)}
+                      </select>
+                    </InlineStack>
+                  )}
                   {textColors.map((c, i) => (
                     <InlineStack key={i} gap="200" blockAlign="end" wrap={false}>
                       <input
@@ -944,6 +1038,7 @@ function FieldRow({
   field,
   allFields,
   conditions,
+  assets,
   isFirst,
   isLast,
   isEditing,
@@ -954,6 +1049,7 @@ function FieldRow({
   field: FieldData;
   allFields: FieldData[];
   conditions: FieldConditionData[];
+  assets?: AssetLibrary;
   isFirst: boolean;
   isLast: boolean;
   isEditing: boolean;
@@ -967,7 +1063,7 @@ function FieldRow({
   if (isEditing) {
     return (
       <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-        <FieldForm field={field} actionType="update" onClose={onEditClose} onDirtyChange={onDirtyChange} />
+        <FieldForm field={field} actionType="update" onClose={onEditClose} onDirtyChange={onDirtyChange} assets={assets} />
       </Box>
     );
   }
@@ -1460,7 +1556,7 @@ export function ErrorBoundary() {
 }
 
 export default function ProductDetailPage() {
-  const { product, published, fields, pricingRules, conditions, variantPrices, themeEditorDeepLink } = useLoaderData<typeof loader>();
+  const { product, published, fields, pricingRules, conditions, variantPrices, assets, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -1678,6 +1774,7 @@ export default function ProductDetailPage() {
                         field={field}
                         allFields={fields}
                         conditions={conditions}
+                        assets={assets}
                         isFirst={index === 0}
                         isLast={index === fields.length - 1}
                         isEditing={editingFieldId === field.id}
@@ -1690,7 +1787,7 @@ export default function ProductDetailPage() {
                       <Box padding="400">
                         <BlockStack gap="300">
                           <Text as="h3" variant="headingSm">New field</Text>
-                          <FieldForm actionType="create" onClose={handleAddClose} onDirtyChange={setFieldFormDirty} />
+                          <FieldForm actionType="create" onClose={handleAddClose} onDirtyChange={setFieldFormDirty} assets={assets} />
                         </BlockStack>
                       </Box>
                     )}

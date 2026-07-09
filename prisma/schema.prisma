@@ -132,6 +132,74 @@ model FieldCondition {
   @@index([shop, productId])
 }
 
+// ── SL-86: Assets library ────────────────────────────────────────────────────
+// All assets are shop-scoped. Fields reference assets by copying their values
+// at insert time (copy-on-use) so editing an asset never alters live products.
+
+model FontAsset {
+  id        String   @id @default(cuid())
+  shop      String
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop])
+}
+
+model ColorSet {
+  id        String          @id @default(cuid())
+  shop      String
+  name      String
+  entries   ColorSetEntry[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([shop])
+}
+
+model ColorSetEntry {
+  id         String   @id @default(cuid())
+  colorSetId String
+  label      String
+  color      String
+  position   Int      @default(0)
+
+  colorSet   ColorSet @relation(fields: [colorSetId], references: [id], onDelete: Cascade)
+}
+
+model ImageAsset {
+  id        String   @id @default(cuid())
+  shop      String
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop])
+}
+
+model OptionSet {
+  id        String           @id @default(cuid())
+  shop      String
+  name      String
+  entries   OptionSetEntry[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([shop])
+}
+
+model OptionSetEntry {
+  id          String    @id @default(cuid())
+  optionSetId String
+  label       String
+  priceDelta  Float     @default(0)
+  position    Int       @default(0)
+
+  optionSet   OptionSet @relation(fields: [optionSetId], references: [id], onDelete: Cascade)
+}
+
 model CharPriceGroup {
   id            String      @id @default(cuid())
   pricingRuleId String

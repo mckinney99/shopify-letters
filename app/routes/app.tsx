@@ -31,6 +31,7 @@ export default function App() {
         </a>
         <a href="/app/products">Products</a>
         <a href="/app/orders">Orders</a>
+        <a href="/app/assets">Assets</a>
         <a href="/app/support">Help &amp; Support</a>
       </NavMenu>
       <Outlet />
