@@ -8,79 +8,153 @@ import {
   BlockStack,
   InlineStack,
   Text,
-  Banner,
   Button,
   Box,
+  ProgressBar,
+  Icon,
   Divider,
+  Badge,
 } from "@shopify/polaris";
+import { CheckCircleIcon, MinusCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
+import { buildThemeEditorDeepLink } from "../utils/themeEditor";
 import prisma from "../db.server";
+import { useState, useEffect } from "react";
+
+async function checkWidgetActivated(shop: string, accessToken: string): Promise<boolean> {
+  const uuid = process.env.SHOPIFY_THEME_APP_EXTENSION_UUID;
+  if (!uuid) return false;
+  try {
+    const themesRes = await fetch(`https://${shop}/admin/api/2024-01/themes.json`, {
+      headers: { "X-Shopify-Access-Token": accessToken },
+    });
+    const themesData = (await themesRes.json()) as { themes: Array<{ id: number; role: string }> };
+    const mainTheme = themesData.themes?.find((t) => t.role === "main");
+    if (!mainTheme) return false;
+
+    const assetRes = await fetch(
+      `https://${shop}/admin/api/2024-01/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
+      { headers: { "X-Shopify-Access-Token": accessToken } }
+    );
+    const assetData = (await assetRes.json()) as { asset?: { value?: string } };
+    const content = assetData.asset?.value;
+    if (!content) return false;
+
+    const settings = JSON.parse(content);
+    // App embeds appear in current.blocks with shopify://app-blocks/{uuid}/{handle} keys or as block.type values
+    const blocks: Record<string, unknown> = settings?.current?.blocks ?? {};
+    return (
+      Object.keys(blocks).some((k) => k.includes(uuid)) ||
+      Object.values(blocks).some((b: any) => String(b?.type ?? "").includes(uuid))
+    );
+  } catch {
+    return false;
+  }
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const [totalCount, publishedCount] = await Promise.all([
-    prisma.productConfig.count({ where: { shop: session.shop } }),
+
+  const [enabledCount, publishedCount, widgetActivated] = await Promise.all([
+    prisma.productConfig.count({ where: { shop: session.shop, enabled: true } }),
     prisma.productConfig.count({ where: { shop: session.shop, published: true } }),
+    checkWidgetActivated(session.shop, session.accessToken ?? ""),
   ]);
-  return json({ totalCount, publishedCount });
+
+  const themeEditorUrl =
+    buildThemeEditorDeepLink({
+      shop: session.shop,
+      extensionUuid: process.env.SHOPIFY_THEME_APP_EXTENSION_UUID,
+    }) ?? `https://${session.shop}/admin/themes/current/editor`;
+
+  return json({ enabledCount, publishedCount, widgetActivated, themeEditorUrl, shop: session.shop });
 };
 
-function TopNav() {
+type StepRowProps = {
+  done: boolean;
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionUrl: string;
+  external?: boolean;
+};
+
+function StepRow({ done, title, description, actionLabel, actionUrl, external }: StepRowProps) {
   return (
-    <Box paddingBlockEnd="200">
-      <InlineStack gap="400" align="start">
-        <Button url="/app/products" variant="plain">Products</Button>
-        <Button url="/app/orders" variant="plain">Orders</Button>
-        <Button url="/app/support" variant="plain">Help &amp; Support</Button>
-      </InlineStack>
-    </Box>
+    <InlineStack gap="400" align="start" blockAlign="start" wrap={false}>
+      <Box minWidth="24px" paddingBlockStart="050">
+        <Icon
+          source={done ? CheckCircleIcon : MinusCircleIcon}
+          tone={done ? "success" : "subdued"}
+        />
+      </Box>
+      <BlockStack gap="100">
+        <InlineStack gap="200" blockAlign="center">
+          <Text as="p" fontWeight={done ? "regular" : "semibold"} tone={done ? "subdued" : undefined}>
+            {title}
+          </Text>
+          {done && <Badge tone="success">Done</Badge>}
+        </InlineStack>
+        {!done && (
+          <>
+            <Text as="p" tone="subdued">{description}</Text>
+            <Box paddingBlockStart="100">
+              <Button url={actionUrl} target={external ? "_blank" : undefined} variant="primary" size="slim">
+                {actionLabel}
+              </Button>
+            </Box>
+          </>
+        )}
+      </BlockStack>
+    </InlineStack>
   );
 }
 
-export default function Index() {
-  const { totalCount, publishedCount } = useLoaderData<typeof loader>();
+const DISMISSED_KEY = "etch_setup_guide_dismissed";
 
-  if (publishedCount === 0) {
-    return (
-      <Page title="Welcome to Etch">
-        <Layout>
-          <Layout.Section>
-            <BlockStack gap="500">
-              <TopNav />
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">What is Etch?</Text>
-                  <Text as="p">
-                    Etch lets you charge customers based on what they type, perfect for engraving,
-                    monogramming, embroidery, and any product with personalised text. Set a price per
-                    character and Etch automatically adds the right amount to the cart total.
-                  </Text>
-                  <Divider />
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">How to get set up (takes about 2 minutes):</Text>
-                    <BlockStack gap="100">
-                      <Text as="p"><b>1. Pick a product:</b> choose any product from your Shopify store</Text>
-                      <Text as="p"><b>2. Add a text field:</b> tell Etch what your customer will type (e.g. "Enter engraving text")</Text>
-                      <Text as="p"><b>3. Set your pricing:</b> choose a flat fee and/or a price per character typed</Text>
-                      <Text as="p"><b>4. Publish:</b> go live on your storefront instantly, no code required</Text>
-                    </BlockStack>
-                  </BlockStack>
-                  <Box>
-                    <Button url="/app/products" variant="primary">Go to Products</Button>
-                  </Box>
-                </BlockStack>
-              </Card>
-              <Banner title="Step 1 of 5: Head to Products" tone="info">
-                <Text as="p">
-                  Click <b>Products</b> to see your Shopify products.
-                  From there you can select which products you would like to add custom pricing to.
-                </Text>
-              </Banner>
-            </BlockStack>
-          </Layout.Section>
-        </Layout>
-      </Page>
-    );
+export default function Index() {
+  const { enabledCount, publishedCount, widgetActivated, themeEditorUrl, shop } =
+    useLoaderData<typeof loader>();
+
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    setDismissed(localStorage.getItem(DISMISSED_KEY) === "1");
+  }, []);
+
+  const steps = [
+    {
+      done: widgetActivated,
+      title: "Activate the Etch widget in your theme",
+      description: "Open your theme editor and add the Etch widget to your product page template.",
+      actionLabel: "Open theme editor",
+      actionUrl: themeEditorUrl,
+      external: true,
+    },
+    {
+      done: enabledCount > 0,
+      title: "Add customization to a product",
+      description: "Pick a product and add a text field, dropdown, or other input.",
+      actionLabel: "Go to Products",
+      actionUrl: "/app/products",
+    },
+    {
+      done: publishedCount > 0,
+      title: "Preview it on your store",
+      description: "Publish a configured product and open it on your storefront to see Etch in action.",
+      actionLabel: "View store",
+      actionUrl: `https://${shop}`,
+      external: true,
+    },
+  ];
+
+  const doneCount = steps.filter((s) => s.done).length;
+  const allDone = doneCount === steps.length;
+  const showGuide = !dismissed;
+
+  function handleDismiss() {
+    localStorage.setItem(DISMISSED_KEY, "1");
+    setDismissed(true);
   }
 
   return (
@@ -88,25 +162,63 @@ export default function Index() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
-            <TopNav />
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Your products</Text>
-                <InlineStack gap="800">
-                  <BlockStack gap="100">
-                    <Text as="p" variant="headingXl" fontWeight="bold">{publishedCount}</Text>
-                    <Text as="p" tone="subdued">Active</Text>
+            {showGuide && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">Setup guide</Text>
+                    <Text as="p" tone="subdued">{doneCount} of {steps.length} complete</Text>
+                  </InlineStack>
+                  <ProgressBar progress={(doneCount / steps.length) * 100} size="small" tone="success" />
+                  <BlockStack gap="400">
+                    {steps.map((step, i) => (
+                      <Box key={i}>
+                        {i > 0 && <Box paddingBlockEnd="400"><Divider /></Box>}
+                        <StepRow {...step} />
+                      </Box>
+                    ))}
                   </BlockStack>
-                  <BlockStack gap="100">
-                    <Text as="p" variant="headingXl" fontWeight="bold">{totalCount}</Text>
-                    <Text as="p" tone="subdued">Configured</Text>
-                  </BlockStack>
-                </InlineStack>
-                <Box>
-                  <Button url="/app/products" variant="primary">Add custom pricing</Button>
-                </Box>
-              </BlockStack>
-            </Card>
+                  {allDone && (
+                    <Box>
+                      <Button onClick={handleDismiss} variant="plain">Dismiss guide</Button>
+                    </Box>
+                  )}
+                </BlockStack>
+              </Card>
+            )}
+
+            {publishedCount > 0 && (
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">Your products</Text>
+                  <InlineStack gap="800">
+                    <BlockStack gap="100">
+                      <Text as="p" variant="headingXl" fontWeight="bold">{publishedCount}</Text>
+                      <Text as="p" tone="subdued">Published</Text>
+                    </BlockStack>
+                    <BlockStack gap="100">
+                      <Text as="p" variant="headingXl" fontWeight="bold">{enabledCount}</Text>
+                      <Text as="p" tone="subdued">Configured</Text>
+                    </BlockStack>
+                  </InlineStack>
+                  <Box>
+                    <Button url="/app/products" variant="primary">Manage products</Button>
+                  </Box>
+                </BlockStack>
+              </Card>
+            )}
+
+            {publishedCount === 0 && !showGuide && (
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">Get started</Text>
+                  <Text as="p">Add customization fields to your products to start charging input-based pricing.</Text>
+                  <Box>
+                    <Button url="/app/products" variant="primary">Go to Products</Button>
+                  </Box>
+                </BlockStack>
+              </Card>
+            )}
           </BlockStack>
         </Layout.Section>
       </Layout>
