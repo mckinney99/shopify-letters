@@ -250,7 +250,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     }),
     prisma.productConfig.findUnique({
       where: { shop_productId: { shop: session.shop, productId: productGid } },
-      select: { published: true },
+      select: { published: true, previewEnabled: true },
     }),
     prisma.fontAsset.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, select: { id: true, name: true, url: true } }),
     prisma.colorSet.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, include: { entries: { orderBy: { position: "asc" } } } }),
@@ -271,6 +271,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return json({
     product: data.product as { id: string; title: string },
     published: config?.published ?? false,
+    previewEnabled: config?.previewEnabled ?? false,
     fields,
     pricingRules,
     conditions,
@@ -494,6 +495,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       where: { shop_productId: { shop, productId: productGid } },
       update: { published },
       create: { shop, productId: productGid, published },
+    });
+    return json({ ok: true });
+  }
+
+  if (_action === "toggle_preview") {
+    const previewEnabled = form.get("previewEnabled") === "true";
+    await prisma.productConfig.upsert({
+      where: { shop_productId: { shop, productId: productGid } },
+      update: { previewEnabled },
+      create: { shop, productId: productGid, previewEnabled },
     });
     return json({ ok: true });
   }
@@ -1710,7 +1721,7 @@ function SaveAsTemplateButton() {
 }
 
 export default function ProductDetailPage() {
-  const { product, published, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
+  const { product, published, previewEnabled, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -1767,6 +1778,12 @@ export default function ProductDetailPage() {
 
   const publishFetcher = useFetcher<{ ok?: boolean }>();
   const isPublishing = publishFetcher.state !== "idle";
+
+  const previewFetcher = useFetcher<{ ok?: boolean }>();
+  const optimisticPreview =
+    previewFetcher.state !== "idle"
+      ? previewFetcher.formData?.get("previewEnabled") === "true"
+      : previewEnabled;
   const optimisticPublished =
     isPublishing
       ? publishFetcher.formData?.get("published") === "true"
@@ -1914,6 +1931,29 @@ export default function ProductDetailPage() {
               )}
               {fields.length > 0 && (
                 <SaveAsTemplateButton />
+              )}
+              {fields.some((f) => f.type === "text" || f.type === "textarea") && (
+                <Card>
+                  <InlineStack align="space-between" blockAlign="center">
+                    <BlockStack gap="100">
+                      <Text as="p" fontWeight="semibold">Text preview</Text>
+                      <Text as="p" tone="subdued">
+                        Show the customer's text overlaid on the product image as they type.
+                      </Text>
+                    </BlockStack>
+                    <Checkbox
+                      label="Enable preview"
+                      labelHidden
+                      checked={optimisticPreview}
+                      onChange={(checked) =>
+                        previewFetcher.submit(
+                          { _action: "toggle_preview", previewEnabled: String(checked) },
+                          { method: "post" }
+                        )
+                      }
+                    />
+                  </InlineStack>
+                </Card>
               )}
               <Card padding="0">
                 {fields.length === 0 && !showAddForm ? (

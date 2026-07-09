@@ -44,7 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [config, dbFields, pricingRules, conditions] = await Promise.all([
     prisma.productConfig.findUnique({
       where: { shop_productId: { shop, productId: productGid } },
-      select: { published: true },
+      select: { published: true, previewEnabled: true },
     }),
     prisma.customizationField.findMany({
       where: { shop, productId: productGid },
@@ -95,7 +95,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     charGroups: ruleByFieldId[f.id]?.charGroups ?? [],
   }));
 
-  return json({ fields, conditions }, { headers: CORS_HEADERS });
+  return json({ fields, conditions, previewEnabled: config.previewEnabled }, { headers: CORS_HEADERS });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {

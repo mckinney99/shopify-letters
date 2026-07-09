@@ -49,6 +49,7 @@
         loadingEl.hidden = true;
         renderFields(container, data.fields, data.conditions || [], shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency);
         fieldsEl.hidden = false;
+        if (data.previewEnabled) initPreview(container, data.fields);
       })
       .catch(function () {
         loadingEl.hidden = true;
@@ -1247,6 +1248,61 @@
 
   function formatDollar(amount) {
     return '$' + Number(amount).toFixed(2);
+  }
+
+  // Overlays the shopper's typed text on the product image in real time.
+  // Decoupled from pricing/cart plumbing — display only, no hidden inputs touched.
+  function initPreview(container, fields) {
+    var TEXT_TYPES = ['text', 'textarea'];
+    var textFields = fields.filter(function(f) { return TEXT_TYPES.indexOf(f.type) !== -1; });
+    if (textFields.length === 0) return;
+
+    // Find the product's featured image; try common selectors across popular themes.
+    var SELECTORS = [
+      '.product__media--featured img',
+      '.product__media img',
+      '.product-single__photo img',
+      '.product-featured-media img',
+      '[data-product-featured-image]',
+      '.product-image img',
+    ];
+    var productImg = null;
+    for (var si = 0; si < SELECTORS.length; si++) {
+      productImg = document.querySelector(SELECTORS[si]);
+      if (productImg) break;
+    }
+    if (!productImg) return;
+
+    var imgContainer = productImg.parentElement;
+    if (window.getComputedStyle(imgContainer).position === 'static') {
+      imgContainer.style.position = 'relative';
+    }
+
+    var overlay = document.createElement('div');
+    overlay.className = 'etch-preview-overlay';
+    overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:12px;box-sizing:border-box';
+    imgContainer.appendChild(overlay);
+
+    var blockId = container.id;
+
+    function updateOverlay() {
+      overlay.innerHTML = '';
+      textFields.forEach(function(field) {
+        var el = document.getElementById('etch-' + blockId + '-' + field.id);
+        var text = el ? el.value.trim() : '';
+        if (!text) return;
+        var span = document.createElement('span');
+        span.textContent = text;
+        span.style.cssText = 'display:block;color:#fff;font-size:clamp(14px,4vw,28px);font-weight:bold;text-align:center;text-shadow:0 1px 6px rgba(0,0,0,0.85);word-break:break-word;max-width:100%;line-height:1.3';
+        overlay.appendChild(span);
+      });
+    }
+
+    container.addEventListener('input', function(e) {
+      if (e.target.classList && e.target.classList.contains('etch-customization__input')) {
+        updateOverlay();
+      }
+    });
   }
 
   // Boot all blocks on the page. Guard prevents double-init when a theme places
