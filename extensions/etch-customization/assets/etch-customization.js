@@ -179,6 +179,8 @@
     formTarget.appendChild(snapBreakdownInput);
     formTarget.appendChild(snapVersionInput);
     formTarget.appendChild(snapCorrelationInput);
+    var snapPreviewInput = makeHiddenInput('properties[_etch_preview_image]', '');
+    formTarget.appendChild(snapPreviewInput);
 
     function updateBtn() {
       if (!cartBtn) return;
@@ -207,6 +209,10 @@
     }
 
     // Guard against edge cases where the button somehow submits without a snapshot
+    // _etchCapturing: true while the async snapshot+upload is in flight (prevents double-submit)
+    // _etchSnapshotReady: one-shot flag that lets the programmatic re-submit bypass capture
+    var _etchCapturing = false;
+    var _etchSnapshotReady = false;
     if (productForm) {
       productForm.addEventListener('submit', function (e) {
         if (latestPriceData === null) {
@@ -215,7 +221,31 @@
           errorEl.hidden = false;
           return;
         }
-        logAddToCart(shop, productId, appUrl, correlationId, inputMap);
+        // Second pass: snapshot already captured, let the form submit naturally.
+        if (_etchSnapshotReady) {
+          _etchSnapshotReady = false;
+          _etchCapturing = false;
+          logAddToCart(shop, productId, appUrl, correlationId, inputMap);
+          return;
+        }
+        if (_etchCapturing) { e.preventDefault(); return; }
+        var previewOverlay = container.querySelector('.etch-preview-overlay');
+        if (previewOverlay) {
+          e.preventDefault();
+          _etchCapturing = true;
+          capturePreviewSnapshot(previewOverlay, appUrl, shop, function(url) {
+            snapPreviewInput.value = url || '';
+            _etchSnapshotReady = true;
+            if (productForm.requestSubmit) {
+              productForm.requestSubmit();
+            } else {
+              logAddToCart(shop, productId, appUrl, correlationId, inputMap);
+              productForm.submit();
+            }
+          });
+        } else {
+          logAddToCart(shop, productId, appUrl, correlationId, inputMap);
+        }
       });
     }
 
@@ -588,6 +618,80 @@
         body: body,
         keepalive: true,
       }).catch(function () {});
+    }
+  }
+
+  // Captures the current preview overlay as a PNG, uploads it to /api/upload,
+  // and calls cb(url) with the CDN URL, or cb(null) on any failure.
+  // A 5-second hard timeout guarantees add-to-cart is never blocked.
+  function capturePreviewSnapshot(overlay, appUrl, shop, cb) {
+    var called = false;
+    function done(url) { if (!called) { called = true; cb(url); } }
+    setTimeout(function() { done(null); }, 5000);
+
+    try {
+      var overlayRect = overlay.getBoundingClientRect();
+      var cw = Math.round(overlayRect.width) || 800;
+      var ch = Math.round(overlayRect.height) || 800;
+      var canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) { done(null); return; }
+
+      function drawSpans() {
+        overlay.querySelectorAll('span').forEach(function(span) {
+          if (!span.textContent.trim() || span.style.display === 'none') return;
+          var r = span.getBoundingClientRect();
+          var x = r.left - overlayRect.left;
+          var y = r.top - overlayRect.top;
+          var cs = window.getComputedStyle(span);
+          ctx.save();
+          ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+          ctx.fillStyle = cs.color || '#fff';
+          ctx.shadowColor = 'rgba(0,0,0,0.7)';
+          ctx.shadowBlur = 4;
+          ctx.textBaseline = 'top';
+          ctx.fillText(span.textContent, x, y, r.width || cw);
+          ctx.restore();
+        });
+      }
+
+      function upload() {
+        drawSpans();
+        canvas.toBlob(function(blob) {
+          if (!blob) { done(null); return; }
+          var fd = new FormData();
+          fd.append('shop', shop);
+          fd.append('file', blob, 'etch-preview.png');
+          fetch(appUrl + '/api/upload', { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(j) { done(j.url || null); })
+            .catch(function() { done(null); });
+        }, 'image/png');
+      }
+
+      // Try to draw the product image as background; skip on CORS block.
+      var imgEl = null;
+      var imgSels = ['.product__media--featured img', '.product__media img',
+        '.product-single__photo img', '.product-featured-media img',
+        '[data-product-featured-image]', '.product-image img'];
+      for (var si = 0; si < imgSels.length; si++) {
+        imgEl = document.querySelector(imgSels[si]);
+        if (imgEl) break;
+      }
+      if (imgEl && imgEl.src) {
+        var bgImg = new Image();
+        bgImg.crossOrigin = 'anonymous';
+        bgImg.onload = function() { ctx.drawImage(bgImg, 0, 0, cw, ch); upload(); };
+        bgImg.onerror = function() { upload(); };
+        bgImg.src = imgEl.src;
+      } else {
+        upload();
+      }
+    } catch(err) {
+      console.warn('[etch] preview snapshot error:', err);
+      done(null);
     }
   }
 
