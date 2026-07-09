@@ -132,6 +132,20 @@ model FieldCondition {
   @@index([shop, productId])
 }
 
+// SL-87: merchant-saved personalization templates.
+// shop = null is reserved for built-ins (kept as constants, not DB rows).
+// payload = JSON array of TemplateField objects (see app/utils/templates.ts).
+model Template {
+  id        String   @id @default(cuid())
+  shop      String
+  name      String
+  payload   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop])
+}
+
 // ── SL-86: Assets library ────────────────────────────────────────────────────
 // All assets are shop-scoped. Fields reference assets by copying their values
 // at insert time (copy-on-use) so editing an asset never alters live products.

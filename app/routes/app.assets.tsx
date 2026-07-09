@@ -28,6 +28,7 @@ type ColorEntry = { label: string; color: string };
 type ColorSetRow = { id: string; name: string; entries: (ColorEntry & { id: string; position: number })[] };
 type OptionEntry = { label: string; priceDelta: string };
 type OptionSetRow = { id: string; name: string; entries: (OptionEntry & { id: string; position: number })[] };
+type TemplateRow = { id: string; name: string; payload: string };
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const tab = url.searchParams.get("tab") || "fonts";
 
-  const [fonts, colorSets, images, optionSets] = await Promise.all([
+  const [fonts, colorSets, images, optionSets, templates] = await Promise.all([
     tab === "fonts"
       ? prisma.fontAsset.findMany({ where: { shop }, orderBy: { name: "asc" } })
       : Promise.resolve([] as FontRow[]),
@@ -58,9 +59,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
           orderBy: { name: "asc" },
         })
       : Promise.resolve([] as OptionSetRow[]),
+    tab === "templates"
+      ? prisma.template.findMany({ where: { shop }, orderBy: { name: "asc" } })
+      : Promise.resolve([] as TemplateRow[]),
   ]);
 
-  return json({ tab, fonts, colorSets, images, optionSets });
+  return json({ tab, fonts, colorSets, images, optionSets, templates });
 }
 
 // ── Action ────────────────────────────────────────────────────────────────────
@@ -148,6 +152,12 @@ export async function action({ request }: ActionFunctionArgs) {
   if (intent === "delete_option_set") {
     const id = form.get("id") as string;
     await prisma.optionSet.deleteMany({ where: { id, shop } });
+    return json({ ok: true });
+  }
+
+  if (intent === "delete_template") {
+    const id = form.get("id") as string;
+    await prisma.template.deleteMany({ where: { id, shop } });
     return json({ ok: true });
   }
 
@@ -508,6 +518,50 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
   );
 }
 
+// ── Templates tab ─────────────────────────────────────────────────────────────
+
+function TemplatesTab({ templates }: { templates: TemplateRow[] }) {
+  return (
+    <BlockStack gap="400">
+      <Card>
+        <Box padding="400">
+          <BlockStack gap="200">
+            <Text variant="headingSm" as="h3">Saved templates ({templates.length})</Text>
+            <Text as="p" tone="subdued" variant="bodySm">
+              Templates are saved from the product Fields tab ("Save as template"). Apply them from any product's empty-field state.
+            </Text>
+          </BlockStack>
+        </Box>
+        <Divider />
+        <Box paddingInline="400">
+          {templates.length === 0 ? (
+            <Box paddingBlock="400">
+              <Text as="p" tone="subdued">No saved templates yet. Go to a product's Fields tab and click "Save as template".</Text>
+            </Box>
+          ) : templates.map((t) => {
+            let fieldCount = 0;
+            let fieldLabels = "";
+            try {
+              const fields = JSON.parse(t.payload) as Array<{ label: string }>;
+              fieldCount = fields.length;
+              fieldLabels = fields.map((f) => f.label).join(", ");
+            } catch { /* ok */ }
+            return (
+              <AssetRow key={t.id}>
+                <BlockStack gap="050">
+                  <Text as="span" fontWeight="semibold">{t.name}</Text>
+                  <Text as="span" tone="subdued" variant="bodySm">{fieldCount} field{fieldCount !== 1 ? "s" : ""}: {fieldLabels}</Text>
+                </BlockStack>
+                <DeleteButton intent="delete_template" id={t.id} />
+              </AssetRow>
+            );
+          })}
+        </Box>
+      </Card>
+    </BlockStack>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -515,10 +569,11 @@ const TABS = [
   { id: "colors", content: "Colors" },
   { id: "images", content: "Images" },
   { id: "options", content: "Option sets" },
+  { id: "templates", content: "Templates" },
 ];
 
 export default function AssetsPage() {
-  const { tab, fonts, colorSets, images, optionSets } = useLoaderData<typeof loader>();
+  const { tab, fonts, colorSets, images, optionSets, templates } = useLoaderData<typeof loader>();
   const [, setSearchParams] = useSearchParams();
 
   const selectedIndex = TABS.findIndex((t) => t.id === tab);
@@ -530,13 +585,14 @@ export default function AssetsPage() {
   );
 
   return (
-    <Page title="Assets" subtitle="Reusable fonts, colors, images, and option sets — copy into any field.">
+    <Page title="Assets" subtitle="Reusable fonts, colors, images, option sets, and templates — copy into any field.">
       <Tabs tabs={TABS} selected={activeIndex} onSelect={handleTabChange}>
         <Box paddingBlockStart="400">
           {activeIndex === 0 && <FontsTab fonts={fonts as FontRow[]} />}
           {activeIndex === 1 && <ColorsTab colorSets={colorSets as ColorSetRow[]} />}
           {activeIndex === 2 && <ImagesTab images={images as ImageRow[]} />}
           {activeIndex === 3 && <OptionSetsTab optionSets={optionSets as OptionSetRow[]} />}
+          {activeIndex === 4 && <TemplatesTab templates={templates as TemplateRow[]} />}
         </Box>
       </Tabs>
     </Page>

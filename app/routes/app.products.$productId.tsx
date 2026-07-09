@@ -25,6 +25,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
 import { buildThemeEditorDeepLink } from "../utils/themeEditor";
+import { BUILT_IN_TEMPLATES, type TemplateField } from "../utils/templates";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -233,7 +234,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const productGid = `gid://shopify/Product/${params.productId}`;
 
-  const [productRes, fields, pricingRules, conditions, config, fontAssets, colorSets, imageAssets, optionSets] = await Promise.all([
+  const [productRes, fields, pricingRules, conditions, config, fontAssets, colorSets, imageAssets, optionSets, merchantTemplates] = await Promise.all([
     admin.graphql(PRODUCT_QUERY, { variables: { id: productGid } }),
     prisma.customizationField.findMany({
       where: { shop: session.shop, productId: productGid },
@@ -255,6 +256,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     prisma.colorSet.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, include: { entries: { orderBy: { position: "asc" } } } }),
     prisma.imageAsset.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, select: { id: true, name: true, url: true } }),
     prisma.optionSet.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, include: { entries: { orderBy: { position: "asc" } } } }),
+    prisma.template.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, select: { id: true, name: true, payload: true } }),
   ]);
 
   const { data } = await productRes.json();
@@ -274,6 +276,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     conditions,
     variantPrices,
     assets: { fonts: fontAssets, colorSets, images: imageAssets, optionSets },
+    merchantTemplates,
     // One-click theme-editor link to add the Etch widget to the product page.
     // Upgraded to pre-add the app block when the extension UUID is configured. See SL-70.
     themeEditorDeepLink: buildThemeEditorDeepLink({
@@ -524,6 +527,69 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const conditionId = form.get("conditionId") as string;
     await prisma.fieldCondition.deleteMany({ where: { id: conditionId, shop } });
     await syncPricingMetafield(admin, shop, productGid);
+    return json({ ok: true });
+  }
+
+  // ── Template actions ───────────────────────────────────────────────────────
+
+  if (_action === "apply_template") {
+    const payloadRaw = form.get("payload") as string;
+    let templateFields: TemplateField[];
+    try {
+      templateFields = JSON.parse(payloadRaw) as TemplateField[];
+    } catch {
+      return json({ error: "Invalid template payload." }, { status: 422 });
+    }
+    const existingCount = await prisma.customizationField.count({ where: { shop, productId: productGid } });
+    for (let i = 0; i < templateFields.length; i++) {
+      const f = templateFields[i];
+      const created = await prisma.customizationField.create({
+        data: {
+          shop, productId: productGid, label: f.label, type: f.type,
+          required: f.required, minChars: f.minChars, maxChars: f.maxChars,
+          allowedChars: f.allowedChars, disallowedChars: f.disallowedChars,
+          allowSpaces: f.allowSpaces, countSpaces: f.countSpaces,
+          helpText: f.helpText, dateFutureOnly: f.dateFutureOnly,
+          fontOptions: f.fontOptions, textColorOptions: f.textColorOptions,
+          fileAccept: f.fileAccept, position: existingCount + i,
+        },
+      });
+      if (f.options.length > 0) {
+        await prisma.fieldOption.createMany({
+          data: f.options.map((o, j) => ({
+            fieldId: created.id, label: o.label, priceDelta: o.priceDelta,
+            swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, position: j,
+          })),
+        });
+      }
+    }
+    await syncPricingMetafield(admin, shop, productGid);
+    return json({ ok: true });
+  }
+
+  if (_action === "save_as_template") {
+    const name = ((form.get("templateName") as string) ?? "").trim();
+    if (!name) return json({ error: "Template name is required." }, { status: 422 });
+    const currentFields = await prisma.customizationField.findMany({
+      where: { shop, productId: productGid },
+      orderBy: { position: "asc" },
+      include: { options: { orderBy: { position: "asc" } } },
+    });
+    if (currentFields.length === 0) return json({ error: "No fields to save." }, { status: 422 });
+    const payload: TemplateField[] = currentFields.map((f) => ({
+      label: f.label, type: f.type, required: f.required,
+      minChars: f.minChars, maxChars: f.maxChars,
+      allowedChars: f.allowedChars, disallowedChars: f.disallowedChars,
+      allowSpaces: f.allowSpaces, countSpaces: f.countSpaces,
+      helpText: f.helpText, dateFutureOnly: f.dateFutureOnly,
+      fontOptions: f.fontOptions, textColorOptions: f.textColorOptions,
+      fileAccept: f.fileAccept,
+      options: f.options.map((o) => ({
+        label: o.label, priceDelta: o.priceDelta,
+        swatchColor: o.swatchColor ?? undefined, imageUrl: o.imageUrl ?? undefined,
+      })),
+    }));
+    await prisma.template.create({ data: { shop, name, payload: JSON.stringify(payload) } });
     return json({ ok: true });
   }
 
@@ -1555,8 +1621,96 @@ export function ErrorBoundary() {
   );
 }
 
+// ── Template picker (shown in empty state) ────────────────────────────────────
+
+function TemplatePicker({ merchantTemplates }: { merchantTemplates: { id: string; name: string; payload: string }[] }) {
+  const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  const busy = fetcher.state !== "idle";
+
+  function applyTemplate(payload: string) {
+    fetcher.submit({ _action: "apply_template", payload }, { method: "post" });
+  }
+
+  const allTemplates = [
+    ...BUILT_IN_TEMPLATES.map((t) => ({ id: t.id, name: t.name, description: t.description, payload: JSON.stringify(t.fields), fieldCount: t.fields.length })),
+    ...merchantTemplates.map((t) => {
+      let fieldCount = 0;
+      try { fieldCount = (JSON.parse(t.payload) as unknown[]).length; } catch { /* ok */ }
+      return { id: t.id, name: t.name, description: `${fieldCount} saved field${fieldCount !== 1 ? "s" : ""}`, payload: t.payload, fieldCount };
+    }),
+  ];
+
+  if (allTemplates.length === 0) return null;
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <Text variant="headingSm" as="h3">Start from a template</Text>
+        <Text as="p" tone="subdued" variant="bodySm">Pick a starting point and adjust from there — or skip this and add fields manually below.</Text>
+        {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          {allTemplates.map((t) => (
+            <div key={t.id} style={{ border: "1px solid #e1e3e5", borderRadius: "8px", padding: "1rem", minWidth: "10rem", maxWidth: "14rem", flex: "1 1 10rem" }}>
+              <BlockStack gap="200">
+                <Text as="span" fontWeight="semibold">{t.name}</Text>
+                <Text as="span" variant="bodySm" tone="subdued">{t.description}</Text>
+                <Button size="slim" onClick={() => applyTemplate(t.payload)} loading={busy} disabled={busy}>
+                  Apply
+                </Button>
+              </BlockStack>
+            </div>
+          ))}
+        </div>
+      </BlockStack>
+    </Card>
+  );
+}
+
+// ── Save as template button ───────────────────────────────────────────────────
+
+function SaveAsTemplateButton() {
+  const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  const [name, setName] = useState("");
+  const [open, setOpen] = useState(false);
+  const busy = fetcher.state !== "idle";
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok) {
+      setOpen(false);
+      setName("");
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  return (
+    <>
+      <div>
+        <Button variant="plain" onClick={() => setOpen(true)}>Save as template</Button>
+      </div>
+      <Modal open={open} onClose={() => setOpen(false)} title="Save fields as template">
+        <Modal.Section>
+          <BlockStack gap="300">
+            {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
+            <TextField label="Template name" value={name} onChange={setName} autoComplete="off" placeholder="e.g. Jewelry engraving" helpText="Saved templates can be applied to other products from the Assets section." />
+            <InlineStack gap="200">
+              <Button
+                variant="primary"
+                loading={busy}
+                disabled={busy || !name.trim()}
+                onClick={() => fetcher.submit({ _action: "save_as_template", templateName: name }, { method: "post" })}
+              >
+                Save template
+              </Button>
+              <Button onClick={() => setOpen(false)}>Cancel</Button>
+            </InlineStack>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+    </>
+  );
+}
+
 export default function ProductDetailPage() {
-  const { product, published, fields, pricingRules, conditions, variantPrices, assets, themeEditorDeepLink } = useLoaderData<typeof loader>();
+  const { product, published, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -1754,6 +1908,12 @@ export default function ProductDetailPage() {
                     </Text>
                   </BlockStack>
                 </Banner>
+              )}
+              {fields.length === 0 && !showAddForm && (
+                <TemplatePicker merchantTemplates={merchantTemplates} />
+              )}
+              {fields.length > 0 && (
+                <SaveAsTemplateButton />
               )}
               <Card padding="0">
                 {fields.length === 0 && !showAddForm ? (
