@@ -1325,6 +1325,17 @@
         var text = el ? el.value.trim() : '';
         var span = getOrCreateSpan(field);
         span.textContent = text;
+        // Mirror the shopper's chosen font and color — set by font/color pickers
+        // directly on the input element's inline style.
+        if (el) {
+          span.style.fontFamily = el.style.fontFamily || 'inherit';
+          var chosenColor = el.style.color;
+          span.style.color = chosenColor || '#fff';
+          // Reduce shadow contrast when the color is light (non-default)
+          span.style.textShadow = chosenColor
+            ? '0 1px 3px rgba(0,0,0,0.5)'
+            : '0 1px 6px rgba(0,0,0,0.85)';
+        }
         span.style.display = text ? (field.previewX != null ? 'flex' : 'block') : 'none';
       });
     }
@@ -1335,6 +1346,17 @@
     container.addEventListener('input', function(e) {
       if (e.target.classList && e.target.classList.contains('etch-customization__input')) {
         updateOverlay();
+      }
+    });
+
+    // Font pills and color swatches set inline style on the input element directly;
+    // they don't fire an 'input' event. Defer by one tick so the click handler
+    // runs first and the style is already updated when we read it.
+    container.addEventListener('click', function(e) {
+      if (e.target.classList &&
+          (e.target.classList.contains('etch-customization__font-pill') ||
+           e.target.classList.contains('etch-customization__color-swatch'))) {
+        setTimeout(updateOverlay, 0);
       }
     });
   }
