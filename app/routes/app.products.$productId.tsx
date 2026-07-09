@@ -32,6 +32,9 @@ const PRODUCT_QUERY = `
     product(id: $id) {
       id
       title
+      featuredImage {
+        url
+      }
       variants(first: 50) {
         edges {
           node {
@@ -270,6 +273,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   return json({
     product: data.product as { id: string; title: string },
+    productImageUrl: (data.product as any).featuredImage?.url ?? null,
     published: config?.published ?? false,
     previewEnabled: config?.previewEnabled ?? false,
     fields,
@@ -505,6 +509,21 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       where: { shop_productId: { shop, productId: productGid } },
       update: { previewEnabled },
       create: { shop, productId: productGid, previewEnabled },
+    });
+    return json({ ok: true });
+  }
+
+  if (_action === "save_preview_placement") {
+    const fieldId = form.get("fieldId") as string;
+    if (!fieldId) return json({ ok: false }, { status: 400 });
+    await prisma.customizationField.updateMany({
+      where: { id: fieldId, shop },
+      data: {
+        previewX: parseFloat(form.get("previewX") as string),
+        previewY: parseFloat(form.get("previewY") as string),
+        previewW: parseFloat(form.get("previewW") as string),
+        previewH: parseFloat(form.get("previewH") as string),
+      },
     });
     return json({ ok: true });
   }
@@ -1720,8 +1739,168 @@ function SaveAsTemplateButton() {
   );
 }
 
+type PlacementBox = { x: number; y: number; w: number; h: number };
+
+const BOX_COLORS = ["#5c6ac4", "#47c1bf", "#f49342", "#de3618", "#50b83c"];
+
+function PreviewPlacementBoxEditor({
+  fields,
+  productImageUrl,
+}: {
+  fields: FieldData[];
+  productImageUrl: string | null;
+}) {
+  const textFields = fields.filter((f) => f.type === "text" || f.type === "textarea");
+  const placementFetcher = useFetcher();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [placements, setPlacementBoxs] = useState<Record<string, PlacementBox>>(() => {
+    const map: Record<string, PlacementBox> = {};
+    textFields.forEach((f) => {
+      map[f.id] = {
+        x: (f as any).previewX ?? 10,
+        y: (f as any).previewY ?? 40,
+        w: (f as any).previewW ?? 80,
+        h: (f as any).previewH ?? 15,
+      };
+    });
+    return map;
+  });
+
+  const placementsRef = useRef(placements);
+  useEffect(() => { placementsRef.current = placements; }, [placements]);
+
+  const dragging = useRef<{
+    fieldId: string;
+    mode: "move" | "resize";
+    startX: number;
+    startY: number;
+    startP: PlacementBox;
+  } | null>(null);
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!dragging.current || !containerRef.current) return;
+      const { fieldId, mode, startX, startY, startP } = dragging.current;
+      const rect = containerRef.current.getBoundingClientRect();
+      const dx = ((e.clientX - startX) / rect.width) * 100;
+      const dy = ((e.clientY - startY) / rect.height) * 100;
+      setPlacementBoxs((prev) => {
+        const p = { ...prev[fieldId] };
+        if (mode === "move") {
+          p.x = Math.max(0, Math.min(100 - startP.w, startP.x + dx));
+          p.y = Math.max(0, Math.min(100 - startP.h, startP.y + dy));
+        } else {
+          p.w = Math.max(10, Math.min(100 - startP.x, startP.w + dx));
+          p.h = Math.max(5, Math.min(100 - startP.y, startP.h + dy));
+        }
+        return { ...prev, [fieldId]: p };
+      });
+    }
+    function onMouseUp() {
+      if (!dragging.current) return;
+      const { fieldId } = dragging.current;
+      dragging.current = null;
+      const p = placementsRef.current[fieldId];
+      placementFetcher.submit(
+        {
+          _action: "save_preview_placement",
+          fieldId,
+          previewX: String(Math.round(p.x * 100) / 100),
+          previewY: String(Math.round(p.y * 100) / 100),
+          previewW: String(Math.round(p.w * 100) / 100),
+          previewH: String(Math.round(p.h * 100) / 100),
+        },
+        { method: "post" }
+      );
+    }
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (textFields.length === 0) return null;
+
+  return (
+    <BlockStack gap="200">
+      <Text as="p" tone="subdued">
+        Drag each box to position the text on your product image.
+      </Text>
+      <div
+        ref={containerRef}
+        style={{ position: "relative", display: "inline-block", width: "100%", userSelect: "none" }}
+      >
+        {productImageUrl ? (
+          <img
+            src={productImageUrl}
+            alt="Product"
+            style={{ display: "block", width: "100%", height: "auto", borderRadius: "8px" }}
+          />
+        ) : (
+          <div style={{ background: "#f6f6f7", borderRadius: "8px", height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Text as="p" tone="subdued">No product image</Text>
+          </div>
+        )}
+        {textFields.map((field, idx) => {
+          const p = placements[field.id] ?? { x: 10, y: 40, w: 80, h: 15 };
+          const color = BOX_COLORS[idx % BOX_COLORS.length];
+          return (
+            <div
+              key={field.id}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                dragging.current = { fieldId: field.id, mode: "move", startX: e.clientX, startY: e.clientY, startP: { ...p } };
+              }}
+              style={{
+                position: "absolute",
+                left: `${p.x}%`,
+                top: `${p.y}%`,
+                width: `${p.w}%`,
+                height: `${p.h}%`,
+                border: `2px solid ${color}`,
+                background: `${color}22`,
+                cursor: "move",
+                boxSizing: "border-box",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "4px",
+              }}
+            >
+              <span style={{ color, fontSize: "12px", fontWeight: 600, pointerEvents: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90%" }}>
+                {field.label}
+              </span>
+              {/* Resize handle — bottom-right corner */}
+              <div
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  dragging.current = { fieldId: field.id, mode: "resize", startX: e.clientX, startY: e.clientY, startP: { ...p } };
+                }}
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  right: 0,
+                  width: "12px",
+                  height: "12px",
+                  background: color,
+                  cursor: "se-resize",
+                  borderRadius: "2px 0 4px 0",
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </BlockStack>
+  );
+}
+
 export default function ProductDetailPage() {
-  const { product, published, previewEnabled, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
+  const { product, productImageUrl, published, previewEnabled, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -1934,25 +2113,33 @@ export default function ProductDetailPage() {
               )}
               {fields.some((f) => f.type === "text" || f.type === "textarea") && (
                 <Card>
-                  <InlineStack align="space-between" blockAlign="center">
-                    <BlockStack gap="100">
-                      <Text as="p" fontWeight="semibold">Text preview</Text>
-                      <Text as="p" tone="subdued">
-                        Show the customer's text overlaid on the product image as they type.
-                      </Text>
-                    </BlockStack>
-                    <Checkbox
-                      label="Enable preview"
-                      labelHidden
-                      checked={optimisticPreview}
-                      onChange={(checked) =>
-                        previewFetcher.submit(
-                          { _action: "toggle_preview", previewEnabled: String(checked) },
-                          { method: "post" }
-                        )
-                      }
-                    />
-                  </InlineStack>
+                  <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <BlockStack gap="100">
+                        <Text as="p" fontWeight="semibold">Text preview</Text>
+                        <Text as="p" tone="subdued">
+                          Show the customer's text overlaid on the product image as they type.
+                        </Text>
+                      </BlockStack>
+                      <Checkbox
+                        label="Enable preview"
+                        labelHidden
+                        checked={optimisticPreview}
+                        onChange={(checked) =>
+                          previewFetcher.submit(
+                            { _action: "toggle_preview", previewEnabled: String(checked) },
+                            { method: "post" }
+                          )
+                        }
+                      />
+                    </InlineStack>
+                    {optimisticPreview && (
+                      <PreviewPlacementBoxEditor
+                        fields={fields}
+                        productImageUrl={productImageUrl}
+                      />
+                    )}
+                  </BlockStack>
                 </Card>
               )}
               <Card padding="0">

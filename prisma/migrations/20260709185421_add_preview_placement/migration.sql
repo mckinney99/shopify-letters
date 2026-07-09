@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "CustomizationField" ADD COLUMN     "previewH" DOUBLE PRECISION,
+ADD COLUMN     "previewW" DOUBLE PRECISION,
+ADD COLUMN     "previewX" DOUBLE PRECISION,
+ADD COLUMN     "previewY" DOUBLE PRECISION;

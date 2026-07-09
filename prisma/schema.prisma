@@ -72,6 +72,11 @@ model CustomizationField {
   textColorOptions String?
   // SL-78: MIME filter for upload fields e.g. "image/*" or "*/*"
   fileAccept       String?
+  // SL-91: preview text placement as % of image dimensions (null = auto-center)
+  previewX         Float?
+  previewY         Float?
+  previewW         Float?
+  previewH         Float?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

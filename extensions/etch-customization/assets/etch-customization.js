@@ -1278,25 +1278,59 @@
       imgContainer.style.position = 'relative';
     }
 
+    // Root overlay covers the whole image; individual spans are positioned within it.
     var overlay = document.createElement('div');
     overlay.className = 'etch-preview-overlay';
-    overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:12px;box-sizing:border-box';
+    overlay.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;box-sizing:border-box';
     imgContainer.appendChild(overlay);
 
     var blockId = container.id;
+    // Track per-field span elements so we can update them efficiently.
+    var fieldSpans = {};
+
+    function getOrCreateSpan(field) {
+      if (fieldSpans[field.id]) return fieldSpans[field.id];
+      var span = document.createElement('span');
+      var hasPlacement = field.previewX != null && field.previewY != null;
+      if (hasPlacement) {
+        span.style.cssText = 'position:absolute;'
+          + 'left:' + field.previewX + '%;'
+          + 'top:' + field.previewY + '%;'
+          + 'width:' + (field.previewW != null ? field.previewW : 80) + '%;'
+          + 'min-height:' + (field.previewH != null ? field.previewH : 15) + '%;'
+          + 'color:#fff;font-weight:bold;text-align:center;'
+          + 'font-size:clamp(12px,3vw,24px);'
+          + 'text-shadow:0 1px 6px rgba(0,0,0,0.85);'
+          + 'word-break:break-word;line-height:1.3;'
+          + 'display:flex;align-items:center;justify-content:center;box-sizing:border-box';
+      } else {
+        // Auto-center: stacked as flex items in the overlay
+        span.style.cssText = 'display:block;color:#fff;font-size:clamp(14px,4vw,28px);font-weight:bold;'
+          + 'text-align:center;text-shadow:0 1px 6px rgba(0,0,0,0.85);word-break:break-word;max-width:100%;line-height:1.3';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.gap = '4px';
+        overlay.style.padding = '12px';
+      }
+      overlay.appendChild(span);
+      fieldSpans[field.id] = span;
+      return span;
+    }
 
     function updateOverlay() {
-      overlay.innerHTML = '';
       textFields.forEach(function(field) {
         var el = document.getElementById('etch-' + blockId + '-' + field.id);
         var text = el ? el.value.trim() : '';
-        if (!text) return;
-        var span = document.createElement('span');
+        var span = getOrCreateSpan(field);
         span.textContent = text;
-        span.style.cssText = 'display:block;color:#fff;font-size:clamp(14px,4vw,28px);font-weight:bold;text-align:center;text-shadow:0 1px 6px rgba(0,0,0,0.85);word-break:break-word;max-width:100%;line-height:1.3';
-        overlay.appendChild(span);
+        span.style.display = text ? (field.previewX != null ? 'flex' : 'block') : 'none';
       });
     }
+
+    // Initialise (all empty) so spans are pre-created in DOM order.
+    updateOverlay();
 
     container.addEventListener('input', function(e) {
       if (e.target.classList && e.target.classList.contains('etch-customization__input')) {
