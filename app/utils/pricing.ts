@@ -70,12 +70,15 @@ function isFieldActive(
   fieldInputs: FieldInput[],
   conditions: PricingCondition[]
 ): boolean {
-  const cond = conditions.find((c) => c.fieldId === fieldId);
-  if (!cond) return true;
-  const trigger = fieldInputs.find((f) => f.fieldId === cond.triggerFieldId);
-  return cond.operator === "equals"
-    ? (trigger?.normalizedText ?? "").trim() === cond.value
-    : true;
+  const fieldConditions = conditions.filter((c) => c.fieldId === fieldId);
+  if (fieldConditions.length === 0) return true;
+  // AND semantics: all conditions must be met.
+  return fieldConditions.every((cond) => {
+    const trigger = fieldInputs.find((f) => f.fieldId === cond.triggerFieldId);
+    return cond.operator === "equals"
+      ? (trigger?.normalizedText ?? "").trim() === cond.value
+      : true;
+  });
 }
 
 // productBaseMinor: variant price in cents, used only for percent mode.

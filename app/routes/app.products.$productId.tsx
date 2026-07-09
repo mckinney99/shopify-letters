@@ -275,6 +275,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (_action === "delete") {
     const fieldId = form.get("fieldId") as string;
     await prisma.customizationField.deleteMany({ where: { id: fieldId, shop } });
+    // Clean up any conditions that reference the deleted field (as dependent or trigger).
+    await prisma.fieldCondition.deleteMany({
+      where: { shop, productId: productGid, OR: [{ fieldId }, { triggerFieldId: fieldId }] },
+    });
     const remaining = await prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
@@ -379,6 +383,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const value = ((form.get("conditionValue") as string) ?? "").trim();
     if (!fieldId || !triggerFieldId) return json({ error: "fieldId and triggerFieldId required." }, { status: 422 });
     if (fieldId === triggerFieldId) return json({ error: "A field cannot be its own trigger." }, { status: 422 });
+    if (!value) return json({ error: "Condition value is required." }, { status: 422 });
     await prisma.fieldCondition.create({
       data: { shop, productId: productGid, fieldId, triggerFieldId, operator: "equals", value },
     });
@@ -792,14 +797,28 @@ function LiveExample({
                   />
                   {rule && (
                     <BlockStack gap="050">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Per-character price: ${rule.perCharPrice.toFixed(2)}
-                      </Text>
-                      {rule.charGroups.map((g) => (
-                        <Text key={g.id} as="p" variant="bodySm" tone="subdued">
-                          &nbsp;&nbsp;{g.label}: ${g.pricePerChar.toFixed(2)}
+                      {(!rule.mode || rule.mode === "per_char") && (
+                        <>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Per-character price: ${rule.perCharPrice.toFixed(2)}
+                          </Text>
+                          {rule.charGroups.map((g) => (
+                            <Text key={g.id} as="p" variant="bodySm" tone="subdued">
+                              &nbsp;&nbsp;{g.label}: ${g.pricePerChar.toFixed(2)}
+                            </Text>
+                          ))}
+                        </>
+                      )}
+                      {rule.mode === "flat" && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Flat fee: ${rule.amount.toFixed(2)} when filled in
                         </Text>
-                      ))}
+                      )}
+                      {rule.mode === "percent" && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {rule.amount}% of base price when filled in
+                        </Text>
+                      )}
                     </BlockStack>
                   )}
                 </BlockStack>

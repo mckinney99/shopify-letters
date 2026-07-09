@@ -90,12 +90,14 @@ function isFieldActive(
   fieldInputs: Array<{ fieldId: string; normalizedText: string }>,
   conditions: FieldCondition[]
 ): boolean {
-  const cond = conditions.find((c) => c.fieldId === fieldId);
-  if (!cond) return true;
-  const trigger = fieldInputs.find((f) => f.fieldId === cond.triggerFieldId);
-  return cond.operator === "equals"
-    ? (trigger?.normalizedText ?? "").trim() === cond.value
-    : true;
+  const fieldConditions = conditions.filter((c) => c.fieldId === fieldId);
+  if (fieldConditions.length === 0) return true;
+  return fieldConditions.every((cond) => {
+    const trigger = fieldInputs.find((f) => f.fieldId === cond.triggerFieldId);
+    return cond.operator === "equals"
+      ? (trigger?.normalizedText ?? "").trim() === cond.value
+      : true;
+  });
 }
 
 function calculatePrice(

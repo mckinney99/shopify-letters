@@ -324,6 +324,8 @@
         // Keep the bundled JSON attribute in sync so the Cart Transform function
         // can read all field values via a single attribute(key: "_etch_inputs") query.
         etchInputsEl.value = JSON.stringify(inputMap);
+        // Evaluate conditions AFTER inputMap is updated (Defect 4 fix: was capture-phase listener).
+        evaluateConditions();
         schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl, getBaseMinor());
       });
 
@@ -336,47 +338,48 @@
       inputMap[field.id] = '';
     });
 
+    // Bundled JSON attribute read by the Cart Transform function via
+    // attribute(key: "_etch_inputs"). Must be created before evaluateConditions
+    // so it's defined when that function writes to etchInputsEl.value.
+    var etchInputsEl = makeHiddenInput('properties[_etch_inputs]', JSON.stringify(inputMap));
+    formTarget.appendChild(etchInputsEl);
+
     // SL-85: evaluate conditions on each input change; show/hide dependent fields.
-    var fieldWrappers = {}; // fieldId -> wrapper element
+    // Called AFTER inputMap is updated in each field's input handler (see below).
+    var fieldWrappers = {};
     fieldsEl.querySelectorAll('.etch-customization__field').forEach(function(wrapper, i) {
       fieldWrappers[fields[i].id] = wrapper;
     });
 
+    // AND semantics: all conditions for a field must be met for it to show.
     function evaluateConditions() {
+      var condsByField = {};
       conditions.forEach(function(cond) {
-        var wrapper = fieldWrappers[cond.fieldId];
+        if (!condsByField[cond.fieldId]) condsByField[cond.fieldId] = [];
+        condsByField[cond.fieldId].push(cond);
+      });
+      Object.keys(condsByField).forEach(function(fieldId) {
+        var wrapper = fieldWrappers[fieldId];
         if (!wrapper) return;
-        var triggerValue = (inputMap[cond.triggerFieldId] || '').trim();
-        var active = cond.operator === 'equals'
-          ? triggerValue === cond.value
-          : true;
+        var active = condsByField[fieldId].every(function(cond) {
+          var triggerValue = (inputMap[cond.triggerFieldId] || '').trim();
+          return cond.operator === 'equals' ? triggerValue === cond.value : true;
+        });
         wrapper.hidden = !active;
         if (!active) {
-          // Clear the hidden field's value so it doesn't influence pricing or validation.
           var inp = wrapper.querySelector('input');
           if (inp && inp.value) {
             inp.value = '';
-            inputMap[cond.fieldId] = '';
-            var hiddenMirror = formTarget.querySelector('input[name="properties[' + fields.find(function(f){return f.id===cond.fieldId;})?.label + ']"]');
+            var fieldDef = fields.find(function(f) { return f.id === fieldId; });
+            inputMap[fieldId] = '';
+            var hiddenMirror = formTarget.querySelector('input[name="properties[' + (fieldDef ? fieldDef.label : '') + ']"]');
             if (hiddenMirror) hiddenMirror.value = '';
           }
-          validityMap[cond.fieldId] = true; // hidden = not blocking
+          validityMap[fieldId] = true; // hidden fields never block the cart button
         }
       });
       etchInputsEl.value = JSON.stringify(inputMap);
     }
-
-    // Re-run condition evaluation whenever any input changes by patching the
-    // existing input event handlers (conditions is evaluated after each input fires).
-    var originalSchedule = schedulePreview;
-    function scheduleWithConditions(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice) {
-      evaluateConditions();
-      originalSchedule(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice);
-    }
-
-    // Re-attach input events to also call condition evaluation. The events were
-    // already attached in the forEach above, so we patch via a one-time wrapper.
-    fieldsEl.addEventListener('input', function() { evaluateConditions(); }, true);
 
     // Initial evaluation on load
     evaluateConditions();
@@ -402,12 +405,6 @@
       });
       fieldsEl.appendChild(pricingInfoEl);
     }
-
-    // Bundled JSON attribute read by the Cart Transform function via
-    // attribute(key: "_etch_inputs"). Created after forEach so inputMap has
-    // all initial empty values. The input event handler above keeps it in sync.
-    var etchInputsEl = makeHiddenInput('properties[_etch_inputs]', JSON.stringify(inputMap));
-    formTarget.appendChild(etchInputsEl);
 
     // Initial button state: disabled until price loads
     updateBtn();

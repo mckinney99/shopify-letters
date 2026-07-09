@@ -70,10 +70,12 @@ function isFieldActive(
   etchInputs: Record<string, string>,
   conditions: FieldCondition[]
 ): boolean {
-  const cond = conditions.find((c) => c.fieldId === fieldId);
-  if (!cond) return true;
-  const triggerValue = (etchInputs[cond.triggerFieldId] ?? "").trim();
-  return cond.operator === "equals" ? triggerValue === cond.value : true;
+  const fieldConditions = conditions.filter((c) => c.fieldId === fieldId);
+  if (fieldConditions.length === 0) return true;
+  return fieldConditions.every((cond) => {
+    const triggerValue = (etchInputs[cond.triggerFieldId] ?? "").trim();
+    return cond.operator === "equals" ? triggerValue === cond.value : true;
+  });
 }
 
 // ── Validation logic — port of normalizeText/normalizeInput from app/utils/normalize.ts ──
