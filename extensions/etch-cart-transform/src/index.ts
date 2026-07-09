@@ -15,12 +15,21 @@ type CharGroupRule = {
 type FieldPricingRule = {
   fieldId: string;
   perCharPrice: number;
+  mode?: string; // per_char | flat | percent
+  amount?: number;
   charGroups: CharGroupRule[];
 };
 
 type FieldOptionRule = {
   label: string;
   priceDelta: number;
+};
+
+type FieldCondition = {
+  fieldId: string;
+  triggerFieldId: string;
+  operator: string;
+  value: string;
 };
 
 type FieldDefinition = {
@@ -37,6 +46,7 @@ type MetafieldPayload = {
   shop?: string;
   fields: FieldDefinition[];
   rules: FieldPricingRule[];
+  conditions?: FieldCondition[];
 };
 
 // ── Types for the Shopify Function input (mirrors input.graphql) ──────────────
@@ -83,20 +93,46 @@ function toCents(dollars: number): number {
 
 const MAX_PRICE_MINOR = 9_999_999;
 
+function isFieldActive(
+  fieldId: string,
+  fieldInputs: Array<{ fieldId: string; normalizedText: string }>,
+  conditions: FieldCondition[]
+): boolean {
+  const fieldConditions = conditions.filter((c) => c.fieldId === fieldId);
+  if (fieldConditions.length === 0) return true;
+  return fieldConditions.every((cond) => {
+    const trigger = fieldInputs.find((f) => f.fieldId === cond.triggerFieldId);
+    return cond.operator === "equals"
+      ? (trigger?.normalizedText ?? "").trim() === cond.value
+      : true;
+  });
+}
+
 function calculatePrice(
   fieldInputs: Array<{ fieldId: string; normalizedText: string }>,
   rules: FieldPricingRule[],
-  baseMinor: number
+  baseMinor: number,
+  conditions: FieldCondition[] = []
 ): number {
   let total = baseMinor;
 
   for (const input of fieldInputs) {
+    if (!isFieldActive(input.fieldId, fieldInputs, conditions)) continue;
     const rule = rules.find((r) => r.fieldId === input.fieldId);
     if (!rule) continue;
-    const chars = [...input.normalizedText]; // codepoint-aware — correct for emoji
-    for (const char of chars) {
-      const group = rule.charGroups.find((g) => g.characters.includes(char));
-      total += toCents(group ? group.pricePerChar : rule.perCharPrice);
+    const mode = rule.mode ?? "per_char";
+    const hasValue = input.normalizedText.length > 0;
+    if (mode === "flat") {
+      if (hasValue) total += toCents(rule.amount ?? 0);
+    } else if (mode === "percent") {
+      if (hasValue) total += Math.round((rule.amount ?? 0) / 100 * baseMinor);
+    } else {
+      // per_char
+      const chars = [...input.normalizedText]; // codepoint-aware — correct for emoji
+      for (const char of chars) {
+        const group = rule.charGroups.find((g) => g.characters.includes(char));
+        total += toCents(group ? group.pricePerChar : rule.perCharPrice);
+      }
     }
   }
 
@@ -110,11 +146,14 @@ function calculatePrice(
 // Must stay in sync with the option pricing in app/routes/api.preview.ts.
 function optionDeltaMinor(
   fields: FieldDefinition[],
-  etchInputs: Record<string, string>
+  etchInputs: Record<string, string>,
+  fieldInputs: Array<{ fieldId: string; normalizedText: string }>,
+  conditions: FieldCondition[]
 ): number {
   let total = 0;
   for (const field of fields) {
     if (!field.options || field.options.length === 0) continue;
+    if (!isFieldActive(field.id, fieldInputs, conditions)) continue;
     const selected = etchInputs[field.id];
     if (!selected) continue;
     const option = field.options.find((o) => o.label === selected);
@@ -193,8 +232,9 @@ export function run(input: Input): unknown {
       }));
 
       const baseMinor = Math.round(parseFloat(line.cost.amountPerQuantity.amount) * 100);
-      let enforcedMinor = calculatePrice(fieldInputs, payload.rules, baseMinor);
-      enforcedMinor += optionDeltaMinor(payload.fields, etchInputs);
+      const conditions = payload.conditions ?? [];
+      let enforcedMinor = calculatePrice(fieldInputs, payload.rules, baseMinor, conditions);
+      enforcedMinor += optionDeltaMinor(payload.fields, etchInputs, fieldInputs, conditions);
       if (enforcedMinor > MAX_PRICE_MINOR) enforcedMinor = MAX_PRICE_MINOR;
       const enforcedAmount = (enforcedMinor / 100).toFixed(2);
 

@@ -11,7 +11,9 @@ export type CharGroupRule = {
 export type FieldPricingRule = {
   fieldId: string;       // "" = product-level base-price rule
   basePrice: number;     // dollars (used only when fieldId === "")
-  perCharPrice: number;  // dollars per unmatched char
+  perCharPrice: number;  // dollars per unmatched char (per_char mode)
+  mode?: "per_char" | "flat" | "percent"; // default per_char
+  amount?: number;       // flat $ or percent value (0-100) for flat/percent modes
   charGroups: CharGroupRule[];
 };
 
@@ -55,9 +57,36 @@ function toCents(dollars: number): number {
   return Math.round(dollars * 100);
 }
 
+// conditions: used by both preview and transform to skip hidden fields.
+export type PricingCondition = {
+  fieldId: string;
+  triggerFieldId: string;
+  operator: string; // "equals" only in v1
+  value: string;
+};
+
+function isFieldActive(
+  fieldId: string,
+  fieldInputs: FieldInput[],
+  conditions: PricingCondition[]
+): boolean {
+  const fieldConditions = conditions.filter((c) => c.fieldId === fieldId);
+  if (fieldConditions.length === 0) return true;
+  // AND semantics: all conditions must be met.
+  return fieldConditions.every((cond) => {
+    const trigger = fieldInputs.find((f) => f.fieldId === cond.triggerFieldId);
+    return cond.operator === "equals"
+      ? (trigger?.normalizedText ?? "").trim() === cond.value
+      : true;
+  });
+}
+
+// productBaseMinor: variant price in cents, used only for percent mode.
 export function calculateProductPrice(
   fieldInputs: FieldInput[],
-  rules: FieldPricingRule[]
+  rules: FieldPricingRule[],
+  productBaseMinor = 0,
+  conditions: PricingCondition[] = []
 ): PricingResult {
   const validationErrors: string[] = [];
   const baseRule = rules.find((r) => r.fieldId === "");
@@ -66,38 +95,54 @@ export function calculateProductPrice(
   const fieldBreakdowns: FieldBreakdown[] = [];
 
   for (const input of fieldInputs) {
+    if (!isFieldActive(input.fieldId, fieldInputs, conditions)) continue;
+
     const rule = rules.find((r) => r.fieldId === input.fieldId);
     if (!rule) continue;
 
+    const mode = rule.mode ?? "per_char";
     const chars = [...input.normalizedText]; // codepoint array — correct for emoji
-    const groupCounts: Record<string, number> = {};
-    for (const g of rule.charGroups) groupCounts[g.label] = 0;
+    const hasValue = chars.length > 0;
 
+    let subtotalMinor: number;
+    let groups: GroupBreakdown[] = [];
     let unmatchedCount = 0;
-    for (const char of chars) {
-      const match = rule.charGroups.find((g) => g.characters.includes(char));
-      if (match) {
-        groupCounts[match.label]++;
-      } else {
-        unmatchedCount++;
+    let unmatchedPricePerCharMinor = 0;
+    let unmatchedSubtotalMinor = 0;
+
+    if (mode === "flat") {
+      subtotalMinor = hasValue ? toCents(rule.amount ?? 0) : 0;
+    } else if (mode === "percent") {
+      subtotalMinor = hasValue ? Math.round((rule.amount ?? 0) / 100 * productBaseMinor) : 0;
+    } else {
+      // per_char (default)
+      const groupCounts: Record<string, number> = {};
+      for (const g of rule.charGroups) groupCounts[g.label] = 0;
+
+      for (const char of chars) {
+        const match = rule.charGroups.find((g) => g.characters.includes(char));
+        if (match) {
+          groupCounts[match.label]++;
+        } else {
+          unmatchedCount++;
+        }
       }
+
+      groups = rule.charGroups.map((g) => {
+        const count = groupCounts[g.label];
+        const pricePerCharMinor = toCents(g.pricePerChar);
+        return {
+          label: g.label,
+          charCount: count,
+          pricePerCharMinor,
+          subtotalMinor: count * pricePerCharMinor,
+        };
+      });
+
+      unmatchedPricePerCharMinor = toCents(rule.perCharPrice);
+      unmatchedSubtotalMinor = unmatchedCount * unmatchedPricePerCharMinor;
+      subtotalMinor = groups.reduce((s, g) => s + g.subtotalMinor, 0) + unmatchedSubtotalMinor;
     }
-
-    const groups: GroupBreakdown[] = rule.charGroups.map((g) => {
-      const count = groupCounts[g.label];
-      const pricePerCharMinor = toCents(g.pricePerChar);
-      return {
-        label: g.label,
-        charCount: count,
-        pricePerCharMinor,
-        subtotalMinor: count * pricePerCharMinor,
-      };
-    });
-
-    const unmatchedPricePerCharMinor = toCents(rule.perCharPrice);
-    const unmatchedSubtotalMinor = unmatchedCount * unmatchedPricePerCharMinor;
-    const groupsSubtotal = groups.reduce((s, g) => s + g.subtotalMinor, 0);
-    const subtotalMinor = groupsSubtotal + unmatchedSubtotalMinor;
 
     fieldBreakdowns.push({
       fieldId: input.fieldId,

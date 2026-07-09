@@ -106,11 +106,29 @@ model PricingRule {
   fieldId      String
   basePrice    Float          @default(0)
   perCharPrice Float          @default(0)
+  mode         String         @default("per_char") // per_char | flat | percent
+  amount       Float          @default(0)          // flat $ or percent (0-100) for non-per_char modes
   charGroups   CharPriceGroup[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
   @@unique([shop, productId, fieldId])
+  @@index([shop, productId])
+}
+
+// SL-85: show/hide a field based on another field's value.
+// fieldId is the dependent (hidden) field; triggerFieldId drives visibility.
+model FieldCondition {
+  id             String   @id @default(cuid())
+  shop           String
+  productId      String
+  fieldId        String
+  triggerFieldId String
+  operator       String   @default("equals")
+  value          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   @@index([shop, productId])
 }
 

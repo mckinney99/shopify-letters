@@ -47,7 +47,7 @@
           return;
         }
         loadingEl.hidden = true;
-        renderFields(container, data.fields, shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency);
+        renderFields(container, data.fields, data.conditions || [], shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency);
         fieldsEl.hidden = false;
       })
       .catch(function () {
@@ -57,7 +57,7 @@
       });
   }
 
-  function renderFields(container, fields, shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency) {
+  function renderFields(container, fields, conditions, shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency) {
     var blockId = container.id;
     var heading = container.dataset.heading;
 
@@ -443,7 +443,9 @@
         // Keep the bundled JSON attribute in sync so the Cart Transform function
         // can read all field values via a single attribute(key: "_etch_inputs") query.
         etchInputsEl.value = JSON.stringify(inputMap);
-        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+        // Evaluate conditions AFTER inputMap is updated (Defect 4 fix: was capture-phase listener).
+        evaluateConditions();
+        schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl, getBaseMinor());
       });
 
       wrapper.appendChild(label);
@@ -476,8 +478,54 @@
       inputMap[field.id] = '';
     });
 
+    // Bundled JSON attribute read by the Cart Transform function via
+    // attribute(key: "_etch_inputs"). Must be created before evaluateConditions
+    // so it's defined when that function writes to etchInputsEl.value.
+    var etchInputsEl = makeHiddenInput('properties[_etch_inputs]', JSON.stringify(inputMap));
+    formTarget.appendChild(etchInputsEl);
+
+    // SL-85: evaluate conditions on each input change; show/hide dependent fields.
+    // Called AFTER inputMap is updated in each field's input handler (see below).
+    var fieldWrappers = {};
+    fieldsEl.querySelectorAll('.etch-customization__field').forEach(function(wrapper, i) {
+      fieldWrappers[fields[i].id] = wrapper;
+    });
+
+    // AND semantics: all conditions for a field must be met for it to show.
+    function evaluateConditions() {
+      var condsByField = {};
+      conditions.forEach(function(cond) {
+        if (!condsByField[cond.fieldId]) condsByField[cond.fieldId] = [];
+        condsByField[cond.fieldId].push(cond);
+      });
+      Object.keys(condsByField).forEach(function(fieldId) {
+        var wrapper = fieldWrappers[fieldId];
+        if (!wrapper) return;
+        var active = condsByField[fieldId].every(function(cond) {
+          var triggerValue = (inputMap[cond.triggerFieldId] || '').trim();
+          return cond.operator === 'equals' ? triggerValue === cond.value : true;
+        });
+        wrapper.hidden = !active;
+        if (!active) {
+          var inp = wrapper.querySelector('input');
+          if (inp && inp.value) {
+            inp.value = '';
+            var fieldDef = fields.find(function(f) { return f.id === fieldId; });
+            inputMap[fieldId] = '';
+            var hiddenMirror = formTarget.querySelector('input[name="properties[' + (fieldDef ? fieldDef.label : '') + ']"]');
+            if (hiddenMirror) hiddenMirror.value = '';
+          }
+          validityMap[fieldId] = true; // hidden fields never block the cart button
+        }
+      });
+      etchInputsEl.value = JSON.stringify(inputMap);
+    }
+
+    // Initial evaluation on load
+    evaluateConditions();
+
     // Static per-character pricing summary — shows rates, not calculated totals
-    var pricedFields = fields.filter(function(f) { return f.perCharPrice != null; });
+    var pricedFields = fields.filter(function(f) { return f.perCharPrice != null && (f.mode == null || f.mode === 'per_char'); });
     if (pricedFields.length > 0) {
       var pricingInfoEl = document.createElement('div');
       pricingInfoEl.className = 'etch-customization__pricing-info';
@@ -498,16 +546,10 @@
       fieldsEl.appendChild(pricingInfoEl);
     }
 
-    // Bundled JSON attribute read by the Cart Transform function via
-    // attribute(key: "_etch_inputs"). Created after forEach so inputMap has
-    // all initial empty values. The input event handler above keeps it in sync.
-    var etchInputsEl = makeHiddenInput('properties[_etch_inputs]', JSON.stringify(inputMap));
-    formTarget.appendChild(etchInputsEl);
-
     // Initial button state: disabled until price loads
     updateBtn();
 
-    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+    fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl, getBaseMinor());
   }
 
   // RFC 4122-ish v4 UUID, with a non-crypto fallback for older browsers.
@@ -1073,18 +1115,18 @@
   }
 
   var debounceTimer;
-  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice) {
+  function schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice, baseMinor) {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
-      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice);
+      fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice, baseMinor);
     }, 350);
   }
 
-  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice) {
+  function fetchPreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPrice, baseMinor) {
     fetch(appUrl + '/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shop: shop, productId: productId, fields: inputMap, correlationId: correlationId }),
+      body: JSON.stringify({ shop: shop, productId: productId, fields: inputMap, correlationId: correlationId, baseMinor: baseMinor != null ? baseMinor : null }),
     })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (data) {

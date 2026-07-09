@@ -33,12 +33,22 @@ export type PricingConfigCharGroup = {
 export type PricingConfigRule = {
   fieldId: string;
   perCharPrice: number;
+  mode: string;    // per_char | flat | percent
+  amount: number;
   charGroups: PricingConfigCharGroup[];
+};
+
+export type PricingConfigCondition = {
+  fieldId: string;
+  triggerFieldId: string;
+  operator: string;
+  value: string;
 };
 
 export type PricingConfig = {
   fields: PricingConfigField[];
   rules: PricingConfigRule[];
+  conditions: PricingConfigCondition[];
 };
 
 type DbFieldOption = {
@@ -68,13 +78,26 @@ type DbCharGroup = {
 type DbPricingRule = {
   fieldId: string;
   perCharPrice: number;
+  mode?: string;
+  amount?: number;
   charGroups: DbCharGroup[];
+};
+
+type DbCondition = {
+  fieldId: string;
+  triggerFieldId: string;
+  operator: string;
+  value: string;
 };
 
 // Builds the canonical config shape from Prisma rows. Field/rule order
 // matters for the hash, so callers should pass rows ordered consistently
 // (e.g. fields by `position`).
-export function buildPricingConfig(fields: DbField[], rules: DbPricingRule[]): PricingConfig {
+export function buildPricingConfig(
+  fields: DbField[],
+  rules: DbPricingRule[],
+  conditions: DbCondition[] = []
+): PricingConfig {
   return {
     fields: fields.map((f) => ({
       id: f.id,
@@ -93,12 +116,20 @@ export function buildPricingConfig(fields: DbField[], rules: DbPricingRule[]): P
       .map((r) => ({
         fieldId: r.fieldId,
         perCharPrice: r.perCharPrice,
+        mode: r.mode ?? "per_char",
+        amount: r.amount ?? 0,
         charGroups: r.charGroups.map((g) => ({
           label: g.label,
           characters: g.characters,
           pricePerChar: g.pricePerChar,
         })),
       })),
+    conditions: conditions.map((c) => ({
+      fieldId: c.fieldId,
+      triggerFieldId: c.triggerFieldId,
+      operator: c.operator,
+      value: c.value,
+    })),
   };
 }
 

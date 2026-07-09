@@ -59,7 +59,7 @@ async function syncPricingMetafield(
   shop: string,
   productGid: string
 ): Promise<void> {
-  const [fields, pricingRules] = await Promise.all([
+  const [fields, pricingRules, conditions] = await Promise.all([
     prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
@@ -69,9 +69,12 @@ async function syncPricingMetafield(
       where: { shop, productId: productGid },
       include: { charGroups: true },
     }),
+    prisma.fieldCondition.findMany({
+      where: { shop, productId: productGid },
+    }),
   ]);
 
-  const config = buildPricingConfig(fields, pricingRules);
+  const config = buildPricingConfig(fields, pricingRules, conditions);
   const value = JSON.stringify({
     version: computeConfigVersion(config),
     // Lets the checkout functions include a shop identifier in their
@@ -138,6 +141,8 @@ type PricingRuleData = {
   fieldId: string;
   basePrice: number;
   perCharPrice: number;
+  mode: string;
+  amount: number;
   charGroups: CharPriceGroupData[];
 };
 
@@ -201,6 +206,14 @@ function parseOptions(raw: string | null): { label: string; priceDelta: number; 
   }
 }
 
+type FieldConditionData = {
+  id: string;
+  fieldId: string;
+  triggerFieldId: string;
+  operator: string;
+  value: string;
+};
+
 function validateField(data: Record<string, string>): string | null {
   if (!data.label?.trim()) return "Label is required.";
   const min = data.minChars ? parseInt(data.minChars) : null;
@@ -220,7 +233,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const productGid = `gid://shopify/Product/${params.productId}`;
 
-  const [productRes, fields, pricingRules, config] = await Promise.all([
+  const [productRes, fields, pricingRules, conditions, config] = await Promise.all([
     admin.graphql(PRODUCT_QUERY, { variables: { id: productGid } }),
     prisma.customizationField.findMany({
       where: { shop: session.shop, productId: productGid },
@@ -230,6 +243,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     prisma.pricingRule.findMany({
       where: { shop: session.shop, productId: productGid },
       include: { charGroups: true },
+    }),
+    prisma.fieldCondition.findMany({
+      where: { shop: session.shop, productId: productGid },
     }),
     prisma.productConfig.findUnique({
       where: { shop_productId: { shop: session.shop, productId: productGid } },
@@ -251,6 +267,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     published: config?.published ?? false,
     fields,
     pricingRules,
+    conditions,
     variantPrices,
     // One-click theme-editor link to add the Etch widget to the product page.
     // Upgraded to pre-add the app block when the extension UUID is configured. See SL-70.
@@ -382,6 +399,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (_action === "delete") {
     const fieldId = form.get("fieldId") as string;
     await prisma.customizationField.deleteMany({ where: { id: fieldId, shop } });
+    // Clean up any conditions that reference the deleted field (as dependent or trigger).
+    await prisma.fieldCondition.deleteMany({
+      where: { shop, productId: productGid, OR: [{ fieldId }, { triggerFieldId: fieldId }] },
+    });
     const remaining = await prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
@@ -426,11 +447,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
   if (_action === "set_field_price") {
     const fieldId = form.get("fieldId") as string;
+    const mode = (form.get("mode") as string) || "per_char";
     const perCharPrice = parseFloat((form.get("perCharPrice") as string) || "0") || 0;
+    const amount = parseFloat((form.get("amount") as string) || "0") || 0;
     await prisma.pricingRule.upsert({
       where: { shop_productId_fieldId: { shop, productId: productGid, fieldId } },
-      update: { perCharPrice },
-      create: { shop, productId: productGid, fieldId, perCharPrice },
+      update: { perCharPrice, mode, amount },
+      create: { shop, productId: productGid, fieldId, perCharPrice, mode, amount },
     });
     await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
@@ -474,6 +497,27 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       where: { id: groupId, rule: { shop } },
     });
     if (group) await prisma.charPriceGroup.delete({ where: { id: groupId } });
+    await syncPricingMetafield(admin, shop, productGid);
+    return json({ ok: true });
+  }
+
+  if (_action === "add_field_condition") {
+    const fieldId = form.get("fieldId") as string;
+    const triggerFieldId = form.get("triggerFieldId") as string;
+    const value = ((form.get("conditionValue") as string) ?? "").trim();
+    if (!fieldId || !triggerFieldId) return json({ error: "fieldId and triggerFieldId required." }, { status: 422 });
+    if (fieldId === triggerFieldId) return json({ error: "A field cannot be its own trigger." }, { status: 422 });
+    if (!value) return json({ error: "Condition value is required." }, { status: 422 });
+    await prisma.fieldCondition.create({
+      data: { shop, productId: productGid, fieldId, triggerFieldId, operator: "equals", value },
+    });
+    await syncPricingMetafield(admin, shop, productGid);
+    return json({ ok: true });
+  }
+
+  if (_action === "delete_field_condition") {
+    const conditionId = form.get("conditionId") as string;
+    await prisma.fieldCondition.deleteMany({ where: { id: conditionId, shop } });
     await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
@@ -805,8 +849,101 @@ function FieldForm({
   );
 }
 
+// SL-85: condition editor shown in-line per field row.
+function FieldConditionEditor({
+  field,
+  allFields,
+  conditions,
+}: {
+  field: FieldData;
+  allFields: FieldData[];
+  conditions: FieldConditionData[];
+}) {
+  const addFetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  const [triggerFieldId, setTriggerFieldId] = useState("");
+  const [conditionValue, setConditionValue] = useState("");
+  const [showForm, setShowForm] = useState(false);
+
+  const fieldConditions = conditions.filter((c) => c.fieldId === field.id);
+  const otherFields = allFields.filter((f) => f.id !== field.id);
+
+  useEffect(() => {
+    if (addFetcher.state === "idle" && addFetcher.data?.ok) {
+      setShowForm(false);
+      setTriggerFieldId("");
+      setConditionValue("");
+    }
+  }, [addFetcher.state, addFetcher.data]);
+
+  if (otherFields.length === 0) return null;
+
+  return (
+    <BlockStack gap="200">
+      <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">Visibility</Text>
+      {fieldConditions.length === 0 && !showForm && (
+        <Text as="p" variant="bodySm" tone="subdued">Always visible</Text>
+      )}
+      {fieldConditions.map((cond) => {
+        const triggerLabel = allFields.find((f) => f.id === cond.triggerFieldId)?.label ?? cond.triggerFieldId;
+        return (
+          <ConditionRow key={cond.id} cond={cond} triggerLabel={triggerLabel} />
+        );
+      })}
+      {showForm ? (
+        <addFetcher.Form method="post">
+          <input type="hidden" name="_action" value="add_field_condition" />
+          <input type="hidden" name="fieldId" value={field.id} />
+          <input type="hidden" name="triggerFieldId" value={triggerFieldId} />
+          <input type="hidden" name="conditionValue" value={conditionValue} />
+          <InlineStack gap="200" blockAlign="end" wrap={false}>
+            <Text as="span" variant="bodySm">Show when</Text>
+            <div style={{ minWidth: "120px" }}>
+              <select
+                value={triggerFieldId}
+                onChange={(e) => setTriggerFieldId(e.target.value)}
+                style={{ width: "100%", padding: "4px 6px", border: "1px solid #c9cccf", borderRadius: "4px", fontSize: "13px" }}
+                aria-label="Trigger field"
+              >
+                <option value="">— field —</option>
+                {otherFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </select>
+            </div>
+            <Text as="span" variant="bodySm">is</Text>
+            <div style={{ minWidth: "100px" }}>
+              <TextField label="" labelHidden value={conditionValue} onChange={setConditionValue} autoComplete="off" placeholder="value" />
+            </div>
+            {addFetcher.data?.error && <Text as="span" tone="critical" variant="bodySm">{addFetcher.data.error}</Text>}
+            <Button size="slim" submit loading={addFetcher.state !== "idle"} disabled={!triggerFieldId}>Add</Button>
+            <Button size="slim" onClick={() => setShowForm(false)}>Cancel</Button>
+          </InlineStack>
+        </addFetcher.Form>
+      ) : (
+        <Button size="slim" onClick={() => setShowForm(true)}>+ Add condition</Button>
+      )}
+    </BlockStack>
+  );
+}
+
+function ConditionRow({ cond, triggerLabel }: { cond: FieldConditionData; triggerLabel: string }) {
+  const deleteFetcher = useFetcher();
+  return (
+    <InlineStack gap="200" blockAlign="center">
+      <Text as="span" variant="bodySm" tone="subdued">
+        Show when <b>{triggerLabel}</b> is <b>&ldquo;{cond.value}&rdquo;</b>
+      </Text>
+      <deleteFetcher.Form method="post" style={{ display: "inline" }}>
+        <input type="hidden" name="_action" value="delete_field_condition" />
+        <input type="hidden" name="conditionId" value={cond.id} />
+        <Button tone="critical" size="slim" submit loading={deleteFetcher.state !== "idle"}>×</Button>
+      </deleteFetcher.Form>
+    </InlineStack>
+  );
+}
+
 function FieldRow({
   field,
+  allFields,
+  conditions,
   isFirst,
   isLast,
   isEditing,
@@ -815,6 +952,8 @@ function FieldRow({
   onDirtyChange,
 }: {
   field: FieldData;
+  allFields: FieldData[];
+  conditions: FieldConditionData[];
   isFirst: boolean;
   isLast: boolean;
   isEditing: boolean;
@@ -847,32 +986,35 @@ function FieldRow({
 
   return (
     <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-      <InlineStack align="space-between" blockAlign="center" gap="400">
-        <BlockStack gap="100">
-          <Text as="span" variant="bodyMd" fontWeight="semibold">{field.label}</Text>
-          {charInfo.length > 0 && (
-            <Text as="span" variant="bodySm" tone="subdued">{charInfo.join(" · ")}</Text>
-          )}
-        </BlockStack>
-        <InlineStack gap="200" blockAlign="center">
-          <moveFetcher.Form method="post" style={{ display: "inline" }}>
-            <input type="hidden" name="_action" value="move_up" />
-            <input type="hidden" name="fieldId" value={field.id} />
-            <Button submit disabled={isFirst || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move up">↑</Button>
-          </moveFetcher.Form>
-          <moveFetcher.Form method="post" style={{ display: "inline" }}>
-            <input type="hidden" name="_action" value="move_down" />
-            <input type="hidden" name="fieldId" value={field.id} />
-            <Button submit disabled={isLast || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move down">↓</Button>
-          </moveFetcher.Form>
-          <Button size="slim" onClick={onEdit}>Edit</Button>
-          <deleteFetcher.Form method="post" style={{ display: "inline" }}>
-            <input type="hidden" name="_action" value="delete" />
-            <input type="hidden" name="fieldId" value={field.id} />
-            <Button submit tone="critical" size="slim" loading={deleteFetcher.state !== "idle"}>Delete</Button>
-          </deleteFetcher.Form>
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="center" gap="400">
+          <BlockStack gap="100">
+            <Text as="span" variant="bodyMd" fontWeight="semibold">{field.label}</Text>
+            {charInfo.length > 0 && (
+              <Text as="span" variant="bodySm" tone="subdued">{charInfo.join(" · ")}</Text>
+            )}
+          </BlockStack>
+          <InlineStack gap="200" blockAlign="center">
+            <moveFetcher.Form method="post" style={{ display: "inline" }}>
+              <input type="hidden" name="_action" value="move_up" />
+              <input type="hidden" name="fieldId" value={field.id} />
+              <Button submit disabled={isFirst || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move up">↑</Button>
+            </moveFetcher.Form>
+            <moveFetcher.Form method="post" style={{ display: "inline" }}>
+              <input type="hidden" name="_action" value="move_down" />
+              <input type="hidden" name="fieldId" value={field.id} />
+              <Button submit disabled={isLast || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move down">↓</Button>
+            </moveFetcher.Form>
+            <Button size="slim" onClick={onEdit}>Edit</Button>
+            <deleteFetcher.Form method="post" style={{ display: "inline" }}>
+              <input type="hidden" name="_action" value="delete" />
+              <input type="hidden" name="fieldId" value={field.id} />
+              <Button submit tone="critical" size="slim" loading={deleteFetcher.state !== "idle"}>Delete</Button>
+            </deleteFetcher.Form>
+          </InlineStack>
         </InlineStack>
-      </InlineStack>
+        <FieldConditionEditor field={field} allFields={allFields} conditions={conditions} />
+      </BlockStack>
     </Box>
   );
 }
@@ -905,9 +1047,14 @@ function validateLiveField(value: string, field: FieldData): string[] {
   return errors;
 }
 
-function calcFieldSurcharge(value: string, field: FieldData, rule: PricingRuleData | undefined): number {
+function calcFieldSurcharge(value: string, field: FieldData, rule: PricingRuleData | undefined, basePrice: number): number {
   if (!rule) return 0;
   const normalized = value.trim().replace(/\s+/g, " ");
+  const hasValue = normalized.length > 0;
+  const mode = rule.mode ?? "per_char";
+  if (mode === "flat") return hasValue ? (rule.amount ?? 0) : 0;
+  if (mode === "percent") return hasValue ? (rule.amount ?? 0) / 100 * basePrice : 0;
+  // per_char
   const chars = field.countSpaces
     ? [...normalized]
     : [...normalized].filter((c) => c !== " ");
@@ -947,7 +1094,7 @@ function LiveExample({
 
   const totalSurcharge = fields.reduce((sum, f) => {
     const rule = pricingRules.find((r) => r.fieldId === f.id);
-    return sum + calcFieldSurcharge(values[f.id] ?? "", f, rule);
+    return sum + calcFieldSurcharge(values[f.id] ?? "", f, rule, basePrice ?? 0);
   }, 0);
   const estimatedTotal = basePrice !== null ? basePrice + totalSurcharge : null;
 
@@ -993,14 +1140,28 @@ function LiveExample({
                   />
                   {rule && (
                     <BlockStack gap="050">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Per-character price: ${rule.perCharPrice.toFixed(2)}
-                      </Text>
-                      {rule.charGroups.map((g) => (
-                        <Text key={g.id} as="p" variant="bodySm" tone="subdued">
-                          &nbsp;&nbsp;{g.label}: ${g.pricePerChar.toFixed(2)}
+                      {(!rule.mode || rule.mode === "per_char") && (
+                        <>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Per-character price: ${rule.perCharPrice.toFixed(2)}
+                          </Text>
+                          {rule.charGroups.map((g) => (
+                            <Text key={g.id} as="p" variant="bodySm" tone="subdued">
+                              &nbsp;&nbsp;{g.label}: ${g.pricePerChar.toFixed(2)}
+                            </Text>
+                          ))}
+                        </>
+                      )}
+                      {rule.mode === "flat" && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Flat fee: ${rule.amount.toFixed(2)} when filled in
                         </Text>
-                      ))}
+                      )}
+                      {rule.mode === "percent" && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {rule.amount}% of base price when filled in
+                        </Text>
+                      )}
                     </BlockStack>
                   )}
                 </BlockStack>
@@ -1068,8 +1229,12 @@ function FieldPricingCard({
 }) {
   const priceFetcher = useFetcher<{ ok?: boolean }>();
   const groupFetcher = useFetcher<{ ok?: boolean; error?: string }>();
+  const savedMode = rule?.mode ?? "per_char";
   const savedPerCharPrice = rule?.perCharPrice?.toFixed(4) ?? "0.0000";
+  const savedAmount = rule?.amount?.toFixed(4) ?? "0.0000";
+  const [mode, setMode] = useState(savedMode);
   const [perCharPrice, setPerCharPrice] = useState(savedPerCharPrice);
+  const [amount, setAmount] = useState(savedAmount);
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [groupLabel, setGroupLabel] = useState("");
   const [groupChars, setGroupChars] = useState("");
@@ -1084,19 +1249,22 @@ function FieldPricingCard({
     }
   }, [groupFetcher.state, groupFetcher.data]);
 
-  // Report an unsaved per-character price up so the parent can guard tab switches (SL-68).
-  // After a successful save the loader revalidates, rule.perCharPrice updates, and
-  // savedPerCharPrice matches the input again — clearing dirty automatically.
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
-  // Compare numerically, not by string: after saving "2" the loader revalidates
-  // rule.perCharPrice to 2 which formats back to "2.0000", so a raw string compare
-  // would wrongly stay dirty and nag on every tab switch (SL-68 QA).
-  const priceDirty = parseFloat(perCharPrice || "0") !== (rule?.perCharPrice ?? 0);
+  const priceDirty =
+    mode !== savedMode ||
+    (mode === "per_char" && parseFloat(perCharPrice || "0") !== (rule?.perCharPrice ?? 0)) ||
+    (mode !== "per_char" && parseFloat(amount || "0") !== (rule?.amount ?? 0));
   useEffect(() => {
     onDirtyChangeRef.current?.(priceDirty);
   }, [priceDirty]);
   useEffect(() => () => onDirtyChangeRef.current?.(false), []);
+
+  const modeOptions = [
+    { label: "Per letter", value: "per_char" },
+    { label: "Flat fee", value: "flat" },
+    { label: "Percentage of base price", value: "percent" },
+  ];
 
   return (
     <Card>
@@ -1105,23 +1273,65 @@ function FieldPricingCard({
         <priceFetcher.Form method="post">
           <input type="hidden" name="_action" value="set_field_price" />
           <input type="hidden" name="fieldId" value={field.id} />
+          <input type="hidden" name="mode" value={mode} />
           <input type="hidden" name="perCharPrice" value={perCharPrice} />
-          <InlineStack gap="300" blockAlign="end">
-            <div style={{ width: "200px" }}>
-              <TextField
-                label="Price per character ($)"
-                type="number"
-                value={perCharPrice}
-                onChange={setPerCharPrice}
-                prefix="$"
-                autoComplete="off"
-              />
-            </div>
-            <Button submit loading={priceFetcher.state !== "idle"}>Save</Button>
-          </InlineStack>
+          <input type="hidden" name="amount" value={amount} />
+          <BlockStack gap="300">
+            <InlineStack gap="300" blockAlign="end">
+              <div style={{ width: "240px" }}>
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                  style={{ width: "100%", padding: "6px 8px", border: "1px solid #c9cccf", borderRadius: "4px", fontSize: "14px" }}
+                  aria-label="Pricing mode"
+                >
+                  {modeOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              {mode === "per_char" && (
+                <div style={{ width: "180px" }}>
+                  <TextField
+                    label="Price per character ($)"
+                    type="number"
+                    value={perCharPrice}
+                    onChange={setPerCharPrice}
+                    prefix="$"
+                    autoComplete="off"
+                  />
+                </div>
+              )}
+              {mode === "flat" && (
+                <div style={{ width: "180px" }}>
+                  <TextField
+                    label="Flat fee ($)"
+                    type="number"
+                    value={amount}
+                    onChange={setAmount}
+                    prefix="$"
+                    helpText="Added when the field has any value"
+                    autoComplete="off"
+                  />
+                </div>
+              )}
+              {mode === "percent" && (
+                <div style={{ width: "180px" }}>
+                  <TextField
+                    label="Percentage (%)"
+                    type="number"
+                    value={amount}
+                    onChange={setAmount}
+                    suffix="%"
+                    helpText="Of the product base price"
+                    autoComplete="off"
+                  />
+                </div>
+              )}
+              <Button submit loading={priceFetcher.state !== "idle"}>Save</Button>
+            </InlineStack>
+          </BlockStack>
         </priceFetcher.Form>
 
-        {rule?.charGroups?.length ? (
+        {mode === "per_char" && rule?.charGroups?.length ? (
           <BlockStack gap="200">
             <Text as="p" variant="bodySm" tone="subdued">
               Character groups (override the default price per character)
@@ -1133,7 +1343,7 @@ function FieldPricingCard({
           </BlockStack>
         ) : null}
 
-        {showAddGroup ? (
+        {mode === "per_char" && showAddGroup ? (
           <groupFetcher.Form method="post">
             <input type="hidden" name="_action" value="add_char_group" />
             <input type="hidden" name="fieldId" value={field.id} />
@@ -1173,11 +1383,11 @@ function FieldPricingCard({
               </InlineStack>
             </BlockStack>
           </groupFetcher.Form>
-        ) : (
+        ) : mode === "per_char" ? (
           <Button size="slim" onClick={() => setShowAddGroup(true)}>
             + Add character group
           </Button>
-        )}
+        ) : null}
       </BlockStack>
     </Card>
   );
@@ -1250,7 +1460,7 @@ export function ErrorBoundary() {
 }
 
 export default function ProductDetailPage() {
-  const { product, published, fields, pricingRules, variantPrices, themeEditorDeepLink } = useLoaderData<typeof loader>();
+  const { product, published, fields, pricingRules, conditions, variantPrices, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -1466,6 +1676,8 @@ export default function ProductDetailPage() {
                       <FieldRow
                         key={field.id}
                         field={field}
+                        allFields={fields}
+                        conditions={conditions}
                         isFirst={index === 0}
                         isLast={index === fields.length - 1}
                         isEditing={editingFieldId === field.id}
