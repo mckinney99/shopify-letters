@@ -1,6 +1,6 @@
 # SL-101 Spike: Admin Product Page UX Overhaul
 
-**Status:** Decision pending  
+**Status:** Decision made — Option D  
 **Output:** Design options + recommendation + story breakdown
 
 ---
@@ -114,25 +114,46 @@ Option upcharges can still be edited inline in the field editor (convenience), b
 
 ---
 
-## Recommendation
+## Option D — No Tabs, Inline Pricing, Right Preview Panel ⭐ CHOSEN
 
-**Ship Option C first.**
+Emerged from design review. Supersedes Options A–C.
 
-- Smallest risk: the page structure doesn't change for merchants who don't open the panel
-- Unblocks SL-97 (font size), SL-98 (font picker overhaul), SL-100 (rotation) — all slot cleanly into the sidebar
-- If merchant feedback says "I always want the preview visible," we can default the panel to open (one-line localStorage default change)
-- If usage data later shows split-screen is strongly preferred, Option B becomes an incremental upgrade from C, not a rewrite
+**What changes:**
+- **Pricing tab removed entirely.** Per-character char-group pricing moves inline into each text/textarea field card. Per-option pricing already lives inline on choice fields — no change needed there.
+- **No tabs at all.** Single scrollable field list. Simpler IA.
+- **Live preview panel** fixed to the right (~300px). At narrow viewports (<900px) it snaps to bottom automatically. No manual position toggle for now — revisit if merchant feedback asks for it.
+- **Preview panel shows storefront-accurate context:** product image + text overlay (with actual configured font/color loaded via Google Fonts), product title, price, Etch widget input, and a visual Add to Cart button (non-functional, labeled "preview only").
+- **"Preview on store" button** in the page header opens the real storefront product page — actual theme, no simulation. Works even when the product is not yet published via a signed preview token (see below).
 
-Option A is ruled out because splitting font/color/size controls across Fields and Preview tabs violates the principle that per-field settings live with the field editor.
+**Preview token flow:**
+1. Merchant clicks "Preview on store" in admin
+2. Admin generates HMAC-signed token (`shop + productId + expiry`, 30-min TTL, stateless)
+3. Opens `https://{shop}/products/{handle}?etch_preview={token}` in a new tab
+4. Storefront `etch-customization.js` detects the param, sends token to `/api/preview` for validation
+5. If valid: renders widget with full field config regardless of `published` state
+6. A dismissible "You're previewing — this isn't live yet" banner renders on the product page so the merchant knows this is preview-only and customers are unaffected
+7. Token expiry and per-request HMAC validation ensure no customer ever sees the unpublished widget
 
 ---
 
-## Story Breakdown (Option C)
+## Recommendation
+
+**Ship Option D.**
+
+- Eliminates the "where do I set pricing?" confusion completely — no tab to look in, it's right there on the field
+- Preview panel always visible alongside fields — zero friction, no toggle needed
+- "Preview on store" solves a real merchant pain point (can't see what it looks like until published) with a secure token mechanism
+- Responsive snap (right → bottom) handles narrow screens without a position toggle UI
+- Unblocks SL-97, SL-98, SL-100 — all slot naturally into the preview panel
+
+---
+
+## Story Breakdown (Option D)
 
 | Story | Title | Points | Notes |
 |---|---|---|---|
-| SL-102 | Pricing tab: add option upcharges summary | 2 | Read `priceDelta` from existing field options; render below per-char rules. No schema change. |
-| SL-103 | Product page: collapsible preview sidebar with toggle | 3 | Move `PreviewPlacementBoxEditor` from inline card → sidebar panel. Add toggle button to toolbar. localStorage state. |
-| SL-104 | Preview sidebar: onboarding tooltip on first visit | 1 | One-time Polaris `Tooltip` pointing at the toggle button. localStorage dismiss. |
+| SL-102 | Admin: remove Pricing tab — move char-group pricing inline into field cards | 3 | Move `PricingTab` char-group editor into each text/textarea `FieldRow` expanded view. Delete the Pricing tab. No schema change. |
+| SL-103 | Admin: live preview panel (right, snaps to bottom on narrow screens) | 5 | Move `PreviewPlacementBoxEditor` to a fixed right panel. Panel shows product image + overlay, product title/price, Etch widget input, visual ATC button. Load configured Google Fonts in admin for accurate rendering. Snap to bottom below 900px. |
+| SL-104 | Admin + Storefront: "Preview on store" with signed token + preview banner | 3 | Admin generates HMAC token, opens storefront URL with `?etch_preview=token`. Storefront widget validates token via `/api/preview`, renders even if unpublished. Dismissible "You're previewing" banner on storefront. |
 
-After these three, SL-97 (font size picker), SL-98 (searchable font dropdown), and SL-100 (rotation) all target the sidebar panel and can be shipped in any order.
+After these three, SL-97 (font size picker), SL-98 (searchable font dropdown), and SL-100 (rotation) all target the preview panel and can be shipped in any order.
