@@ -132,7 +132,7 @@ export default function Index() {
       external: true,
     },
     {
-      done: enabledCount > 0,
+      done: enabledCount > 0 || publishedCount > 0,
       title: "Add customization to a product",
       description: "Pick a product and add a text field, dropdown, or other input.",
       actionLabel: "Go to Products",
@@ -150,6 +150,7 @@ export default function Index() {
 
   const doneCount = steps.filter((s) => s.done).length;
   const allDone = doneCount === steps.length;
+  const pendingSteps = steps.filter((s) => !s.done);
   const showGuide = !dismissed;
 
   function handleDismiss() {
@@ -170,18 +171,23 @@ export default function Index() {
                     <Text as="p" tone="subdued">{doneCount} of {steps.length} complete</Text>
                   </InlineStack>
                   <ProgressBar progress={(doneCount / steps.length) * 100} size="small" tone="success" />
-                  <BlockStack gap="400">
-                    {steps.map((step, i) => (
-                      <Box key={i}>
-                        {i > 0 && <Box paddingBlockEnd="400"><Divider /></Box>}
-                        <StepRow {...step} />
+                  {allDone ? (
+                    <BlockStack gap="200">
+                      <Text as="p" fontWeight="semibold" tone="success">You're all set!</Text>
+                      <Text as="p" tone="subdued">Etch is active and your first product is configured. Customers can now personalize on your storefront.</Text>
+                      <Box paddingBlockStart="100">
+                        <Button onClick={handleDismiss} variant="plain">Dismiss guide</Button>
                       </Box>
-                    ))}
-                  </BlockStack>
-                  {allDone && (
-                    <Box>
-                      <Button onClick={handleDismiss} variant="plain">Dismiss guide</Button>
-                    </Box>
+                    </BlockStack>
+                  ) : (
+                    <BlockStack gap="400">
+                      {pendingSteps.map((step, i) => (
+                        <Box key={step.title}>
+                          {i > 0 && <Box paddingBlockEnd="400"><Divider /></Box>}
+                          <StepRow {...step} />
+                        </Box>
+                      ))}
+                    </BlockStack>
                   )}
                 </BlockStack>
               </Card>
