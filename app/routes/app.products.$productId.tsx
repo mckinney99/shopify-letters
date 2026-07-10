@@ -646,22 +646,76 @@ type AssetLibrary = {
   optionSets: { id: string; name: string; entries: { id: string; label: string; priceDelta: number; position: number }[] }[];
 };
 
+const TYPE_PICKER_OPTIONS = [
+  { value: "text",           label: "Short text",          description: "Single line — names, initials, short messages" },
+  { value: "textarea",       label: "Long text",            description: "Multi-line — longer messages or paragraphs" },
+  { value: "number",         label: "Number",               description: "Numeric input with optional min / max" },
+  { value: "date",           label: "Date",                 description: "Date picker, optionally future dates only" },
+  { value: "dropdown",       label: "Dropdown",             description: "Single selection from a list" },
+  { value: "checkbox",       label: "Checkbox",             description: "Single opt-in with optional surcharge" },
+  { value: "buttons",        label: "Button group",         description: "Single selection shown as clickable buttons" },
+  { value: "swatches",       label: "Color swatches",       description: "Single selection shown as colored circles" },
+  { value: "image-swatches", label: "Image swatches",       description: "Single selection shown as images" },
+  { value: "upload",         label: "File upload",          description: "Let customers attach a file (image, PDF, etc.)" },
+  { value: "text-block",     label: "Text block",           description: "Display-only text — no input, no pricing" },
+  { value: "image-static",   label: "Image (display only)", description: "Display-only image — no input, no pricing" },
+];
+
+function TypePickerModal({ open, onSelect, onCancel }: { open: boolean; onSelect: (type: string) => void; onCancel: () => void }) {
+  return (
+    <Modal open={open} onClose={onCancel} title="Choose a field type" noScroll={false}>
+      <Modal.Section>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+          {TYPE_PICKER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onSelect(opt.value)}
+              style={{
+                textAlign: "left",
+                padding: "12px 14px",
+                border: "1px solid #e1e3e5",
+                borderRadius: "8px",
+                background: "#fff",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "#005bd3";
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 0 0 1px #005bd3";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "#e1e3e5";
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = "none";
+              }}
+            >
+              <Text as="p" fontWeight="semibold" variant="bodySm">{opt.label}</Text>
+              <Text as="p" tone="subdued" variant="bodySm">{opt.description}</Text>
+            </button>
+          ))}
+        </div>
+      </Modal.Section>
+    </Modal>
+  );
+}
+
 function FieldForm({
   field,
   actionType,
   onClose,
   onDirtyChange,
   assets,
+  initialType,
 }: {
   field?: FieldData;
   actionType: "create" | "update";
   onClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
   assets?: AssetLibrary;
+  initialType?: string;
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const [label, setLabel] = useState(field?.label ?? "");
-  const [type, setType] = useState(field?.type ?? "text");
+  const [type, setType] = useState(field?.type ?? initialType ?? "text");
   const [minChars, setMinChars] = useState(field?.minChars?.toString() ?? "");
   const [maxChars, setMaxChars] = useState(field?.maxChars?.toString() ?? "");
   const [allowedChars, setAllowedChars] = useState(field?.allowedChars ?? "");
@@ -2159,6 +2213,9 @@ export default function ProductDetailPage() {
     }
   }, [publishFetcher.state, publishFetcher.data, onboardingComplete]);
 
+  const [showTypePicker, setShowTypePicker] = useState(false);
+  const [pickedType, setPickedType] = useState<string | null>(null);
+
   const handleEdit = useCallback((id: string) => {
     setShowAddForm(false);
     setEditingFieldId(id);
@@ -2166,9 +2223,15 @@ export default function ProductDetailPage() {
   const handleEditClose = useCallback(() => setEditingFieldId(null), []);
   const handleAddOpen = useCallback(() => {
     setEditingFieldId(null);
+    setShowTypePicker(true);
+  }, []);
+  const handleTypePick = useCallback((type: string) => {
+    setShowTypePicker(false);
+    setPickedType(type);
     setShowAddForm(true);
   }, []);
-  const handleAddClose = useCallback(() => setShowAddForm(false), []);
+  const handleTypePickCancel = useCallback(() => setShowTypePicker(false), []);
+  const handleAddClose = useCallback(() => { setShowAddForm(false); setPickedType(null); }, []);
 
   return (
     <Page
@@ -2330,7 +2393,7 @@ export default function ProductDetailPage() {
                     <Box padding="400">
                       <BlockStack gap="300">
                         <Text as="h3" variant="headingSm">New field</Text>
-                        <FieldForm actionType="create" onClose={handleAddClose} assets={assets} />
+                        <FieldForm actionType="create" onClose={handleAddClose} assets={assets} initialType={pickedType ?? undefined} />
                       </BlockStack>
                     </Box>
                   )}
@@ -2368,6 +2431,7 @@ export default function ProductDetailPage() {
         )}
       </div>
       </BlockStack>
+      <TypePickerModal open={showTypePicker} onSelect={handleTypePick} onCancel={handleTypePickCancel} />
     </Page>
   );
 }
