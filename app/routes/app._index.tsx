@@ -132,7 +132,7 @@ export default function Index() {
       external: true,
     },
     {
-      done: enabledCount > 0,
+      done: enabledCount > 0 || publishedCount > 0,
       title: "Add customization to a product",
       description: "Pick a product and add a text field, dropdown, or other input.",
       actionLabel: "Go to Products",
