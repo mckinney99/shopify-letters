@@ -76,7 +76,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         minChars: true, maxChars: true, allowedChars: true, disallowedChars: true,
         allowSpaces: true, countSpaces: true,
         helpText: true, dateFutureOnly: true, fontOptions: true, textColorOptions: true, fontSizeOptions: true, fileAccept: true,
-        previewX: true, previewY: true, previewW: true, previewH: true,
+        previewX: true, previewY: true, previewW: true, previewH: true, previewRotation: true,
         options: { select: { label: true, priceDelta: true, swatchColor: true, imageUrl: true }, orderBy: { position: "asc" } },
       },
     }),
@@ -121,6 +121,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     previewY: f.previewY,
     previewW: f.previewW,
     previewH: f.previewH,
+    previewRotation: f.previewRotation,
   }));
 
   return json({ fields, conditions, previewEnabled: config?.previewEnabled ?? false, previewMode }, { headers: CORS_HEADERS });

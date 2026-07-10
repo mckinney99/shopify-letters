@@ -79,6 +79,8 @@ model CustomizationField {
   previewY         Float?
   previewW         Float?
   previewH         Float?
+  // SL-100: rotation in degrees (0–359, null = 0)
+  previewRotation  Float?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

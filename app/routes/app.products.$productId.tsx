@@ -136,6 +136,7 @@ type FieldData = {
   textColorOptions?: string | null;
   fontSizeOptions?: string | null;
   fileAccept?: string | null;
+  previewRotation?: number | null;
 };
 
 type CharPriceGroupData = {
@@ -544,6 +545,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         previewY: parseFloat(form.get("previewY") as string),
         previewW: parseFloat(form.get("previewW") as string),
         previewH: parseFloat(form.get("previewH") as string),
+        previewRotation: parseFloat(form.get("previewRotation") as string) || 0,
       },
     });
     return json({ ok: true });
@@ -2045,7 +2047,7 @@ function SaveAsTemplateButton() {
   );
 }
 
-type PlacementBox = { x: number; y: number; w: number; h: number };
+type PlacementBox = { x: number; y: number; w: number; h: number; rotation: number };
 
 const BOX_COLORS = ["#5c6ac4", "#47c1bf", "#f49342", "#de3618", "#50b83c"];
 
@@ -2072,6 +2074,7 @@ function PreviewPlacementBoxEditor({
         y: (f as any).previewY ?? 40,
         w: (f as any).previewW ?? 80,
         h: (f as any).previewH ?? 15,
+        rotation: (f as any).previewRotation ?? 0,
       };
     });
     return map;
@@ -2120,6 +2123,7 @@ function PreviewPlacementBoxEditor({
           previewY: String(Math.round(p.y * 100) / 100),
           previewW: String(Math.round(p.w * 100) / 100),
           previewH: String(Math.round(p.h * 100) / 100),
+          previewRotation: String(Math.round(p.rotation)),
         },
         { method: "post" }
       );
@@ -2131,6 +2135,24 @@ function PreviewPlacementBoxEditor({
       document.removeEventListener("mouseup", onMouseUp);
     };
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleRotationChange(fieldId: string, deg: number) {
+    const clamped = Math.max(0, Math.min(359, isNaN(deg) ? 0 : deg));
+    setPlacementBoxs((prev) => ({ ...prev, [fieldId]: { ...prev[fieldId], rotation: clamped } }));
+    const p = placementsRef.current[fieldId];
+    placementFetcher.submit(
+      {
+        _action: "save_preview_placement",
+        fieldId,
+        previewX: String(Math.round(p.x * 100) / 100),
+        previewY: String(Math.round(p.y * 100) / 100),
+        previewW: String(Math.round(p.w * 100) / 100),
+        previewH: String(Math.round(p.h * 100) / 100),
+        previewRotation: String(clamped),
+      },
+      { method: "post" }
+    );
+  }
 
   if (textFields.length === 0) return null;
 
@@ -2155,7 +2177,7 @@ function PreviewPlacementBoxEditor({
           </div>
         )}
         {textFields.map((field, idx) => {
-          const p = placements[field.id] ?? { x: 10, y: 40, w: 80, h: 15 };
+          const p = placements[field.id] ?? { x: 10, y: 40, w: 80, h: 15, rotation: 0 };
           const color = BOX_COLORS[idx % BOX_COLORS.length];
           const liveText = previewValues?.[field.id] ?? "";
           const hasLiveText = liveText.length > 0;
@@ -2185,6 +2207,8 @@ function PreviewPlacementBoxEditor({
                 alignItems: "center",
                 justifyContent: "center",
                 borderRadius: "4px",
+                transform: p.rotation ? `rotate(${p.rotation}deg)` : undefined,
+                transformOrigin: "center center",
               }}
             >
               <span style={{
@@ -2223,6 +2247,31 @@ function PreviewPlacementBoxEditor({
           );
         })}
       </div>
+      {/* Per-field rotation inputs */}
+      <BlockStack gap="100">
+        {textFields.map((field, idx) => {
+          const color = BOX_COLORS[idx % BOX_COLORS.length];
+          return (
+            <InlineStack key={field.id} gap="200" blockAlign="center">
+              <span style={{ width: 10, height: 10, background: color, borderRadius: 2, display: "inline-block", flexShrink: 0 }} />
+              <Text as="span" variant="bodySm">{field.label}</Text>
+              <div style={{ width: 90 }}>
+                <TextField
+                  label="Rotation"
+                  labelHidden
+                  type="number"
+                  min="0"
+                  max="359"
+                  value={String(placements[field.id]?.rotation ?? 0)}
+                  onChange={(v) => handleRotationChange(field.id, parseInt(v))}
+                  suffix="°"
+                  autoComplete="off"
+                />
+              </div>
+            </InlineStack>
+          );
+        })}
+      </BlockStack>
     </BlockStack>
   );
 }

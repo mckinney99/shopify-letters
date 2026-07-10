@@ -660,13 +660,22 @@
           var x = r.left - overlayRect.left;
           var y = r.top - overlayRect.top;
           var cs = window.getComputedStyle(span);
+          var rotation = parseFloat(span.dataset.rotation || '0');
           ctx.save();
           ctx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
           ctx.fillStyle = cs.color || '#fff';
           ctx.shadowColor = 'rgba(0,0,0,0.7)';
           ctx.shadowBlur = 4;
           ctx.textBaseline = 'top';
-          ctx.fillText(span.textContent, x, y, r.width || cw);
+          if (rotation) {
+            var cx = x + r.width / 2;
+            var cy = y + r.height / 2;
+            ctx.translate(cx, cy);
+            ctx.rotate(rotation * Math.PI / 180);
+            ctx.fillText(span.textContent, -r.width / 2, -r.height / 2, r.width || cw);
+          } else {
+            ctx.fillText(span.textContent, x, y, r.width || cw);
+          }
           ctx.restore();
         });
       }
@@ -1436,6 +1445,8 @@
       var span = document.createElement('span');
       var hasPlacement = field.previewX != null && field.previewY != null;
       if (hasPlacement) {
+        var rotationCss = field.previewRotation ? 'transform:rotate(' + field.previewRotation + 'deg);transform-origin:center center;' : '';
+        span.dataset.rotation = field.previewRotation || 0;
         span.style.cssText = 'position:absolute;'
           + 'left:' + field.previewX + '%;'
           + 'top:' + field.previewY + '%;'
@@ -1445,7 +1456,8 @@
           + 'font-size:clamp(12px,3vw,24px);'
           + 'text-shadow:0 1px 6px rgba(0,0,0,0.85);'
           + 'word-break:break-word;line-height:1.3;'
-          + 'display:flex;align-items:center;justify-content:center;box-sizing:border-box';
+          + 'display:flex;align-items:center;justify-content:center;box-sizing:border-box;'
+          + rotationCss;
       } else {
         // Auto-center: stacked as flex items in the overlay
         span.style.cssText = 'display:block;color:#fff;font-size:clamp(14px,4vw,28px);font-weight:bold;'
