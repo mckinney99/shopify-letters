@@ -70,6 +70,8 @@ model CustomizationField {
   fontOptions      String?
   // SL-82: JSON [{"label":"Gold","color":"#D4AF37"}] of text colors to offer
   textColorOptions String?
+  // SL-97: JSON array of size strings e.g. ["12px","16px","24px"]
+  fontSizeOptions  String?
   // SL-78: MIME filter for upload fields e.g. "image/*" or "*/*"
   fileAccept       String?
   // SL-91: preview text placement as % of image dimensions (null = auto-center)
