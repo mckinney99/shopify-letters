@@ -1589,6 +1589,204 @@ function FieldPricingCard({
   );
 }
 
+// ── Live preview panel ────────────────────────────────────────────────────────
+
+function LivePreviewPanel({
+  fields,
+  pricingRules,
+  variantPrices,
+  productImageUrl,
+  productTitle,
+  productId,
+  previewEnabled,
+  onTogglePreview,
+}: {
+  fields: FieldData[];
+  pricingRules: PricingRuleData[];
+  variantPrices: number[];
+  productImageUrl: string | null;
+  productTitle: string;
+  productId: string;
+  previewEnabled: boolean;
+  onTogglePreview: (enabled: boolean) => void;
+}) {
+  const textFields = fields.filter((f) => f.type === "text" || f.type === "textarea");
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(textFields.map((f) => [f.id, ""]))
+  );
+  const [panelOpen, setPanelOpen] = useState(true);
+  const PANEL_KEY = `etch_preview_panel_${productId}`;
+
+  useEffect(() => {
+    if (localStorage.getItem(PANEL_KEY) === "0") setPanelOpen(false);
+  }, [PANEL_KEY]);
+
+  // Inject Google Fonts for every font configured on any field of this product
+  useEffect(() => {
+    const fonts = [
+      ...new Set(
+        fields.flatMap((f) => {
+          try { return f.fontOptions ? (JSON.parse(f.fontOptions) as string[]) : []; }
+          catch { return [] as string[]; }
+        })
+      ),
+    ].filter(Boolean);
+    if (!fonts.length) return;
+    const id = "etch-admin-google-fonts";
+    let link = document.getElementById(id) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    link.href = `https://fonts.googleapis.com/css2?${fonts.map((f) => `family=${f.replace(/ /g, "+")}`).join("&")}&display=swap`;
+  }, [fields]);
+
+  const basePrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
+
+  const totalSurcharge = textFields.reduce((sum, f) => {
+    const rule = pricingRules.find((r) => r.fieldId === f.id);
+    return sum + calcFieldSurcharge(values[f.id] ?? "", f, rule, basePrice ?? 0);
+  }, 0);
+  const totalChars = textFields.reduce((sum, f) => {
+    const v = (values[f.id] ?? "").trim().replace(/\s+/g, " ");
+    const chars = f.countSpaces ? [...v] : [...v].filter((c) => c !== " ");
+    return sum + chars.length;
+  }, 0);
+
+  // Extract first configured font/color per field for storefront-accurate rendering
+  const fieldStyles = Object.fromEntries(
+    textFields.map((f) => {
+      let font = "";
+      let color = "";
+      try {
+        const fonts: string[] = f.fontOptions ? JSON.parse(f.fontOptions) : [];
+        if (fonts.length) font = fonts[0];
+      } catch {}
+      try {
+        const colors: { label: string; color: string }[] = f.textColorOptions
+          ? JSON.parse(f.textColorOptions)
+          : [];
+        if (colors.length) color = colors[0].color;
+      } catch {}
+      return [f.id, { font, color: color || "#ffffff" }];
+    })
+  );
+
+  if (!panelOpen) {
+    return (
+      <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: "4px" }}>
+        <button
+          onClick={() => { localStorage.setItem(PANEL_KEY, "1"); setPanelOpen(true); }}
+          style={{ fontSize: "12px", background: "#303030", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", cursor: "pointer" }}
+        >
+          Show preview ▶
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden", background: "white", position: "sticky", top: "16px" }}>
+      {/* Header */}
+      <div style={{ background: "#303030", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ color: "white", fontWeight: 600, fontSize: "13px" }}>Live Preview</span>
+        <button
+          onClick={() => { localStorage.setItem(PANEL_KEY, "0"); setPanelOpen(false); }}
+          aria-label="Close preview panel"
+          style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: "20px", lineHeight: 1, padding: "0 2px" }}
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Product image + draggable overlay */}
+      <PreviewPlacementBoxEditor
+        fields={fields}
+        productImageUrl={productImageUrl}
+        previewValues={values}
+        fieldStyles={fieldStyles}
+      />
+
+      {/* Product info + widget simulation */}
+      <div style={{ padding: "14px 16px" }}>
+        <div style={{ fontWeight: 700, fontSize: "15px", marginBottom: "2px" }}>{productTitle}</div>
+        {basePrice !== null && (
+          <div style={{ color: "#616568", fontSize: "13px", marginBottom: "12px" }}>
+            ${basePrice.toFixed(2)}
+            {totalSurcharge > 0 && (
+              <span style={{ color: "#1a7f37" }}> + ${totalSurcharge.toFixed(2)}</span>
+            )}
+          </div>
+        )}
+
+        {/* Etch widget inputs */}
+        <div style={{ marginBottom: "12px" }}>
+          {textFields.map((field) => (
+            <div key={field.id} style={{ marginBottom: "8px" }}>
+              <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#303030", marginBottom: "4px" }}>
+                {field.label}
+              </label>
+              {field.type === "textarea" ? (
+                <textarea
+                  value={values[field.id] ?? ""}
+                  onChange={(e) => setValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                  rows={3}
+                  placeholder="Type to preview…"
+                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid #c9cccf", borderRadius: "6px", padding: "6px 8px", fontSize: "13px", resize: "vertical", outline: "none", fontFamily: fieldStyles[field.id]?.font || undefined }}
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={values[field.id] ?? ""}
+                  onChange={(e) => setValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                  placeholder="Type to preview…"
+                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid #c9cccf", borderRadius: "6px", padding: "6px 8px", fontSize: "13px", outline: "none", fontFamily: fieldStyles[field.id]?.font || undefined }}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Dynamic price line */}
+        {totalChars > 0 && (
+          <div style={{ fontSize: "12px", color: "#1a7f37", marginBottom: "10px", fontWeight: 500 }}>
+            {totalChars} char{totalChars !== 1 ? "s" : ""} · +${totalSurcharge.toFixed(2)} added to price
+          </div>
+        )}
+
+        {/* Fake Add to cart */}
+        <div
+          style={{
+            background: "#303030",
+            color: "white",
+            textAlign: "center",
+            padding: "10px 16px",
+            borderRadius: "6px",
+            fontSize: "13px",
+            fontWeight: 600,
+            userSelect: "none",
+            marginBottom: "12px",
+          }}
+        >
+          Add to cart (preview only)
+        </div>
+
+        {/* Storefront overlay toggle */}
+        <div style={{ borderTop: "1px solid #f1f2f4", paddingTop: "10px" }}>
+          <Checkbox
+            label="Show text overlay on storefront"
+            helpText="Customers see the overlay live as they type"
+            checked={previewEnabled}
+            onChange={onTogglePreview}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function ErrorBoundary() {
@@ -1697,9 +1895,13 @@ const BOX_COLORS = ["#5c6ac4", "#47c1bf", "#f49342", "#de3618", "#50b83c"];
 function PreviewPlacementBoxEditor({
   fields,
   productImageUrl,
+  previewValues,
+  fieldStyles,
 }: {
   fields: FieldData[];
   productImageUrl: string | null;
+  previewValues?: Record<string, string>;
+  fieldStyles?: Record<string, { font: string; color: string }>;
 }) {
   const textFields = fields.filter((f) => f.type === "text" || f.type === "textarea");
   const placementFetcher = useFetcher();
@@ -1798,6 +2000,12 @@ function PreviewPlacementBoxEditor({
         {textFields.map((field, idx) => {
           const p = placements[field.id] ?? { x: 10, y: 40, w: 80, h: 15 };
           const color = BOX_COLORS[idx % BOX_COLORS.length];
+          const liveText = previewValues?.[field.id] ?? "";
+          const hasLiveText = liveText.length > 0;
+          const textColor = hasLiveText && fieldStyles?.[field.id]?.color
+            ? fieldStyles[field.id].color
+            : hasLiveText ? "#ffffff" : color;
+          const textFont = fieldStyles?.[field.id]?.font ?? undefined;
           return (
             <div
               key={field.id}
@@ -1811,8 +2019,8 @@ function PreviewPlacementBoxEditor({
                 top: `${p.y}%`,
                 width: `${p.w}%`,
                 height: `${p.h}%`,
-                border: `2px solid ${color}`,
-                background: `${color}22`,
+                border: hasLiveText ? "1px dashed rgba(255,255,255,0.5)" : `2px solid ${color}`,
+                background: hasLiveText ? "transparent" : `${color}22`,
                 cursor: "move",
                 boxSizing: "border-box",
                 display: "flex",
@@ -1821,8 +2029,19 @@ function PreviewPlacementBoxEditor({
                 borderRadius: "4px",
               }}
             >
-              <span style={{ color, fontSize: "12px", fontWeight: 600, pointerEvents: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90%" }}>
-                {field.label}
+              <span style={{
+                color: textColor,
+                fontFamily: textFont,
+                fontSize: hasLiveText ? "16px" : "12px",
+                fontWeight: 600,
+                textShadow: hasLiveText ? "0 1px 4px rgba(0,0,0,0.6)" : undefined,
+                pointerEvents: "none",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: "90%",
+              }}>
+                {hasLiveText ? liveText : field.label}
               </span>
               {/* Resize handle — bottom-right corner */}
               <div
@@ -1855,6 +2074,13 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(false);
+  useEffect(() => {
+    const check = () => setIsNarrow(window.innerWidth < 900);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   // Onboarding guide state
   const [onboardingComplete, setOnboardingComplete] = useState(false);
@@ -2035,88 +2261,85 @@ export default function ProductDetailPage() {
           </BlockStack>
         </Banner>
       )}
-      {fields.length === 0 && !showAddForm && (
-        <TemplatePicker merchantTemplates={merchantTemplates} />
-      )}
-      {fields.length > 0 && (
-        <SaveAsTemplateButton />
-      )}
-      {fields.some((f) => f.type === "text" || f.type === "textarea") && (
-        <Card>
+      <div style={{ display: "flex", gap: "24px", flexDirection: isNarrow ? "column" : "row", alignItems: "flex-start" }}>
+        {/* Left: field configuration */}
+        <div style={{ flex: 1, minWidth: 0 }}>
           <BlockStack gap="400">
-            <InlineStack align="space-between" blockAlign="center">
-              <BlockStack gap="100">
-                <Text as="p" fontWeight="semibold">Text preview</Text>
-                <Text as="p" tone="subdued">
-                  Show the customer's text overlaid on the product image as they type.
-                </Text>
-              </BlockStack>
-              <Checkbox
-                label="Enable preview"
-                labelHidden
-                checked={optimisticPreview}
-                onChange={(checked) =>
-                  previewFetcher.submit(
-                    { _action: "toggle_preview", previewEnabled: String(checked) },
-                    { method: "post" }
-                  )
-                }
-              />
-            </InlineStack>
-            {optimisticPreview && (
-              <PreviewPlacementBoxEditor
-                fields={fields}
-                productImageUrl={productImageUrl}
-              />
+            {fields.length === 0 && !showAddForm && (
+              <TemplatePicker merchantTemplates={merchantTemplates} />
+            )}
+            {fields.length > 0 && (
+              <SaveAsTemplateButton />
+            )}
+            <Card padding="0">
+              {fields.length === 0 && !showAddForm ? (
+                <EmptyState
+                  heading="No customization fields yet"
+                  image=""
+                  action={{ content: "Add field", onAction: handleAddOpen }}
+                >
+                  <Text as="p">
+                    Define the inputs customers fill in when customizing this product.
+                  </Text>
+                </EmptyState>
+              ) : (
+                <>
+                  {fields.map((field, index) => (
+                    <FieldRow
+                      key={field.id}
+                      field={field}
+                      allFields={fields}
+                      conditions={conditions}
+                      assets={assets}
+                      isFirst={index === 0}
+                      isLast={index === fields.length - 1}
+                      isEditing={editingFieldId === field.id}
+                      onEdit={() => handleEdit(field.id)}
+                      onEditClose={handleEditClose}
+                      pricingRule={pricingRules.find((r) => r.fieldId === field.id)}
+                    />
+                  ))}
+                  {showAddForm && (
+                    <Box padding="400">
+                      <BlockStack gap="300">
+                        <Text as="h3" variant="headingSm">New field</Text>
+                        <FieldForm actionType="create" onClose={handleAddClose} assets={assets} />
+                      </BlockStack>
+                    </Box>
+                  )}
+                </>
+              )}
+            </Card>
+            {fields.some((f) => f.type === "text" || f.type === "textarea") && (
+              <LiveExample fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
+            )}
+            {!showAddForm && fields.length > 0 && (
+              <Button onClick={handleAddOpen} variant="primary">Add field</Button>
             )}
           </BlockStack>
-        </Card>
-      )}
-      <Card padding="0">
-        {fields.length === 0 && !showAddForm ? (
-          <EmptyState
-            heading="No customization fields yet"
-            image=""
-            action={{ content: "Add field", onAction: handleAddOpen }}
-          >
-            <Text as="p">
-              Define the inputs customers fill in when customizing this product.
-            </Text>
-          </EmptyState>
-        ) : (
-          <>
-            {fields.map((field, index) => (
-              <FieldRow
-                key={field.id}
-                field={field}
-                allFields={fields}
-                conditions={conditions}
-                assets={assets}
-                isFirst={index === 0}
-                isLast={index === fields.length - 1}
-                isEditing={editingFieldId === field.id}
-                onEdit={() => handleEdit(field.id)}
-                onEditClose={handleEditClose}
-                pricingRule={pricingRules.find((r) => r.fieldId === field.id)}
-              />
-            ))}
-            {showAddForm && (
-              <Box padding="400">
-                <BlockStack gap="300">
-                  <Text as="h3" variant="headingSm">New field</Text>
-                  <FieldForm actionType="create" onClose={handleAddClose} assets={assets} />
-                </BlockStack>
-              </Box>
-            )}
-          </>
+        </div>
+
+        {/* Right: live preview panel */}
+        {fields.some((f) => f.type === "text" || f.type === "textarea") && (
+          <div style={{ flex: "0 0 300px", width: "300px" }}>
+            <LivePreviewPanel
+              fields={fields}
+              pricingRules={pricingRules}
+              variantPrices={variantPrices}
+              productImageUrl={productImageUrl}
+              productTitle={product.title}
+              productId={product.id.split("/").pop() ?? product.id}
+              previewEnabled={optimisticPreview}
+              onTogglePreview={(checked) =>
+                previewFetcher.submit(
+                  { _action: "toggle_preview", previewEnabled: String(checked) },
+                  { method: "post" }
+                )
+              }
+            />
+          </div>
         )}
-      </Card>
-      {fields.some((f) => f.type === "text" || f.type === "textarea") && (
-        <LiveExample fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
-      )}
-      {!showAddForm && fields.length > 0 && (
-        <Button onClick={handleAddOpen} variant="primary">Add field</Button>
-      )}
+      </div>
       </BlockStack>
     </Page>
   );
