@@ -1165,7 +1165,7 @@ function FieldConditionEditor({
             </div>
             <Text as="span" variant="bodySm">is</Text>
             <div style={{ minWidth: "100px" }}>
-              <TextField label="" labelHidden value={conditionValue} onChange={setConditionValue} autoComplete="off" placeholder="value" />
+              <TextField label="" labelHidden value={conditionValue} onChange={setConditionValue} autoComplete="off" placeholder="e.g. Gold" helpText="Exact option value that shows this field" />
             </div>
             {addFetcher.data?.error && <Text as="span" tone="critical" variant="bodySm">{addFetcher.data.error}</Text>}
             <Button size="slim" submit loading={addFetcher.state !== "idle"} disabled={!triggerFieldId}>Add</Button>
@@ -1249,9 +1249,9 @@ function FieldRow({
         <InlineStack align="space-between" blockAlign="center" gap="400">
           <BlockStack gap="100">
             <Text as="span" variant="bodyMd" fontWeight="semibold">{field.label}</Text>
-            {charInfo.length > 0 && (
-              <Text as="span" variant="bodySm" tone="subdued">{charInfo.join(" · ")}</Text>
-            )}
+            <Text as="span" variant="bodySm" tone="subdued">
+              {[FIELD_TYPE_OPTIONS.find((o) => o.value === field.type)?.label ?? field.type, ...charInfo].join(" · ")}
+            </Text>
           </BlockStack>
           <InlineStack gap="200" blockAlign="center">
             <moveFetcher.Form method="post" style={{ display: "inline" }}>
@@ -2406,6 +2406,7 @@ export default function ProductDetailPage() {
             {!showAddForm && fields.length > 0 && (
               <Button onClick={handleAddOpen} variant="primary">Add field</Button>
             )}
+            <div style={{ height: "80px" }} />
           </BlockStack>
         </div>
 
