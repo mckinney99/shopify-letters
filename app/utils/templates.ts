@@ -14,6 +14,7 @@ export type TemplateField = {
   dateFutureOnly: boolean;
   fontOptions: string | null;
   textColorOptions: string | null;
+  fontSizeOptions: string | null;
   fileAccept: string | null;
   options: Array<{
     label: string;
@@ -42,6 +43,7 @@ const defaults: Omit<TemplateField, "label" | "type" | "options"> = {
   dateFutureOnly: false,
   fontOptions: null,
   textColorOptions: null,
+  fontSizeOptions: null,
   fileAccept: null,
 };
 

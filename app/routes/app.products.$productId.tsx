@@ -131,6 +131,7 @@ type FieldData = {
   dateFutureOnly?: boolean;
   fontOptions?: string | null;
   textColorOptions?: string | null;
+  fontSizeOptions?: string | null;
   fileAccept?: string | null;
 };
 
@@ -316,6 +317,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const dateFutureOnly = form.get("dateFutureOnly") === "true";
     const fontOptions = (form.get("fontOptions") as string) || null;
     const textColorOptions = (form.get("textColorOptions") as string) || null;
+    const fontSizeOptions = (form.get("fontSizeOptions") as string) || null;
     const fileAccept = (form.get("fileAccept") as string) || null;
     const options = isChoiceType(type) ? parseOptions(form.get("options") as string) : [];
 
@@ -344,6 +346,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         dateFutureOnly,
         fontOptions,
         textColorOptions,
+        fontSizeOptions,
         fileAccept,
         position: count,
         options: {
@@ -370,6 +373,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const dateFutureOnly = form.get("dateFutureOnly") === "true";
     const fontOptions = (form.get("fontOptions") as string) || null;
     const textColorOptions = (form.get("textColorOptions") as string) || null;
+    const fontSizeOptions = (form.get("fontSizeOptions") as string) || null;
     const fileAccept = (form.get("fileAccept") as string) || null;
     const options = isChoiceType(type) ? parseOptions(form.get("options") as string) : [];
 
@@ -394,6 +398,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         dateFutureOnly,
         fontOptions,
         textColorOptions,
+        fontSizeOptions,
         fileAccept,
       },
     });
@@ -591,7 +596,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           allowedChars: f.allowedChars, disallowedChars: f.disallowedChars,
           allowSpaces: f.allowSpaces, countSpaces: f.countSpaces,
           helpText: f.helpText, dateFutureOnly: f.dateFutureOnly,
-          fontOptions: f.fontOptions, textColorOptions: f.textColorOptions,
+          fontOptions: f.fontOptions, textColorOptions: f.textColorOptions, fontSizeOptions: f.fontSizeOptions,
           fileAccept: f.fileAccept, position: existingCount + i,
         },
       });
@@ -624,6 +629,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       allowSpaces: f.allowSpaces, countSpaces: f.countSpaces,
       helpText: f.helpText, dateFutureOnly: f.dateFutureOnly,
       fontOptions: f.fontOptions, textColorOptions: f.textColorOptions,
+      fontSizeOptions: f.fontSizeOptions ?? null,
       fileAccept: f.fileAccept,
       options: f.options.map((o) => ({
         label: o.label, priceDelta: o.priceDelta,
@@ -766,9 +772,18 @@ function FieldForm({
   const updateOption = (i: number, key: "label" | "priceDelta" | "swatchColor" | "imageUrl", val: string) =>
     setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)));
 
+  // Font size options (SL-97) — stored as JSON string[] e.g. ["12px","16px","24px"]
+  const initialSizes: string[] = field?.fontSizeOptions ? (JSON.parse(field.fontSizeOptions) as string[]) : [];
+  const [enableSizes, setEnableSizes] = useState(initialSizes.length > 0);
+  const [fontSizes, setFontSizes] = useState<string[]>(initialSizes.length > 0 ? initialSizes : ["12px", "16px", "24px"]);
+  const addSize = () => setFontSizes((prev) => [...prev, ""]);
+  const removeSize = (i: number) => setFontSizes((prev) => prev.filter((_, idx) => idx !== i));
+  const updateSize = (i: number, val: string) => setFontSizes((prev) => prev.map((s, idx) => idx === i ? val : s));
+
   // Computed hidden values for SL-81 and SL-82.
   const fontOptionsValue = enableFonts && selectedFonts.length > 0 ? JSON.stringify(selectedFonts) : "";
   const textColorOptionsValue = enableColors && textColors.length > 0 ? JSON.stringify(textColors) : "";
+  const fontSizeOptionsValue = enableSizes && fontSizes.filter(Boolean).length > 0 ? JSON.stringify(fontSizes.filter(Boolean)) : "";
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) onClose();
@@ -791,6 +806,7 @@ function FieldForm({
     fileAccept !== (field?.fileAccept ?? "*/*") ||
     fontOptionsValue !== (field?.fontOptions ?? "") ||
     textColorOptionsValue !== (field?.textColorOptions ?? "") ||
+    fontSizeOptionsValue !== (field?.fontSizeOptions ?? "") ||
     checkboxPrice !== initialCheckboxPrice ||
     JSON.stringify(options) !== JSON.stringify(initialOptions);
   useEffect(() => { onDirtyChangeRef.current?.(dirty); }, [dirty]);
@@ -815,6 +831,7 @@ function FieldForm({
         <input type="hidden" name="fileAccept" value={fileAccept} />
         <input type="hidden" name="fontOptions" value={fontOptionsValue} />
         <input type="hidden" name="textColorOptions" value={textColorOptionsValue} />
+        <input type="hidden" name="fontSizeOptions" value={fontSizeOptionsValue} />
         <input type="hidden" name="options" value={JSON.stringify(optionsPayload)} />
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
         <FormLayout>
@@ -1088,6 +1105,27 @@ function FieldForm({
                     </InlineStack>
                   ))}
                   <div><Button onClick={addColor}>Add color</Button></div>
+                </BlockStack>
+              )}
+              {/* Font size picker (SL-97) */}
+              <Checkbox
+                label="Let shoppers choose a font size"
+                helpText="Show size pills beside this field"
+                checked={enableSizes}
+                onChange={(v) => setEnableSizes(v)}
+              />
+              {enableSizes && (
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm" tone="subdued">Sizes to offer (e.g. 12px, 16px, 24px)</Text>
+                  {fontSizes.map((s, i) => (
+                    <InlineStack key={i} gap="200" blockAlign="center" wrap={false}>
+                      <div style={{ flex: 1 }}>
+                        <TextField label="Size" labelHidden placeholder="e.g. 16px" value={s} onChange={(v) => updateSize(i, v)} autoComplete="off" />
+                      </div>
+                      <Button onClick={() => removeSize(i)} accessibilityLabel="Remove size">Remove</Button>
+                    </InlineStack>
+                  ))}
+                  <div><Button onClick={addSize}>Add size</Button></div>
                 </BlockStack>
               )}
             </>
@@ -1721,11 +1759,12 @@ function LivePreviewPanel({
     return sum + chars.length;
   }, 0);
 
-  // Extract first configured font/color per field for storefront-accurate rendering
+  // Extract first configured font/color/size per field for storefront-accurate rendering
   const fieldStyles = Object.fromEntries(
     textFields.map((f) => {
       let font = "";
       let color = "";
+      let fontSize = "";
       try {
         const fonts: string[] = f.fontOptions ? JSON.parse(f.fontOptions) : [];
         if (fonts.length) font = fonts[0];
@@ -1736,7 +1775,11 @@ function LivePreviewPanel({
           : [];
         if (colors.length) color = colors[0].color;
       } catch {}
-      return [f.id, { font, color: color || "#ffffff" }];
+      try {
+        const sizes: string[] = f.fontSizeOptions ? JSON.parse(f.fontSizeOptions) : [];
+        if (sizes.length) fontSize = sizes[0];
+      } catch {}
+      return [f.id, { font, color: color || "#ffffff", fontSize }];
     })
   );
 
@@ -1800,7 +1843,7 @@ function LivePreviewPanel({
                   onChange={(e) => setValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                   rows={3}
                   placeholder="Type to preview…"
-                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid #c9cccf", borderRadius: "6px", padding: "6px 8px", fontSize: "13px", resize: "vertical", outline: "none", fontFamily: fieldStyles[field.id]?.font || undefined }}
+                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid #c9cccf", borderRadius: "6px", padding: "6px 8px", fontSize: fieldStyles[field.id]?.fontSize || "13px", resize: "vertical", outline: "none", fontFamily: fieldStyles[field.id]?.font || undefined }}
                 />
               ) : (
                 <input
@@ -1808,7 +1851,7 @@ function LivePreviewPanel({
                   value={values[field.id] ?? ""}
                   onChange={(e) => setValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                   placeholder="Type to preview…"
-                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid #c9cccf", borderRadius: "6px", padding: "6px 8px", fontSize: "13px", outline: "none", fontFamily: fieldStyles[field.id]?.font || undefined }}
+                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid #c9cccf", borderRadius: "6px", padding: "6px 8px", fontSize: fieldStyles[field.id]?.fontSize || "13px", outline: "none", fontFamily: fieldStyles[field.id]?.font || undefined }}
                 />
               )}
             </div>
@@ -1967,7 +2010,7 @@ function PreviewPlacementBoxEditor({
   fields: FieldData[];
   productImageUrl: string | null;
   previewValues?: Record<string, string>;
-  fieldStyles?: Record<string, { font: string; color: string }>;
+  fieldStyles?: Record<string, { font: string; color: string; fontSize: string }>;
 }) {
   const textFields = fields.filter((f) => f.type === "text" || f.type === "textarea");
   const placementFetcher = useFetcher();
@@ -2072,6 +2115,7 @@ function PreviewPlacementBoxEditor({
             ? fieldStyles[field.id].color
             : hasLiveText ? "#ffffff" : color;
           const textFont = fieldStyles?.[field.id]?.font ?? undefined;
+          const textSize = fieldStyles?.[field.id]?.fontSize || undefined;
           return (
             <div
               key={field.id}
@@ -2098,7 +2142,7 @@ function PreviewPlacementBoxEditor({
               <span style={{
                 color: textColor,
                 fontFamily: textFont,
-                fontSize: hasLiveText ? "16px" : "12px",
+                fontSize: (hasLiveText && textSize) ? textSize : hasLiveText ? "16px" : "12px",
                 fontWeight: 600,
                 textShadow: hasLiveText ? "0 1px 4px rgba(0,0,0,0.6)" : undefined,
                 pointerEvents: "none",

@@ -508,6 +508,16 @@
         } catch(e) {}
       }
 
+      // Font size picker (SL-97)
+      if (field.fontSizeOptions) {
+        try {
+          var sizes = JSON.parse(field.fontSizeOptions);
+          if (Array.isArray(sizes) && sizes.length > 0) {
+            renderFontSizePicker(sizes, input, wrapper, formTarget, field);
+          }
+        } catch(e) {}
+      }
+
       fieldsEl.appendChild(wrapper);
 
       inputMap[field.id] = '';
@@ -1168,6 +1178,31 @@
     wrapper.appendChild(row);
   }
 
+  // ── Font size picker (SL-97) ──────────────────────────────────────────────
+  function renderFontSizePicker(sizes, textInput, wrapper, formTarget, field) {
+    var hiddenSizeInput = makeHiddenInput('properties[' + field.label + ' Size]', '');
+    formTarget.appendChild(hiddenSizeInput);
+
+    var row = document.createElement('div');
+    row.className = 'etch-customization__font-picker';
+
+    sizes.forEach(function(s) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'etch-customization__font-pill';
+      btn.textContent = s;
+      btn.addEventListener('click', function () {
+        Array.prototype.forEach.call(row.children, function(b) { b.classList.remove('is-selected'); });
+        btn.classList.add('is-selected');
+        textInput.style.fontSize = s;
+        hiddenSizeInput.value = s;
+      });
+      row.appendChild(btn);
+    });
+
+    wrapper.appendChild(row);
+  }
+
   function makeHiddenInput(name, value) {
     var el = document.createElement('input');
     el.type = 'hidden';
@@ -1439,6 +1474,7 @@
           span.style.fontFamily = el.style.fontFamily || 'inherit';
           var chosenColor = el.style.color;
           span.style.color = chosenColor || '#fff';
+          if (el.style.fontSize) span.style.fontSize = el.style.fontSize;
           // Reduce shadow contrast when the color is light (non-default)
           span.style.textShadow = chosenColor
             ? '0 1px 3px rgba(0,0,0,0.5)'
