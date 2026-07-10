@@ -13,7 +13,6 @@ import {
   EmptyState,
   Banner,
   Box,
-  Tabs,
   Divider,
   Badge,
   Checkbox,
@@ -1141,6 +1140,7 @@ function FieldRow({
   onEdit,
   onEditClose,
   onDirtyChange,
+  pricingRule,
 }: {
   field: FieldData;
   allFields: FieldData[];
@@ -1152,6 +1152,7 @@ function FieldRow({
   onEdit: () => void;
   onEditClose: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  pricingRule?: PricingRuleData;
 }) {
   const moveFetcher = useFetcher();
   const deleteFetcher = useFetcher();
@@ -1206,6 +1207,9 @@ function FieldRow({
           </InlineStack>
         </InlineStack>
         <FieldConditionEditor field={field} allFields={allFields} conditions={conditions} />
+        {(field.type === "text" || field.type === "textarea") && (
+          <FieldPricingCard field={field} rule={pricingRule} />
+        )}
       </BlockStack>
     </Box>
   );
@@ -1585,59 +1589,6 @@ function FieldPricingCard({
   );
 }
 
-function PricingTab({
-  fields,
-  pricingRules,
-  variantPrices,
-  onFieldPricingDirty,
-}: {
-  fields: FieldData[];
-  pricingRules: PricingRuleData[];
-  variantPrices: number[];
-  onFieldPricingDirty?: (fieldId: string, dirty: boolean) => void;
-}) {
-  const minPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
-  const maxPrice = variantPrices.length > 0 ? Math.max(...variantPrices) : null;
-  const hasPriceRange = minPrice !== null && maxPrice !== null && minPrice !== maxPrice;
-  const basePriceLabel = minPrice !== null
-    ? `$${minPrice.toFixed(2)}${hasPriceRange ? ` – $${maxPrice!.toFixed(2)}` : ""}`
-    : "—";
-
-  return (
-    <BlockStack gap="500">
-      <Card>
-        <BlockStack gap="200">
-          <Text as="h2" variant="headingMd">Base price</Text>
-          <Text as="p" variant="bodyLg" fontWeight="semibold">{basePriceLabel}</Text>
-          <Text as="p" variant="bodySm" tone="subdued">
-            Pulled from your Shopify product. Etch adds the per-character surcharge on top at checkout.
-          </Text>
-        </BlockStack>
-      </Card>
-
-      {fields.length === 0 ? (
-        <Banner tone="info">
-          Add customization fields on the Fields tab first to configure per-character pricing.
-        </Banner>
-      ) : (
-        <BlockStack gap="400">
-          <Text as="h2" variant="headingMd">Per-field pricing</Text>
-          {fields.map((field) => (
-            <FieldPricingCard
-              key={field.id}
-              field={field}
-              rule={pricingRules.find((r) => r.fieldId === field.id)}
-              onDirtyChange={onFieldPricingDirty ? (dirty) => onFieldPricingDirty(field.id, dirty) : undefined}
-            />
-          ))}
-        </BlockStack>
-      )}
-
-      <LiveExample fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
-    </BlockStack>
-  );
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export function ErrorBoundary() {
@@ -1902,44 +1853,8 @@ function PreviewPlacementBoxEditor({
 export default function ProductDetailPage() {
   const { product, productImageUrl, published, previewEnabled, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
-  const [selectedTab, setSelectedTab] = useState(0);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-
-  // Unsaved-changes guard for tab switches (SL-68). The field form is mutually
-  // exclusive (one add- or edit-form open at a time), so a single boolean suffices.
-  // Pricing has one card per field, so we track the set of dirty field ids.
-  const [fieldFormDirty, setFieldFormDirty] = useState(false);
-  const dirtyPricingFieldsRef = useRef<Set<string>>(new Set());
-  const [pricingFormDirty, setPricingFormDirty] = useState(false);
-  const [pendingTab, setPendingTab] = useState<number | null>(null);
-
-  const reportPricingDirty = useCallback((fieldId: string, dirty: boolean) => {
-    const set = dirtyPricingFieldsRef.current;
-    if (dirty) set.add(fieldId);
-    else set.delete(fieldId);
-    setPricingFormDirty(set.size > 0);
-  }, []);
-
-  const hasUnsavedChanges = fieldFormDirty || pricingFormDirty;
-
-  const handleTabSelect = useCallback(
-    (index: number) => {
-      if (hasUnsavedChanges) setPendingTab(index);
-      else setSelectedTab(index);
-    },
-    [hasUnsavedChanges]
-  );
-
-  const confirmLeaveTab = useCallback(() => {
-    // Discard: clear dirty tracking and switch. Unmounting the current tab's
-    // forms also fires their own onDirtyChange(false), keeping state consistent.
-    dirtyPricingFieldsRef.current.clear();
-    setPricingFormDirty(false);
-    setFieldFormDirty(false);
-    if (pendingTab !== null) setSelectedTab(pendingTab);
-    setPendingTab(null);
-  }, [pendingTab]);
 
   // Onboarding guide state
   const [onboardingComplete, setOnboardingComplete] = useState(false);
@@ -2009,11 +1924,6 @@ export default function ProductDetailPage() {
   }, []);
   const handleAddClose = useCallback(() => setShowAddForm(false), []);
 
-  const tabs = [
-    { id: "fields", content: "Fields" },
-    { id: "pricing", content: "Pricing" },
-  ];
-
   return (
     <Page
       title={product.title}
@@ -2079,164 +1989,135 @@ export default function ProductDetailPage() {
           </Banner>
         )}
 
-      <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabSelect}>
-        <Box paddingBlockStart="400">
-          {selectedTab === 0 ? (
-            <BlockStack gap="400">
-              {showOnboarding && fields.length === 0 && !fieldCalloutDismissed && (
-                <Banner
-                  title="Step 3 of 5: Add a text field"
-                  tone="info"
-                  onDismiss={() => { localStorage.setItem("etch_banner_fields_dismissed", "1"); setFieldCalloutDismissed(true); }}
-                >
-                  <BlockStack gap="200">
-                    <Text as="p">
-                      A <b>field</b> is a text box shown to your customer on the product page. For
-                      example: "Enter your engraving text here" or "Monogram initials (max 3 letters)".
-                      Etch will charge per character based on whatever your customer types in.
-                    </Text>
-                    <Text as="p"><b>Label:</b> the name of the input that your customer will see.</Text>
-                    <Text as="p"><b>Min/Max characters:</b> optional limits on how long the input can be.</Text>
-                    <Text as="p"><b>Allowed/Disallowed characters:</b> optionally restrict to certain letters or symbols.</Text>
-                    <Text as="p">
-                      Click <b>Add field</b> below to create your first one, then head to the{" "}
-                      <b>Pricing</b> tab to set your prices.
-                    </Text>
-                  </BlockStack>
-                </Banner>
-              )}
-              {fields.length === 0 && !showAddForm && (
-                <TemplatePicker merchantTemplates={merchantTemplates} />
-              )}
-              {fields.length > 0 && (
-                <SaveAsTemplateButton />
-              )}
-              {fields.some((f) => f.type === "text" || f.type === "textarea") && (
-                <Card>
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="100">
-                        <Text as="p" fontWeight="semibold">Text preview</Text>
-                        <Text as="p" tone="subdued">
-                          Show the customer's text overlaid on the product image as they type.
-                        </Text>
-                      </BlockStack>
-                      <Checkbox
-                        label="Enable preview"
-                        labelHidden
-                        checked={optimisticPreview}
-                        onChange={(checked) =>
-                          previewFetcher.submit(
-                            { _action: "toggle_preview", previewEnabled: String(checked) },
-                            { method: "post" }
-                          )
-                        }
-                      />
-                    </InlineStack>
-                    {optimisticPreview && (
-                      <PreviewPlacementBoxEditor
-                        fields={fields}
-                        productImageUrl={productImageUrl}
-                      />
-                    )}
-                  </BlockStack>
-                </Card>
-              )}
-              <Card padding="0">
-                {fields.length === 0 && !showAddForm ? (
-                  <EmptyState
-                    heading="No customization fields yet"
-                    image=""
-                    action={{ content: "Add field", onAction: handleAddOpen }}
-                  >
-                    <Text as="p">
-                      Define the inputs customers fill in when customizing this product.
-                    </Text>
-                  </EmptyState>
-                ) : (
-                  <>
-                    {fields.map((field, index) => (
-                      <FieldRow
-                        key={field.id}
-                        field={field}
-                        allFields={fields}
-                        conditions={conditions}
-                        assets={assets}
-                        isFirst={index === 0}
-                        isLast={index === fields.length - 1}
-                        isEditing={editingFieldId === field.id}
-                        onEdit={() => handleEdit(field.id)}
-                        onEditClose={handleEditClose}
-                        onDirtyChange={setFieldFormDirty}
-                      />
-                    ))}
-                    {showAddForm && (
-                      <Box padding="400">
-                        <BlockStack gap="300">
-                          <Text as="h3" variant="headingSm">New field</Text>
-                          <FieldForm actionType="create" onClose={handleAddClose} onDirtyChange={setFieldFormDirty} assets={assets} />
-                        </BlockStack>
-                      </Box>
-                    )}
-                  </>
-                )}
-              </Card>
-              {!showAddForm && fields.length > 0 && (
-                <Button onClick={handleAddOpen} variant="primary">Add field</Button>
-              )}
-            </BlockStack>
-          ) : (
-            <BlockStack gap="400">
-              {showOnboarding && pricingRules.length === 0 && !pricingCalloutDismissed && (
-                <Banner
-                  title="Step 4 of 5: Set your pricing"
-                  tone="info"
-                  onDismiss={() => { localStorage.setItem("etch_banner_pricing_dismissed", "1"); setPricingCalloutDismissed(true); }}
-                >
-                  <BlockStack gap="200">
-                    <Text as="p">
-                      <b>Base price:</b> a flat fee added to every order for this product, no matter how
-                      many characters the customer types. Use this if there's a fixed setup cost
-                      (e.g. $5.00 for any engraving job).
-                    </Text>
-                    <Text as="p">
-                      <b>Per-character price:</b> charged for each character the customer types.
-                      For example, at $0.50/char, the word "Hello" (5 characters) adds $2.50 to the cart.
-                    </Text>
-                    <Text as="p">
-                      <b>Character groups</b> (optional): charge a different price for specific
-                      character sets. For example, emoji or special symbols could cost more than
-                      regular letters.
-                    </Text>
-                    <Text as="p">
-                      Once you're happy with your pricing, head back to this page's top-right corner
-                      and click <b>Publish</b> to go live.
-                    </Text>
-                  </BlockStack>
-                </Banner>
-              )}
-              <PricingTab fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} onFieldPricingDirty={reportPricingDirty} />
-            </BlockStack>
-          )}
-        </Box>
-      </Tabs>
+      {showOnboarding && fields.length === 0 && !fieldCalloutDismissed && (
+        <Banner
+          title="Step 3 of 5: Add a text field"
+          tone="info"
+          onDismiss={() => { localStorage.setItem("etch_banner_fields_dismissed", "1"); setFieldCalloutDismissed(true); }}
+        >
+          <BlockStack gap="200">
+            <Text as="p">
+              A <b>field</b> is a text box shown to your customer on the product page. For
+              example: "Enter your engraving text here" or "Monogram initials (max 3 letters)".
+              Etch will charge per character based on whatever your customer types in.
+            </Text>
+            <Text as="p"><b>Label:</b> the name of the input that your customer will see.</Text>
+            <Text as="p"><b>Min/Max characters:</b> optional limits on how long the input can be.</Text>
+            <Text as="p"><b>Allowed/Disallowed characters:</b> optionally restrict to certain letters or symbols.</Text>
+            <Text as="p">
+              Click <b>Add field</b> below to create your first one. Pricing options will appear on each text field.
+            </Text>
+          </BlockStack>
+        </Banner>
+      )}
+      {showOnboarding && fields.some((f) => f.type === "text" || f.type === "textarea") && pricingRules.length === 0 && !pricingCalloutDismissed && (
+        <Banner
+          title="Step 4 of 5: Set your pricing"
+          tone="info"
+          onDismiss={() => { localStorage.setItem("etch_banner_pricing_dismissed", "1"); setPricingCalloutDismissed(true); }}
+        >
+          <BlockStack gap="200">
+            <Text as="p">
+              <b>Per-character price:</b> charged for each character the customer types.
+              For example, at $0.50/char, the word "Hello" (5 characters) adds $2.50 to the cart.
+            </Text>
+            <Text as="p">
+              <b>Flat fee:</b> a fixed amount added when the field has any value.
+            </Text>
+            <Text as="p">
+              <b>Character groups</b> (optional): charge a different price for specific
+              character sets. For example, emoji or special symbols could cost more than
+              regular letters.
+            </Text>
+            <Text as="p">
+              Set pricing for each text field below, then click <b>Publish</b> to go live.
+            </Text>
+          </BlockStack>
+        </Banner>
+      )}
+      {fields.length === 0 && !showAddForm && (
+        <TemplatePicker merchantTemplates={merchantTemplates} />
+      )}
+      {fields.length > 0 && (
+        <SaveAsTemplateButton />
+      )}
+      {fields.some((f) => f.type === "text" || f.type === "textarea") && (
+        <Card>
+          <BlockStack gap="400">
+            <InlineStack align="space-between" blockAlign="center">
+              <BlockStack gap="100">
+                <Text as="p" fontWeight="semibold">Text preview</Text>
+                <Text as="p" tone="subdued">
+                  Show the customer's text overlaid on the product image as they type.
+                </Text>
+              </BlockStack>
+              <Checkbox
+                label="Enable preview"
+                labelHidden
+                checked={optimisticPreview}
+                onChange={(checked) =>
+                  previewFetcher.submit(
+                    { _action: "toggle_preview", previewEnabled: String(checked) },
+                    { method: "post" }
+                  )
+                }
+              />
+            </InlineStack>
+            {optimisticPreview && (
+              <PreviewPlacementBoxEditor
+                fields={fields}
+                productImageUrl={productImageUrl}
+              />
+            )}
+          </BlockStack>
+        </Card>
+      )}
+      <Card padding="0">
+        {fields.length === 0 && !showAddForm ? (
+          <EmptyState
+            heading="No customization fields yet"
+            image=""
+            action={{ content: "Add field", onAction: handleAddOpen }}
+          >
+            <Text as="p">
+              Define the inputs customers fill in when customizing this product.
+            </Text>
+          </EmptyState>
+        ) : (
+          <>
+            {fields.map((field, index) => (
+              <FieldRow
+                key={field.id}
+                field={field}
+                allFields={fields}
+                conditions={conditions}
+                assets={assets}
+                isFirst={index === 0}
+                isLast={index === fields.length - 1}
+                isEditing={editingFieldId === field.id}
+                onEdit={() => handleEdit(field.id)}
+                onEditClose={handleEditClose}
+                pricingRule={pricingRules.find((r) => r.fieldId === field.id)}
+              />
+            ))}
+            {showAddForm && (
+              <Box padding="400">
+                <BlockStack gap="300">
+                  <Text as="h3" variant="headingSm">New field</Text>
+                  <FieldForm actionType="create" onClose={handleAddClose} assets={assets} />
+                </BlockStack>
+              </Box>
+            )}
+          </>
+        )}
+      </Card>
+      {fields.some((f) => f.type === "text" || f.type === "textarea") && (
+        <LiveExample fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
+      )}
+      {!showAddForm && fields.length > 0 && (
+        <Button onClick={handleAddOpen} variant="primary">Add field</Button>
+      )}
       </BlockStack>
-
-      <Modal
-        open={pendingTab !== null}
-        onClose={() => setPendingTab(null)}
-        title="Unsaved changes"
-        primaryAction={{ content: "Leave anyway", destructive: true, onAction: confirmLeaveTab }}
-        secondaryActions={[{ content: "Go back", onAction: () => setPendingTab(null) }]}
-      >
-        <Modal.Section>
-          <Text as="p">
-            {fieldFormDirty
-              ? "You have an unsaved field. Go back to finish adding it, or leave and discard your changes."
-              : "You have unsaved pricing changes. Go back to save them, or leave and discard your changes."}
-          </Text>
-        </Modal.Section>
-      </Modal>
     </Page>
   );
 }
