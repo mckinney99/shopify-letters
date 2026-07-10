@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import prisma from "../db.server";
 import { normalizeInput } from "../utils/normalize";
 import { calculateProductPrice } from "../utils/pricing";
@@ -31,6 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop") ?? "";
   const productId = url.searchParams.get("productId") ?? "";
+  const previewToken = url.searchParams.get("preview_token") ?? "";
 
   if (!shop || !productId) {
     return json({ error: "Missing shop or productId" }, { status: 400, headers: CORS_HEADERS });
@@ -38,6 +40,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   if (!checkRateLimit(shop)) {
     return json({ error: "Too many requests" }, { status: 429, headers: CORS_HEADERS });
+  }
+
+  let previewMode = false;
+  if (previewToken) {
+    const secret = process.env.SHOPIFY_API_SECRET;
+    const dotIdx = previewToken.indexOf(".");
+    if (secret && dotIdx > 0) {
+      const expiry = parseInt(previewToken.slice(0, dotIdx), 10);
+      const hmac = previewToken.slice(dotIdx + 1);
+      if (!isNaN(expiry) && expiry > Date.now()) {
+        const expected = createHmac("sha256", secret).update(`${shop}:${productId}:${expiry}`).digest("hex");
+        try {
+          const hmacBuf = Buffer.from(hmac, "hex");
+          const expectedBuf = Buffer.from(expected, "hex");
+          if (hmacBuf.length === expectedBuf.length && timingSafeEqual(hmacBuf, expectedBuf)) {
+            previewMode = true;
+          }
+        } catch {}
+      }
+    }
   }
 
   const productGid = `gid://shopify/Product/${productId}`;
@@ -68,7 +90,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }),
   ]);
 
-  if (!config?.published) {
+  if (!config?.published && !previewMode) {
     return json({ error: "Not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
@@ -100,7 +122,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     previewH: f.previewH,
   }));
 
-  return json({ fields, conditions, previewEnabled: config.previewEnabled }, { headers: CORS_HEADERS });
+  return json({ fields, conditions, previewEnabled: config?.previewEnabled ?? false, previewMode }, { headers: CORS_HEADERS });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
