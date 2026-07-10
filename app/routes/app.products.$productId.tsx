@@ -19,6 +19,9 @@ import {
   Checkbox,
   Modal,
   Select,
+  Combobox,
+  Listbox,
+  Tag,
 } from "@shopify/polaris";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -167,17 +170,19 @@ const FIELD_TYPE_OPTIONS = [
   { label: "Image (display only)", value: "image-static" },
 ];
 
-// Built-in fonts offered for the per-field font chooser (SL-81).
+// Built-in fonts offered for the per-field font chooser (SL-81, expanded SL-98).
 const BUILT_IN_FONTS = [
-  "Georgia",
-  "Times New Roman",
-  "Arial",
-  "Courier New",
-  "Dancing Script",
-  "Cinzel",
-  "Playfair Display",
-  "Oswald",
-  "Caveat",
+  // Web-safe (no Google Fonts load needed)
+  "Georgia", "Times New Roman", "Arial", "Courier New",
+  // Serif
+  "Cinzel", "Cormorant Garamond", "EB Garamond", "Lora", "Merriweather", "Playfair Display",
+  // Sans-serif
+  "Josefin Sans", "Montserrat", "Nunito", "Open Sans", "Oswald", "Poppins", "Raleway", "Roboto",
+  // Display / decorative
+  "Abril Fatface", "Bebas Neue", "Lobster", "Pacifico", "Righteous",
+  // Script / handwriting (personalisation staples)
+  "Alex Brush", "Allura", "Caveat", "Dancing Script", "Great Vibes",
+  "Kaushan Script", "Pinyon Script", "Sacramento", "Satisfy",
 ];
 
 // Choice fields present a fixed list of options instead of free text.
@@ -732,10 +737,11 @@ function FieldForm({
   const [helpText, setHelpText] = useState(field?.helpText ?? "");
   const [dateFutureOnly, setDateFutureOnly] = useState(field?.dateFutureOnly ?? false);
   const [fileAccept, setFileAccept] = useState(field?.fileAccept ?? "*/*");
-  // Font chooser (SL-81) — stored as JSON array of font names on the field.
+  // Font chooser (SL-81, SL-98) — stored as JSON array of font names on the field.
   const initialFonts: string[] = field?.fontOptions ? (JSON.parse(field.fontOptions) as string[]) : [];
   const [enableFonts, setEnableFonts] = useState(initialFonts.length > 0);
   const [selectedFonts, setSelectedFonts] = useState<string[]>(initialFonts);
+  const [fontSearch, setFontSearch] = useState("");
   const toggleFont = (f: string) =>
     setSelectedFonts((prev) => prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]);
   // Text color chooser (SL-82) — stored as JSON array of {label, color}.
@@ -811,6 +817,23 @@ function FieldForm({
     JSON.stringify(options) !== JSON.stringify(initialOptions);
   useEffect(() => { onDirtyChangeRef.current?.(dirty); }, [dirty]);
   useEffect(() => () => onDirtyChangeRef.current?.(false), []);
+
+  // Inject Google Fonts for tag previews (SL-98)
+  useEffect(() => {
+    const googleFonts = selectedFonts.filter(
+      (f) => !["Georgia", "Times New Roman", "Arial", "Courier New"].includes(f)
+    );
+    if (!googleFonts.length) return;
+    const id = "etch-admin-google-fonts";
+    let link = document.getElementById(id) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    link.href = `https://fonts.googleapis.com/css2?${googleFonts.map((f) => `family=${f.replace(/ /g, "+")}`).join("&")}&display=swap`;
+  }, [selectedFonts]);
 
   return (
     <fetcher.Form method="post">
@@ -1037,7 +1060,7 @@ function FieldForm({
                 <Checkbox label="Allow spaces" helpText="Customers can type spaces in this field" checked={allowSpaces} onChange={setAllowSpaces} />
                 <Checkbox label="Count spaces toward price" helpText="When off, spaces are excluded from the billed character count" checked={countSpaces} onChange={setCountSpaces} />
               </FormLayout.Group>
-              {/* Font chooser (SL-81) */}
+              {/* Font chooser (SL-81, searchable SL-98) */}
               <Checkbox
                 label="Let shoppers choose a font"
                 helpText="Show a font picker beside this field"
@@ -1045,18 +1068,43 @@ function FieldForm({
                 onChange={(v) => { setEnableFonts(v); if (!v) setSelectedFonts([]); }}
               />
               {enableFonts && (
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodySm" tone="subdued">Fonts to offer</Text>
-                  {BUILT_IN_FONTS.map((f) => (
-                    <Checkbox key={f} label={f} checked={selectedFonts.includes(f)} onChange={() => toggleFont(f)} />
-                  ))}
-                  {assets && assets.fonts.length > 0 && (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="span" variant="bodySm" tone="subdued">From library:</Text>
-                      {assets.fonts.filter((f) => !selectedFonts.includes(f.name)).map((f) => (
-                        <Button key={f.id} size="slim" variant="plain" onClick={() => setSelectedFonts((prev) => [...prev, f.name])}>
-                          + {f.name}
-                        </Button>
+                <BlockStack gap="200">
+                  <Combobox
+                    activator={
+                      <Combobox.TextField
+                        label="Add fonts"
+                        labelHidden
+                        value={fontSearch}
+                        onChange={setFontSearch}
+                        placeholder="Search fonts…"
+                        autoComplete="off"
+                      />
+                    }
+                  >
+                    {(() => {
+                      const q = fontSearch.toLowerCase();
+                      const allFonts = [
+                        ...BUILT_IN_FONTS,
+                        ...(assets?.fonts.map((f) => f.name) ?? []),
+                      ].filter((f, i, arr) => arr.indexOf(f) === i);
+                      const opts = allFonts.filter(
+                        (f) => !selectedFonts.includes(f) && (!q || f.toLowerCase().includes(q))
+                      );
+                      return opts.length > 0 ? (
+                        <Listbox onSelect={(v) => { toggleFont(v); setFontSearch(""); }}>
+                          {opts.map((f) => (
+                            <Listbox.Option key={f} value={f}>{f}</Listbox.Option>
+                          ))}
+                        </Listbox>
+                      ) : null;
+                    })()}
+                  </Combobox>
+                  {selectedFonts.length > 0 && (
+                    <InlineStack gap="200" wrap>
+                      {selectedFonts.map((f) => (
+                        <Tag key={f} onRemove={() => toggleFont(f)}>
+                          <span style={{ fontFamily: `'${f}', serif` }}>{f}</span>
+                        </Tag>
                       ))}
                     </InlineStack>
                   )}
