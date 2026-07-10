@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
+import { createHmac } from "node:crypto";
 import { useLoaderData, useFetcher, useRouteError, useNavigate } from "@remix-run/react";
 import {
   Page,
@@ -31,6 +32,7 @@ const PRODUCT_QUERY = `
     product(id: $id) {
       id
       title
+      handle
       featuredImage {
         url
       }
@@ -271,7 +273,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   ).map((e: { node: { price: string } }) => parseFloat(e.node.price));
 
   return json({
-    product: data.product as { id: string; title: string },
+    product: data.product as { id: string; title: string; handle: string },
+    shop: session.shop,
     productImageUrl: (data.product as any).featuredImage?.url ?? null,
     published: config?.published ?? false,
     previewEnabled: config?.previewEnabled ?? false,
@@ -510,6 +513,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       create: { shop, productId: productGid, previewEnabled },
     });
     return json({ ok: true });
+  }
+
+  if (_action === "generate_preview_token") {
+    const secret = process.env.SHOPIFY_API_SECRET;
+    if (!secret) return json({ error: "Not configured" }, { status: 500 });
+    const numericId = params.productId!;
+    const expiry = Date.now() + 30 * 60 * 1000;
+    const hmac = createHmac("sha256", secret).update(`${shop}:${numericId}:${expiry}`).digest("hex");
+    return json({ token: `${expiry}.${hmac}` });
   }
 
   if (_action === "save_preview_placement") {
@@ -2070,7 +2082,7 @@ function PreviewPlacementBoxEditor({
 }
 
 export default function ProductDetailPage() {
-  const { product, productImageUrl, published, previewEnabled, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
+  const { product, shop, productImageUrl, published, previewEnabled, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -2104,6 +2116,14 @@ export default function ProductDetailPage() {
     previewFetcher.state !== "idle"
       ? previewFetcher.formData?.get("previewEnabled") === "true"
       : previewEnabled;
+
+  const tokenFetcher = useFetcher<{ token?: string; error?: string }>();
+  useEffect(() => {
+    if (tokenFetcher.state === "idle" && tokenFetcher.data?.token) {
+      window.open(`https://${shop}/products/${product.handle}?etch_preview=${tokenFetcher.data.token}`, "_blank");
+    }
+  }, [tokenFetcher.state, tokenFetcher.data, shop, product.handle]);
+
   const optimisticPublished =
     isPublishing
       ? publishFetcher.formData?.get("published") === "true"
@@ -2159,6 +2179,13 @@ export default function ProductDetailPage() {
         </Badge>
       }
       backAction={{ content: "Products", url: "/app/products" }}
+      secondaryActions={[
+        {
+          content: "Preview on store",
+          loading: tokenFetcher.state !== "idle",
+          onAction: () => tokenFetcher.submit({ _action: "generate_preview_token" }, { method: "post" }),
+        },
+      ]}
       primaryAction={{
         content: optimisticPublished ? "Unpublish" : "Publish",
         loading: isPublishing,

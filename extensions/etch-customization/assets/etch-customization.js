@@ -23,12 +23,15 @@
       return;
     }
 
+    var etchPreviewToken = new URLSearchParams(window.location.search).get('etch_preview') || '';
+
     var configUrl =
       appUrl +
       '/api/preview?shop=' +
       encodeURIComponent(shop) +
       '&productId=' +
-      encodeURIComponent(productId);
+      encodeURIComponent(productId) +
+      (etchPreviewToken ? '&preview_token=' + encodeURIComponent(etchPreviewToken) : '');
 
     fetch(configUrl)
       .then(function (res) {
@@ -46,6 +49,7 @@
           container.hidden = true;
           return;
         }
+        if (data.previewMode) injectPreviewBanner();
         loadingEl.hidden = true;
         renderFields(container, data.fields, data.conditions || [], shop, productId, appUrl, fieldsEl, priceEl, errorEl, variantPricesMap, currency);
         fieldsEl.hidden = false;
@@ -1463,6 +1467,23 @@
         setTimeout(updateOverlay, 0);
       }
     });
+  }
+
+  function injectPreviewBanner() {
+    var key = 'etch_preview_banner_dismissed';
+    if (sessionStorage.getItem(key)) return;
+    var bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;background:#1a1a2e;color:#fff;font-size:13px;padding:10px 48px 10px 16px;text-align:center;font-family:sans-serif;line-height:1.4;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
+    bar.textContent = 'Preview mode — this product is not live yet. Your customers cannot see this widget.';
+    var close = document.createElement('button');
+    close.textContent = '×';
+    close.style.cssText = 'position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;padding:0 4px';
+    close.setAttribute('aria-label', 'Dismiss preview banner');
+    close.onclick = function() { sessionStorage.setItem(key, '1'); bar.remove(); };
+    bar.appendChild(close);
+    if (document.body) {
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
   }
 
   // Boot all blocks on the page. Guard prevents double-init when a theme places
