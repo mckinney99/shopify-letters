@@ -11,12 +11,12 @@ import {
   TextField,
   Tabs,
   Divider,
-  EmptyState,
   Banner,
   Box,
   Badge,
+  DropZone,
 } from "@shopify/polaris";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -64,7 +64,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       : Promise.resolve([] as TemplateRow[]),
   ]);
 
-  return json({ tab, fonts, colorSets, images, optionSets, templates });
+  return json({ tab, shop, fonts, colorSets, images, optionSets, templates });
 }
 
 // ── Action ────────────────────────────────────────────────────────────────────
@@ -254,22 +254,44 @@ function FontsTab({ fonts }: { fonts: FontRow[] }) {
 
 // ── Images tab ────────────────────────────────────────────────────────────────
 
-function ImagesTab({ images }: { images: ImageRow[] }) {
+function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
   const fetcher = useFetcher<{ error?: string }>();
+  const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const busy = fetcher.state !== "idle";
+  const uploading = uploadFetcher.state !== "idle";
+
+  useEffect(() => {
+    if (uploadFetcher.data?.url) { setUrl(uploadFetcher.data.url); setUploadError(null); }
+    if (uploadFetcher.data?.error) setUploadError(uploadFetcher.data.error);
+  }, [uploadFetcher.data]);
+
+  const handleDrop = useCallback(
+    (_: File[], accepted: File[]) => {
+      const file = accepted[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { setUploadError("File too large (max 10 MB)"); return; }
+      setUploadError(null);
+      const fd = new FormData();
+      fd.append("shop", shop);
+      fd.append("file", file);
+      uploadFetcher.submit(fd, { method: "post", action: "/api/upload" });
+    },
+    [uploadFetcher, shop]
+  );
 
   const submit = useCallback(() => {
     fetcher.submit({ _action: "create_image", name, url }, { method: "post" });
-    setName(""); setUrl("");
+    setName(""); setUrl(""); setUploadError(null);
   }, [fetcher, name, url]);
 
-  const error = fetcher.data?.error;
+  const error = fetcher.data?.error ?? uploadError;
 
   return (
     <BlockStack gap="400">
-      {error && <Banner tone="critical">{error}</Banner>}
+      {error && <Banner tone="critical" onDismiss={() => setUploadError(null)}>{error}</Banner>}
       <Card>
         <BlockStack gap="0">
           <Box padding="400">
@@ -279,11 +301,27 @@ function ImagesTab({ images }: { images: ImageRow[] }) {
           <Box padding="400">
             <BlockStack gap="300">
               <TextField label="Name" value={name} onChange={setName} autoComplete="off" placeholder="e.g. Floral pattern" />
-              <TextField label="Image URL" value={url} onChange={setUrl} autoComplete="off" placeholder="https://cdn.shopify.com/..." helpText="Paste a CDN or hosted image URL." />
+              <DropZone
+                label="Upload image"
+                accept="image/*"
+                type="image"
+                allowMultiple={false}
+                onDrop={handleDrop}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <Box padding="400">
+                    <Text as="p" alignment="center" tone="subdued">Uploading…</Text>
+                  </Box>
+                ) : (
+                  <DropZone.FileUpload actionTitle="Add image" actionHint="or drop a JPEG, PNG, WebP, or GIF (max 10 MB)" />
+                )}
+              </DropZone>
+              <TextField label="Image URL" value={url} onChange={setUrl} autoComplete="off" placeholder="https://cdn.shopify.com/..." helpText="Upload a file above, or paste a CDN URL directly." />
               {url && (
                 <img src={url} alt={name || "preview"} style={{ maxWidth: "8rem", maxHeight: "8rem", objectFit: "cover", borderRadius: "6px", border: "1px solid #ddd" }} />
               )}
-              <Button variant="primary" onClick={submit} loading={busy} disabled={busy || !name.trim() || !url.trim()}>
+              <Button variant="primary" onClick={submit} loading={busy} disabled={busy || uploading || !name.trim() || !url.trim()}>
                 Save image
               </Button>
             </BlockStack>
@@ -573,7 +611,7 @@ const TABS = [
 ];
 
 export default function AssetsPage() {
-  const { tab, fonts, colorSets, images, optionSets, templates } = useLoaderData<typeof loader>();
+  const { tab, shop, fonts, colorSets, images, optionSets, templates } = useLoaderData<typeof loader>();
   const [, setSearchParams] = useSearchParams();
 
   const selectedIndex = TABS.findIndex((t) => t.id === tab);
@@ -590,7 +628,7 @@ export default function AssetsPage() {
         <Box paddingBlockStart="400">
           {activeIndex === 0 && <FontsTab fonts={fonts as FontRow[]} />}
           {activeIndex === 1 && <ColorsTab colorSets={colorSets as ColorSetRow[]} />}
-          {activeIndex === 2 && <ImagesTab images={images as ImageRow[]} />}
+          {activeIndex === 2 && <ImagesTab images={images as ImageRow[]} shop={shop} />}
           {activeIndex === 3 && <OptionSetsTab optionSets={optionSets as OptionSetRow[]} />}
           {activeIndex === 4 && <TemplatesTab templates={templates as TemplateRow[]} />}
         </Box>
