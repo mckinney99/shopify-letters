@@ -2091,8 +2091,23 @@ function PreviewPlacementBoxEditor({
     startP: PlacementBox;
   } | null>(null);
 
+  const rotating = useRef<{
+    fieldId: string;
+    startAngle: number;
+    startRotation: number;
+    centerX: number;
+    centerY: number;
+  } | null>(null);
+
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
+      if (rotating.current) {
+        const { fieldId, startAngle, startRotation, centerX, centerY } = rotating.current;
+        const angle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180 / Math.PI;
+        const newRotation = ((startRotation + (angle - startAngle)) % 360 + 360) % 360;
+        setPlacementBoxs((prev) => ({ ...prev, [fieldId]: { ...prev[fieldId], rotation: Math.round(newRotation) } }));
+        return;
+      }
       if (!dragging.current || !containerRef.current) return;
       const { fieldId, mode, startX, startY, startP } = dragging.current;
       const rect = containerRef.current.getBoundingClientRect();
@@ -2111,14 +2126,15 @@ function PreviewPlacementBoxEditor({
       });
     }
     function onMouseUp() {
-      if (!dragging.current) return;
-      const { fieldId } = dragging.current;
+      const activeId = rotating.current?.fieldId ?? dragging.current?.fieldId;
+      rotating.current = null;
       dragging.current = null;
-      const p = placementsRef.current[fieldId];
+      if (!activeId) return;
+      const p = placementsRef.current[activeId];
       placementFetcher.submit(
         {
           _action: "save_preview_placement",
-          fieldId,
+          fieldId: activeId,
           previewX: String(Math.round(p.x * 100) / 100),
           previewY: String(Math.round(p.y * 100) / 100),
           previewW: String(Math.round(p.w * 100) / 100),
@@ -2136,30 +2152,12 @@ function PreviewPlacementBoxEditor({
     };
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleRotationChange(fieldId: string, deg: number) {
-    const clamped = Math.max(0, Math.min(359, isNaN(deg) ? 0 : deg));
-    setPlacementBoxs((prev) => ({ ...prev, [fieldId]: { ...prev[fieldId], rotation: clamped } }));
-    const p = placementsRef.current[fieldId];
-    placementFetcher.submit(
-      {
-        _action: "save_preview_placement",
-        fieldId,
-        previewX: String(Math.round(p.x * 100) / 100),
-        previewY: String(Math.round(p.y * 100) / 100),
-        previewW: String(Math.round(p.w * 100) / 100),
-        previewH: String(Math.round(p.h * 100) / 100),
-        previewRotation: String(clamped),
-      },
-      { method: "post" }
-    );
-  }
-
   if (textFields.length === 0) return null;
 
   return (
     <BlockStack gap="200">
       <Text as="p" tone="subdued">
-        Drag each box to position the text on your product image.
+        Drag to move · corner handle to resize · ↺ handle to rotate.
       </Text>
       <div
         ref={containerRef}
@@ -2225,6 +2223,56 @@ function PreviewPlacementBoxEditor({
               }}>
                 {hasLiveText ? liveText : field.label}
               </span>
+              {/* Degree badge — shown when rotated */}
+              {p.rotation !== 0 && (
+                <span style={{
+                  position: "absolute",
+                  bottom: 2,
+                  left: 4,
+                  fontSize: "9px",
+                  color: "#fff",
+                  background: "rgba(0,0,0,0.45)",
+                  borderRadius: 3,
+                  padding: "0 3px",
+                  pointerEvents: "none",
+                  lineHeight: "14px",
+                }}>
+                  {Math.round(p.rotation)}°
+                </span>
+              )}
+              {/* Rotation handle — top-right corner */}
+              <div
+                title="Drag to rotate"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  if (!containerRef.current) return;
+                  const rect = containerRef.current.getBoundingClientRect();
+                  const centerX = rect.left + (p.x + p.w / 2) / 100 * rect.width;
+                  const centerY = rect.top + (p.y + p.h / 2) / 100 * rect.height;
+                  const startAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX) * 180 / Math.PI;
+                  rotating.current = { fieldId: field.id, startAngle, startRotation: p.rotation, centerX, centerY };
+                }}
+                style={{
+                  position: "absolute",
+                  top: -8,
+                  right: -8,
+                  width: 16,
+                  height: 16,
+                  background: color,
+                  border: "2px solid #fff",
+                  borderRadius: "50%",
+                  cursor: "crosshair",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 10,
+                  color: "#fff",
+                  lineHeight: 1,
+                  userSelect: "none",
+                }}>
+                ↺
+              </div>
               {/* Resize handle — bottom-right corner */}
               <div
                 onMouseDown={(e) => {
@@ -2247,31 +2295,6 @@ function PreviewPlacementBoxEditor({
           );
         })}
       </div>
-      {/* Per-field rotation inputs */}
-      <BlockStack gap="100">
-        {textFields.map((field, idx) => {
-          const color = BOX_COLORS[idx % BOX_COLORS.length];
-          return (
-            <InlineStack key={field.id} gap="200" blockAlign="center">
-              <span style={{ width: 10, height: 10, background: color, borderRadius: 2, display: "inline-block", flexShrink: 0 }} />
-              <Text as="span" variant="bodySm">{field.label}</Text>
-              <div style={{ width: 90 }}>
-                <TextField
-                  label="Rotation"
-                  labelHidden
-                  type="number"
-                  min="0"
-                  max="359"
-                  value={String(placements[field.id]?.rotation ?? 0)}
-                  onChange={(v) => handleRotationChange(field.id, parseInt(v))}
-                  suffix="°"
-                  autoComplete="off"
-                />
-              </div>
-            </InlineStack>
-          );
-        })}
-      </BlockStack>
     </BlockStack>
   );
 }
