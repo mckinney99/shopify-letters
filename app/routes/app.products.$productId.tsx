@@ -1285,87 +1285,43 @@ function ConditionRow({ cond, triggerLabel }: { cond: FieldConditionData; trigge
 
 function FieldRow({
   field,
-  allFields,
-  conditions,
-  assets,
   isFirst,
   isLast,
-  isEditing,
   onEdit,
-  onEditClose,
-  onDirtyChange,
-  pricingRule,
 }: {
   field: FieldData;
-  allFields: FieldData[];
-  conditions: FieldConditionData[];
-  assets?: AssetLibrary;
   isFirst: boolean;
   isLast: boolean;
-  isEditing: boolean;
   onEdit: () => void;
-  onEditClose: () => void;
-  onDirtyChange?: (dirty: boolean) => void;
-  pricingRule?: PricingRuleData;
 }) {
   const moveFetcher = useFetcher();
   const deleteFetcher = useFetcher();
-
-  if (isEditing) {
-    return (
-      <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-        <FieldForm field={field} actionType="update" onClose={onEditClose} onDirtyChange={onDirtyChange} assets={assets} />
-      </Box>
-    );
-  }
-
-  const charInfo: string[] = [];
-  if (field.minChars !== null || field.maxChars !== null) {
-    const parts: string[] = [];
-    if (field.minChars !== null) parts.push(`min ${field.minChars}`);
-    if (field.maxChars !== null) parts.push(`max ${field.maxChars}`);
-    charInfo.push(`chars: ${parts.join(", ")}`);
-  }
-  if (field.allowedChars) charInfo.push(`allowed: "${field.allowedChars}"`);
-  if (field.disallowedChars) charInfo.push(`disallowed: "${field.disallowedChars}"`);
-  if (!field.allowSpaces) charInfo.push("no spaces");
-  if (field.countSpaces) charInfo.push("spaces billed");
+  const typeLabel = FIELD_TYPE_OPTIONS.find((o) => o.value === field.type)?.label ?? field.type;
 
   return (
-    <Box padding="400" borderBlockEndWidth="025" borderColor="border">
-      <BlockStack gap="300">
-        <InlineStack align="space-between" blockAlign="center" gap="400">
-          <BlockStack gap="100">
-            <Text as="span" variant="bodyMd" fontWeight="semibold">{field.label}</Text>
-            <Text as="span" variant="bodySm" tone="subdued">
-              {[FIELD_TYPE_OPTIONS.find((o) => o.value === field.type)?.label ?? field.type, ...charInfo].join(" · ")}
-            </Text>
-          </BlockStack>
-          <InlineStack gap="200" blockAlign="center">
-            <moveFetcher.Form method="post" style={{ display: "inline" }}>
-              <input type="hidden" name="_action" value="move_up" />
-              <input type="hidden" name="fieldId" value={field.id} />
-              <Button submit disabled={isFirst || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move up">↑</Button>
-            </moveFetcher.Form>
-            <moveFetcher.Form method="post" style={{ display: "inline" }}>
-              <input type="hidden" name="_action" value="move_down" />
-              <input type="hidden" name="fieldId" value={field.id} />
-              <Button submit disabled={isLast || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move down">↓</Button>
-            </moveFetcher.Form>
-            <Button size="slim" onClick={onEdit}>Edit</Button>
-            <deleteFetcher.Form method="post" style={{ display: "inline" }}>
-              <input type="hidden" name="_action" value="delete" />
-              <input type="hidden" name="fieldId" value={field.id} />
-              <Button submit tone="critical" size="slim" loading={deleteFetcher.state !== "idle"}>Delete</Button>
-            </deleteFetcher.Form>
-          </InlineStack>
-        </InlineStack>
-        <FieldConditionEditor field={field} allFields={allFields} conditions={conditions} />
-        {(field.type === "text" || field.type === "textarea") && (
-          <FieldPricingCard field={field} rule={pricingRule} />
-        )}
-      </BlockStack>
-    </Box>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderBottom: "1px solid #f1f2f4", flexWrap: "wrap" }}>
+      <span style={{ flex: 1, fontWeight: 600, fontSize: "13px", minWidth: "120px" }}>{field.label}</span>
+      <Badge>{typeLabel}</Badge>
+      {field.required && (
+        <Text as="span" variant="bodySm" tone="subdued">Required</Text>
+      )}
+      <moveFetcher.Form method="post" style={{ display: "inline" }}>
+        <input type="hidden" name="_action" value="move_up" />
+        <input type="hidden" name="fieldId" value={field.id} />
+        <Button submit disabled={isFirst || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move up">↑</Button>
+      </moveFetcher.Form>
+      <moveFetcher.Form method="post" style={{ display: "inline" }}>
+        <input type="hidden" name="_action" value="move_down" />
+        <input type="hidden" name="fieldId" value={field.id} />
+        <Button submit disabled={isLast || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move down">↓</Button>
+      </moveFetcher.Form>
+      <Button size="slim" onClick={onEdit}>Edit</Button>
+      <deleteFetcher.Form method="post" style={{ display: "inline" }}>
+        <input type="hidden" name="_action" value="delete" />
+        <input type="hidden" name="fieldId" value={field.id} />
+        <Button submit tone="critical" size="slim" loading={deleteFetcher.state !== "idle"}>Delete</Button>
+      </deleteFetcher.Form>
+    </div>
   );
 }
 
@@ -2397,6 +2353,8 @@ export default function ProductDetailPage() {
   const handleTypePickCancel = useCallback(() => setShowTypePicker(false), []);
   const handleAddClose = useCallback(() => { setShowAddForm(false); setPickedType(null); }, []);
 
+  const editingField = editingFieldId ? (fields.find((f) => f.id === editingFieldId) ?? null) : null;
+
   return (
     <Page
       title={product.title}
@@ -2515,68 +2473,78 @@ export default function ProductDetailPage() {
           </BlockStack>
         </Banner>
       )}
-      <div style={{ display: "flex", gap: "24px", flexDirection: isNarrow ? "column" : "row", alignItems: "flex-start" }}>
-        {/* Left: field configuration */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <BlockStack gap="400">
-            {fields.length === 0 && !showAddForm && (
-              <TemplatePicker merchantTemplates={merchantTemplates} />
-            )}
-            {fields.length > 0 && (
-              <SaveAsTemplateButton />
-            )}
-            <Card padding="0">
-              {fields.length === 0 && !showAddForm ? (
-                <EmptyState
-                  heading="No customization fields yet"
-                  image=""
-                  action={{ content: "Add field", onAction: handleAddOpen }}
-                >
-                  <Text as="p">
-                    Define the inputs customers fill in when customizing this product.
-                  </Text>
-                </EmptyState>
-              ) : (
-                <>
-                  {fields.map((field, index) => (
-                    <FieldRow
-                      key={field.id}
-                      field={field}
-                      allFields={fields}
-                      conditions={conditions}
-                      assets={assets}
-                      isFirst={index === 0}
-                      isLast={index === fields.length - 1}
-                      isEditing={editingFieldId === field.id}
-                      onEdit={() => handleEdit(field.id)}
-                      onEditClose={handleEditClose}
-                      pricingRule={pricingRules.find((r) => r.fieldId === field.id)}
-                    />
-                  ))}
-                  {showAddForm && (
-                    <Box padding="400">
-                      <BlockStack gap="300">
-                        <Text as="h3" variant="headingSm">New field</Text>
-                        <FieldForm actionType="create" onClose={handleAddClose} assets={assets} initialType={pickedType ?? undefined} />
-                      </BlockStack>
-                    </Box>
-                  )}
-                </>
+      <div style={{ display: isNarrow ? "block" : "grid", gridTemplateColumns: isNarrow ? undefined : (editingField ? "42fr 58fr" : "40fr 60fr"), gap: "24px", alignItems: "flex-start" }}>
+        {/* Left column */}
+        <div>
+          {editingField ? (
+            <BlockStack gap="400">
+              <InlineStack blockAlign="center" gap="200">
+                <Button onClick={handleEditClose} size="slim">← Back</Button>
+                <Text as="span" variant="bodySm" tone="subdued">Editing: <b>{editingField.label}</b></Text>
+              </InlineStack>
+              <Card>
+                <FieldForm field={editingField} actionType="update" onClose={handleEditClose} assets={assets} />
+              </Card>
+              <FieldConditionEditor field={editingField} allFields={fields} conditions={conditions} />
+              {(editingField.type === "text" || editingField.type === "textarea") && (
+                <FieldPricingCard field={editingField} rule={pricingRules.find((r) => r.fieldId === editingField.id)} />
               )}
-            </Card>
-            {fields.some((f) => f.type === "text" || f.type === "textarea") && (
-              <LiveExample fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
-            )}
-            {!showAddForm && fields.length > 0 && (
-              <Button onClick={handleAddOpen} variant="primary">Add field</Button>
-            )}
-            <div style={{ height: "80px" }} />
-          </BlockStack>
+            </BlockStack>
+          ) : (
+            <BlockStack gap="400">
+              {fields.length === 0 && !showAddForm && (
+                <TemplatePicker merchantTemplates={merchantTemplates} />
+              )}
+              {fields.length > 0 && (
+                <SaveAsTemplateButton />
+              )}
+              <Card padding="0">
+                {fields.length === 0 && !showAddForm ? (
+                  <EmptyState
+                    heading="No customization fields yet"
+                    image=""
+                    action={{ content: "Add field", onAction: handleAddOpen }}
+                  >
+                    <Text as="p">
+                      Define the inputs customers fill in when customizing this product.
+                    </Text>
+                  </EmptyState>
+                ) : (
+                  <>
+                    {fields.map((field, index) => (
+                      <FieldRow
+                        key={field.id}
+                        field={field}
+                        isFirst={index === 0}
+                        isLast={index === fields.length - 1}
+                        onEdit={() => handleEdit(field.id)}
+                      />
+                    ))}
+                    {showAddForm && (
+                      <Box padding="400">
+                        <BlockStack gap="300">
+                          <Text as="h3" variant="headingSm">New field</Text>
+                          <FieldForm actionType="create" onClose={handleAddClose} assets={assets} initialType={pickedType ?? undefined} />
+                        </BlockStack>
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Card>
+              {fields.some((f) => f.type === "text" || f.type === "textarea") && (
+                <LiveExample fields={fields} pricingRules={pricingRules} variantPrices={variantPrices} />
+              )}
+              {!showAddForm && fields.length > 0 && (
+                <Button onClick={handleAddOpen} variant="primary">Add field</Button>
+              )}
+              <div style={{ height: "80px" }} />
+            </BlockStack>
+          )}
         </div>
 
-        {/* Right: live preview panel */}
-        {fields.some((f) => f.type === "text" || f.type === "textarea") && (
-          <div style={{ flex: "0 0 300px", width: "300px" }}>
+        {/* Right column: live preview */}
+        {(editingField || fields.some((f) => f.type === "text" || f.type === "textarea")) && (
+          <div style={{ position: "sticky", top: "16px" }}>
             <LivePreviewPanel
               fields={fields}
               pricingRules={pricingRules}
