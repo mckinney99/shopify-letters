@@ -2572,7 +2572,9 @@ export default function ProductDetailPage() {
           </BlockStack>
         </Banner>
       )}
-      <div style={{ display: isNarrow ? "block" : "grid", gridTemplateColumns: isNarrow ? undefined : (editingField ? "42fr 58fr" : "40fr 60fr"), gap: "24px", alignItems: "flex-start" }}>
+      <div style={isNarrow
+        ? { display: "flex", flexDirection: "column", gap: "16px" }
+        : { display: "grid", gridTemplateColumns: editingField ? "42fr 58fr" : "40fr 60fr", gap: "24px", alignItems: "flex-start" }}>
         {/* Left column */}
         <div>
           {editingField ? (
@@ -2633,14 +2635,16 @@ export default function ProductDetailPage() {
               {!showAddForm && fields.length > 0 && (
                 <Button onClick={handleAddOpen} variant="primary">Add field</Button>
               )}
-              <div style={{ height: "80px" }} />
+              {/* Scroll clearance so the sticky preview can scroll fully alongside — only needed side-by-side */}
+              {!isNarrow && <div style={{ height: "80px" }} />}
             </BlockStack>
           )}
         </div>
 
-        {/* Right column: live preview (unified — all field types) */}
+        {/* Right column: live preview (unified — all field types).
+            Sticky only side-by-side; full width when stacked below the editor (SL-110). */}
         {(editingField || fields.length > 0) && (
-          <div style={{ position: "sticky", top: "16px" }}>
+          <div style={isNarrow ? { width: "100%" } : { position: "sticky", top: "16px" }}>
             <LivePreviewPanel
               fields={fields}
               pricingRules={pricingRules}
