@@ -2178,16 +2178,19 @@ function PreviewPlacementBoxEditor({
       </Text>
       <div
         ref={containerRef}
-        style={{ position: "relative", display: "inline-block", width: "100%", userSelect: "none" }}
+        // Container hugs the image (fit-content) and is centered, so the % based
+        // placement overlays stay aligned to the visible image. maxHeight keeps
+        // tall images (e.g. snowboards) compact instead of dominating the panel (SL-110).
+        style={{ position: "relative", display: "block", width: "fit-content", maxWidth: "100%", margin: "0 auto", userSelect: "none" }}
       >
         {productImageUrl ? (
           <img
             src={productImageUrl}
             alt="Product"
-            style={{ display: "block", width: "100%", height: "auto", borderRadius: "8px" }}
+            style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "440px", borderRadius: "8px" }}
           />
         ) : (
-          <div style={{ background: "#f6f6f7", borderRadius: "8px", height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "#f6f6f7", borderRadius: "8px", width: "300px", maxWidth: "100%", height: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Text as="p" tone="subdued">No product image</Text>
           </div>
         )}
