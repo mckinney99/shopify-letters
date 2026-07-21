@@ -17,38 +17,47 @@ import {
 } from "@shopify/polaris";
 import { CheckCircleIcon, MinusCircleIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import { buildAppEmbedDeepLink } from "../utils/themeEditor";
+import { buildAppEmbedDeepLink, isEtchEmbedEnabled } from "../utils/themeEditor";
+import { logEvent, shortHash } from "../utils/log";
 import prisma from "../db.server";
 import { useState, useEffect } from "react";
 
+// Detects whether the Etch app embed is enabled on the merchant's main theme.
+// Fetches config/settings_data.json and delegates the (unit-tested) decision to
+// isEtchEmbedEnabled. Failures are logged with a stage so a merchant report of
+// "the step won't complete" can be diagnosed instead of silently returning false. SL-109.
 async function checkWidgetActivated(shop: string, accessToken: string): Promise<boolean> {
-  const uuid = process.env.SHOPIFY_THEME_APP_EXTENSION_UUID;
-  if (!uuid) return false;
+  const fail = (stage: string, extra: Record<string, unknown> = {}) => {
+    logEvent("widget_activation_check_failed", { shop: shortHash(shop), stage, ...extra });
+    return false;
+  };
   try {
     const themesRes = await fetch(`https://${shop}/admin/api/2024-01/themes.json`, {
       headers: { "X-Shopify-Access-Token": accessToken },
     });
-    const themesData = (await themesRes.json()) as { themes: Array<{ id: number; role: string }> };
+    if (!themesRes.ok) return fail("themes_fetch", { status: themesRes.status });
+    const themesData = (await themesRes.json()) as { themes?: Array<{ id: number; role: string }> };
     const mainTheme = themesData.themes?.find((t) => t.role === "main");
-    if (!mainTheme) return false;
+    if (!mainTheme) return fail("no_main_theme");
 
     const assetRes = await fetch(
       `https://${shop}/admin/api/2024-01/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
       { headers: { "X-Shopify-Access-Token": accessToken } }
     );
+    if (!assetRes.ok) return fail("asset_fetch", { status: assetRes.status });
     const assetData = (await assetRes.json()) as { asset?: { value?: string } };
     const content = assetData.asset?.value;
-    if (!content) return false;
+    if (!content) return fail("no_settings_content");
 
-    const settings = JSON.parse(content);
-    // App embeds appear in current.blocks with shopify://app-blocks/{uuid}/{handle} keys or as block.type values
-    const blocks: Record<string, unknown> = settings?.current?.blocks ?? {};
-    return (
-      Object.keys(blocks).some((k) => k.includes(uuid)) ||
-      Object.values(blocks).some((b: any) => String(b?.type ?? "").includes(uuid))
-    );
-  } catch {
-    return false;
+    let settings: unknown;
+    try {
+      settings = JSON.parse(content);
+    } catch {
+      return fail("settings_parse");
+    }
+    return isEtchEmbedEnabled(settings, process.env.SHOPIFY_THEME_APP_EXTENSION_UUID);
+  } catch (err) {
+    return fail("exception", { error: err instanceof Error ? err.message : String(err) });
   }
 }
 

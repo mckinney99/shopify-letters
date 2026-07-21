@@ -55,3 +55,42 @@ export function buildAppEmbedDeepLink(opts: {
   if (!extensionUuid) return base;
   return `${base}&activateAppId=${extensionUuid}/${embedHandle}`;
 }
+
+// The Etch theme app extension's app-embed block handle (extensions/etch-customization/blocks/embed.liquid).
+export const ETCH_EMBED_BLOCK_HANDLE = "embed";
+
+// Decides whether the Etch app embed is *enabled* on the merchant's live theme,
+// given the parsed config/settings_data.json (SL-109).
+//
+// App embeds live in the theme's `current.blocks` map, keyed by block id, each
+// with a `type` like `shopify://apps/{app}/blocks/{block}/{uuid}` and an optional
+// `disabled: true` when the merchant has toggled the embed off.
+//
+// This is robust to the cases that made the old raw-UUID substring match unreliable:
+//   - `current` can be a preset *name* (string), not an object → resolve via `presets`.
+//   - The env UUID (SHOPIFY_THEME_APP_EXTENSION_UUID) is the local TOML `uid`, which
+//     often differs from the *deployed* UUID that actually appears in the theme. So we
+//     primarily match on the stable app-embed block handle (`/blocks/embed/`), and fall
+//     back to the configured UUID when it happens to match.
+//   - A present-but-off embed (`disabled: true`) counts as NOT activated.
+export function isEtchEmbedEnabled(settings: unknown, extensionUuid?: string | null): boolean {
+  if (!settings || typeof settings !== "object") return false;
+  const root = settings as Record<string, any>;
+  let current = root.current;
+  if (typeof current === "string") current = root.presets?.[current];
+  const blocks = current?.blocks;
+  if (!blocks || typeof blocks !== "object") return false;
+
+  const uuid = (extensionUuid || "").toLowerCase();
+  for (const [key, val] of Object.entries<any>(blocks)) {
+    const type = String(val?.type ?? "");
+    const hay = `${key} ${type}`.toLowerCase();
+    const isAppEmbedBlock =
+      hay.includes("shopify://apps/") && hay.includes(`/blocks/${ETCH_EMBED_BLOCK_HANDLE}/`);
+    const refsOurEmbed = isAppEmbedBlock || (!!uuid && hay.includes(uuid));
+    if (!refsOurEmbed) continue;
+    if (val?.disabled === true) continue; // present but toggled off
+    return true;
+  }
+  return false;
+}
