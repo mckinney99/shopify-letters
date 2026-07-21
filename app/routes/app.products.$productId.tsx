@@ -1299,28 +1299,34 @@ function FieldRow({
   const typeLabel = FIELD_TYPE_OPTIONS.find((o) => o.value === field.type)?.label ?? field.type;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 16px", borderBottom: "1px solid #f1f2f4", flexWrap: "wrap" }}>
-      <span style={{ flex: 1, fontWeight: 600, fontSize: "13px", minWidth: "120px" }}>{field.label}</span>
-      <Badge>{typeLabel}</Badge>
-      {field.required && (
-        <Text as="span" variant="bodySm" tone="subdued">Required</Text>
-      )}
-      <moveFetcher.Form method="post" style={{ display: "inline" }}>
-        <input type="hidden" name="_action" value="move_up" />
-        <input type="hidden" name="fieldId" value={field.id} />
-        <Button submit disabled={isFirst || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move up">↑</Button>
-      </moveFetcher.Form>
-      <moveFetcher.Form method="post" style={{ display: "inline" }}>
-        <input type="hidden" name="_action" value="move_down" />
-        <input type="hidden" name="fieldId" value={field.id} />
-        <Button submit disabled={isLast || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move down">↓</Button>
-      </moveFetcher.Form>
-      <Button size="slim" onClick={onEdit}>Edit</Button>
-      <deleteFetcher.Form method="post" style={{ display: "inline" }}>
-        <input type="hidden" name="_action" value="delete" />
-        <input type="hidden" name="fieldId" value={field.id} />
-        <Button submit tone="critical" size="slim" loading={deleteFetcher.state !== "idle"}>Delete</Button>
-      </deleteFetcher.Form>
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px", padding: "10px 16px", borderBottom: "1px solid #f1f2f4" }}>
+      {/* Top: title + type + required */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 600, fontSize: "13px" }}>{field.label}</span>
+        <Badge>{typeLabel}</Badge>
+        {field.required && (
+          <Text as="span" variant="bodySm" tone="subdued">Required</Text>
+        )}
+      </div>
+      {/* Bottom: actions — always beneath the title for a consistent row layout (SL-112) */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+        <moveFetcher.Form method="post" style={{ display: "inline" }}>
+          <input type="hidden" name="_action" value="move_up" />
+          <input type="hidden" name="fieldId" value={field.id} />
+          <Button submit disabled={isFirst || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move up">↑</Button>
+        </moveFetcher.Form>
+        <moveFetcher.Form method="post" style={{ display: "inline" }}>
+          <input type="hidden" name="_action" value="move_down" />
+          <input type="hidden" name="fieldId" value={field.id} />
+          <Button submit disabled={isLast || moveFetcher.state !== "idle"} size="slim" accessibilityLabel="Move down">↓</Button>
+        </moveFetcher.Form>
+        <Button size="slim" onClick={onEdit}>Edit</Button>
+        <deleteFetcher.Form method="post" style={{ display: "inline" }}>
+          <input type="hidden" name="_action" value="delete" />
+          <input type="hidden" name="fieldId" value={field.id} />
+          <Button submit tone="critical" size="slim" loading={deleteFetcher.state !== "idle"}>Delete</Button>
+        </deleteFetcher.Form>
+      </div>
     </div>
   );
 }
