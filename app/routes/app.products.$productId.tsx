@@ -2370,6 +2370,44 @@ export default function ProductDetailPage() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // SL-111: user-draggable split between the field editor and the live preview,
+  // side-by-side only. previewPct = width % of the preview column, clamped so
+  // neither pane becomes unusable; persisted per product.
+  const RATIO_KEY = `etch_preview_ratio_${product.id.split("/").pop() ?? product.id}`;
+  const [previewPct, setPreviewPct] = useState(60);
+  const previewPctRef = useRef(previewPct);
+  useEffect(() => { previewPctRef.current = previewPct; }, [previewPct]);
+  const [dividerHover, setDividerHover] = useState(false);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const draggingDivider = useRef(false);
+  useEffect(() => {
+    const saved = localStorage.getItem(RATIO_KEY);
+    if (saved) {
+      const n = parseFloat(saved);
+      if (!isNaN(n)) setPreviewPct(Math.max(30, Math.min(72, n)));
+    }
+  }, [RATIO_KEY]);
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!draggingDivider.current || !layoutRef.current) return;
+      const rect = layoutRef.current.getBoundingClientRect();
+      const leftPct = ((e.clientX - rect.left) / rect.width) * 100;
+      setPreviewPct(Math.max(30, Math.min(72, 100 - leftPct)));
+    };
+    const onUp = () => {
+      if (!draggingDivider.current) return;
+      draggingDivider.current = false;
+      document.body.style.userSelect = "";
+      localStorage.setItem(RATIO_KEY, String(Math.round(previewPctRef.current)));
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [RATIO_KEY]);
+
   // Onboarding guide state
   const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [showCongrats, setShowCongrats] = useState(false);
@@ -2575,9 +2613,13 @@ export default function ProductDetailPage() {
           </BlockStack>
         </Banner>
       )}
-      <div style={isNarrow
-        ? { display: "flex", flexDirection: "column", gap: "16px" }
-        : { display: "grid", gridTemplateColumns: editingField ? "42fr 58fr" : "40fr 60fr", gap: "24px", alignItems: "flex-start" }}>
+      <div
+        ref={layoutRef}
+        style={isNarrow
+          ? { display: "flex", flexDirection: "column", gap: "16px" }
+          : (editingField || fields.length > 0)
+            ? { display: "grid", gridTemplateColumns: `${100 - previewPct}fr 16px ${previewPct}fr`, alignItems: "flex-start" }
+            : { display: "block" }}>
         {/* Left column */}
         <div>
           {editingField ? (
@@ -2643,6 +2685,32 @@ export default function ProductDetailPage() {
             </BlockStack>
           )}
         </div>
+
+        {/* SL-111: draggable divider to resize the preview — side-by-side only */}
+        {!isNarrow && (editingField || fields.length > 0) && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            title="Drag to resize the preview"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              draggingDivider.current = true;
+              document.body.style.userSelect = "none";
+            }}
+            onMouseEnter={() => setDividerHover(true)}
+            onMouseLeave={() => setDividerHover(false)}
+            style={{ alignSelf: "stretch", cursor: "col-resize", display: "flex", justifyContent: "center", paddingTop: "16px" }}
+          >
+            <div style={{
+              width: dividerHover ? "4px" : "3px",
+              alignSelf: "stretch",
+              minHeight: "80px",
+              borderRadius: "2px",
+              background: dividerHover ? "#8c9196" : "#c9cccf",
+              transition: "background 0.1s, width 0.1s",
+            }} />
+          </div>
+        )}
 
         {/* Right column: live preview (unified — all field types).
             Sticky only side-by-side; full width when stacked below the editor (SL-110). */}
