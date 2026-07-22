@@ -98,11 +98,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   uploadForm.append("file", file);
 
+  // DEBUG (temporary): capture the exact staged target + params + file meta so we can
+  // pin down the GCS SignatureDoesNotMatch. Values redacted to lengths.
+  console.error("[api.upload][debug] target.url:", target.url);
+  console.error("[api.upload][debug] param order:", target.parameters.map((p: any) => `${p.name}(len=${String(p.value).length})`).join(", "));
+  console.error("[api.upload][debug] file meta:", JSON.stringify({ name: file.name, type: file.type, size: file.size }));
+
   try {
     const uploadRes = await fetch(target.url, { method: "POST", body: uploadForm });
     if (!uploadRes.ok) {
       const body = await uploadRes.text();
-      console.error("[api.upload] staged PUT failed:", uploadRes.status, body.slice(0, 200));
+      console.error("[api.upload] staged PUT failed:", uploadRes.status, "FULLBODY>>>", body, "<<<FULLBODY");
       return json({ error: "Upload failed" }, { status: 502, headers: CORS_HEADERS });
     }
   } catch (err) {
