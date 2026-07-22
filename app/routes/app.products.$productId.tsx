@@ -1817,6 +1817,7 @@ function LivePreviewPanel({
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(fields.map((f) => [f.id, ""]))
   );
+  const [headerHover, setHeaderHover] = useState(false);
 
   // Inject Google Fonts for every font configured on any field of this product
   useEffect(() => {
@@ -1886,23 +1887,28 @@ function LivePreviewPanel({
 
   return (
     <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden", background: "white", position: "sticky", top: "16px" }}>
-      {/* Header — carries the collapse chevron side-by-side; the same dark bar becomes
-          the vertical side rail when collapsed (SL-118). */}
-      <div style={{ background: "#303030", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ color: "white", fontWeight: 600, fontSize: "13px" }}>Live Preview</span>
-        {onCollapse && (
-          <button
-            type="button"
-            onClick={onCollapse}
-            title="Hide preview"
-            aria-label="Hide preview"
-            aria-expanded={true}
-            style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.85)", cursor: "pointer", fontSize: "18px", lineHeight: 1, padding: "0 2px", display: "flex", alignItems: "center" }}
-          >
-            ›
-          </button>
-        )}
-      </div>
+      {/* Header — side-by-side it's a full-width button that collapses the preview
+          (click anywhere, matching the side rail); the same dark bar becomes the
+          vertical side rail when collapsed (SL-118, SL-119). */}
+      {onCollapse ? (
+        <button
+          type="button"
+          onClick={onCollapse}
+          onMouseEnter={() => setHeaderHover(true)}
+          onMouseLeave={() => setHeaderHover(false)}
+          title="Hide preview"
+          aria-label="Hide preview"
+          aria-expanded={true}
+          style={{ width: "100%", boxSizing: "border-box", background: headerHover ? "#1a1a1a" : "#303030", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", border: "none", cursor: "pointer", textAlign: "left", transition: "background 0.12s" }}
+        >
+          <span style={{ color: "white", fontWeight: 600, fontSize: "13px" }}>Live Preview</span>
+          <span aria-hidden="true" style={{ color: "rgba(255,255,255,0.85)", fontSize: "18px", lineHeight: 1 }}>›</span>
+        </button>
+      ) : (
+        <div style={{ background: "#303030", padding: "10px 14px", display: "flex", alignItems: "center" }}>
+          <span style={{ color: "white", fontWeight: 600, fontSize: "13px" }}>Live Preview</span>
+        </div>
+      )}
 
       {/* Product image + draggable overlay (text fields) + static overlays (all other field types with placement) */}
       <PreviewPlacementBoxEditor
