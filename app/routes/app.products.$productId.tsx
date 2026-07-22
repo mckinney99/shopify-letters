@@ -2977,8 +2977,7 @@ export default function ProductDetailPage() {
       >
         <Modal.Section>
           <Text as="p">
-            You have changes that haven’t been published. They’re saved as a draft, but
-            customers won’t see them until you publish. Publish now, or leave and finish later?
+            You have updates that have not been published to your store. If you do not publish your changes, they will be lost.
           </Text>
         </Modal.Section>
       </Modal>
