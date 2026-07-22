@@ -731,28 +731,38 @@ function ImageUploadField({
   compact?: boolean;
 }) {
   const { shop } = useLoaderData<typeof loader>();
-  const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const uploading = uploadFetcher.state !== "idle";
-
-  useEffect(() => {
-    if (uploadFetcher.data?.url) { onChange(uploadFetcher.data.url); setUploadError(null); }
-    if (uploadFetcher.data?.error) setUploadError(uploadFetcher.data.error);
-    // onChange is stable enough for this use; deliberately not a dep.
-  }, [uploadFetcher.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [uploading, setUploading] = useState(false);
 
   const handleDrop = useCallback(
-    (_: File[], accepted: File[]) => {
+    async (_: File[], accepted: File[]) => {
       const file = accepted[0];
       if (!file) return;
       if (file.size > 10 * 1024 * 1024) { setUploadError("File too large (max 10 MB)"); return; }
       setUploadError(null);
-      const fd = new FormData();
-      fd.append("shop", shop);
-      fd.append("file", file);
-      uploadFetcher.submit(fd, { method: "post", action: "/api/upload" });
+      setUploading(true);
+      try {
+        // Native fetch sends real multipart/form-data (browser sets the boundary and
+        // preserves the File's name/size). fetcher.submit would urlencode it and the
+        // server would see an empty file — the SL-121 502 bug.
+        const fd = new FormData();
+        fd.append("shop", shop);
+        fd.append("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: fd });
+        const isJson = (res.headers.get("content-type") ?? "").includes("application/json");
+        const data = isJson ? await res.json() : null;
+        if (res.ok && data?.url) {
+          onChange(data.url);
+        } else {
+          setUploadError(data?.error ?? "Upload failed — please try again, or paste an image URL.");
+        }
+      } catch {
+        setUploadError("Upload failed — check your connection, or paste an image URL.");
+      } finally {
+        setUploading(false);
+      }
     },
-    [uploadFetcher, shop]
+    [shop, onChange]
   );
 
   return (

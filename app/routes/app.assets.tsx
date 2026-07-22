@@ -277,7 +277,9 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
       const fd = new FormData();
       fd.append("shop", shop);
       fd.append("file", file);
-      uploadFetcher.submit(fd, { method: "post", action: "/api/upload" });
+      // Files must go as multipart/form-data; without encType Remix urlencodes the
+      // FormData and the server receives an empty file (SL-121).
+      uploadFetcher.submit(fd, { method: "post", action: "/api/upload", encType: "multipart/form-data" });
     },
     [uploadFetcher, shop]
   );
