@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { createHmac } from "node:crypto";
-import { useLoaderData, useFetcher, useRouteError, useNavigate } from "@remix-run/react";
+import { useLoaderData, useFetcher, useRouteError, useNavigate, useBlocker } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -61,15 +61,9 @@ const METAFIELDS_SET_MUTATION = `
   }
 `;
 
-// Serializes current fields + pricing rules to a product metafield so the
-// Cart Transform function can enforce the correct price at checkout without
-// network calls (Shopify Functions constraint — see docs/spike-sl25-shopify-functions.md).
-async function syncPricingMetafield(
-  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"],
-  shop: string,
-  productGid: string
-): Promise<void> {
-  const [fields, pricingRules, conditions] = await Promise.all([
+// Loads the full draft config (fields, pricing, conditions) for a product.
+async function loadDraftConfig(shop: string, productGid: string) {
+  return Promise.all([
     prisma.customizationField.findMany({
       where: { shop, productId: productGid },
       orderBy: { position: "asc" },
@@ -83,16 +77,32 @@ async function syncPricingMetafield(
       where: { shop, productId: productGid },
     }),
   ]);
+}
 
+// SL-123: "Publish changes" — snapshot the current draft as the customer-facing
+// config (stored on ProductConfig.publishedConfig, served by api.preview) AND write
+// the pricing metafield the Cart Transform function enforces at checkout. Edits no
+// longer sync the metafield; only publishing does. Returns the published version.
+async function publishConfig(
+  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"],
+  shop: string,
+  productGid: string
+): Promise<string> {
+  const [fields, pricingRules, conditions] = await loadDraftConfig(shop, productGid);
   const config = buildPricingConfig(fields, pricingRules, conditions);
-  const value = JSON.stringify({
-    version: computeConfigVersion(config),
-    // Lets the checkout functions include a shop identifier in their
-    // structured logs without a Shop.id field being queryable — see SL-31.
-    shop,
-    ...config,
+  const version = computeConfigVersion(config);
+
+  // Customer-facing snapshot the storefront (api.preview) renders. Raw rows so both
+  // the field-definition (GET) and price-preview (POST) paths can derive from it.
+  const snapshot = { fields, pricingRules, conditions };
+  await prisma.productConfig.upsert({
+    where: { shop_productId: { shop, productId: productGid } },
+    update: { publishedConfig: snapshot as object, publishedVersion: version },
+    create: { shop, productId: productGid, publishedConfig: snapshot as object, publishedVersion: version },
   });
 
+  // Pricing metafield for the checkout Functions.
+  const value = JSON.stringify({ version, shop, ...config });
   try {
     const res = await admin.graphql(METAFIELDS_SET_MUTATION, {
       variables: {
@@ -101,14 +111,11 @@ async function syncPricingMetafield(
     });
     const { data } = await res.json();
     const errs = data?.metafieldsSet?.userErrors ?? [];
-    if (errs.length > 0) {
-      console.error("[syncPricingMetafield] userErrors:", JSON.stringify(errs));
-    } else {
-      console.log("[syncPricingMetafield] wrote metafield for", productGid, "value length:", value.length);
-    }
+    if (errs.length > 0) console.error("[publishConfig] metafield userErrors:", JSON.stringify(errs));
   } catch (err) {
-    console.error("[syncPricingMetafield] exception:", err);
+    console.error("[publishConfig] metafield exception:", err);
   }
+  return version;
 }
 
 type FieldOptionData = {
@@ -263,7 +270,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     }),
     prisma.productConfig.findUnique({
       where: { shop_productId: { shop: session.shop, productId: productGid } },
-      select: { published: true, previewEnabled: true },
+      select: { published: true, previewEnabled: true, publishedVersion: true },
     }),
     prisma.fontAsset.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, select: { id: true, name: true, url: true } }),
     prisma.colorSet.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, include: { entries: { orderBy: { position: "asc" } } } }),
@@ -281,12 +288,18 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     data.product.variants?.edges ?? []
   ).map((e: { node: { price: string } }) => parseFloat(e.node.price));
 
+  // SL-123: version of the current draft vs the last-published snapshot — drives the
+  // "You have unpublished changes" state and the Publish changes button.
+  const liveVersion = computeConfigVersion(buildPricingConfig(fields, pricingRules, conditions));
+
   return json({
     product: data.product as { id: string; title: string; handle: string },
     shop: session.shop,
     productImageUrl: (data.product as any).featuredImage?.url ?? null,
     published: config?.published ?? false,
     previewEnabled: config?.previewEnabled ?? false,
+    liveVersion,
+    publishedVersion: config?.publishedVersion ?? null,
     fields,
     pricingRules,
     conditions,
@@ -362,7 +375,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         },
       },
     });
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -420,7 +432,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         });
       }
     }
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -443,7 +454,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         });
       }
     }
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -467,7 +477,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         data: { position: idx },
       }),
     ]);
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -483,7 +492,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       update: { perCharPrice, mode, amount },
       create: { shop, productId: productGid, fieldId, perCharPrice, mode, amount },
     });
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -504,10 +512,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     await prisma.charPriceGroup.create({
       data: { pricingRuleId: rule.id, label, characters, pricePerChar },
     });
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
+  // Active/Inactive toggle (SL-123). Activating also publishes the current draft so
+  // the storefront is never "active but showing nothing/stale".
   if (_action === "set_published") {
     const published = form.get("published") === "true";
     await prisma.productConfig.upsert({
@@ -515,6 +524,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       update: { published },
       create: { shop, productId: productGid, published },
     });
+    if (published) await publishConfig(admin, shop, productGid);
+    return json({ ok: true });
+  }
+
+  // "Publish changes" — push the current draft to the storefront + checkout (SL-123).
+  if (_action === "publish_changes") {
+    await publishConfig(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -560,7 +576,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       where: { id: groupId, rule: { shop } },
     });
     if (group) await prisma.charPriceGroup.delete({ where: { id: groupId } });
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -574,14 +589,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     await prisma.fieldCondition.create({
       data: { shop, productId: productGid, fieldId, triggerFieldId, operator: "equals", value },
     });
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
   if (_action === "delete_field_condition") {
     const conditionId = form.get("conditionId") as string;
     await prisma.fieldCondition.deleteMany({ where: { id: conditionId, shop } });
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -618,7 +631,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         });
       }
     }
-    await syncPricingMetafield(admin, shop, productGid);
     return json({ ok: true });
   }
 
@@ -2472,7 +2484,7 @@ function PreviewPlacementBoxEditor({
 }
 
 export default function ProductDetailPage() {
-  const { product, shop, productImageUrl, published, previewEnabled, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
+  const { product, shop, productImageUrl, published, previewEnabled, liveVersion, publishedVersion, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -2556,6 +2568,35 @@ export default function ProductDetailPage() {
   const publishFetcher = useFetcher<{ ok?: boolean }>();
   const isPublishing = publishFetcher.state !== "idle";
 
+  // SL-123: "Publish changes" pushes the current draft to customers. Dirty = the draft
+  // version differs from the last-published snapshot; cleared optimistically while a
+  // publish (either "Publish changes" or activating) is in flight.
+  const changesFetcher = useFetcher<{ ok?: boolean }>();
+  const isPublishingChanges = changesFetcher.state !== "idle";
+  const hasUnpublishedChanges =
+    !isPublishingChanges && !isPublishing &&
+    liveVersion !== publishedVersion &&
+    // Nothing to publish on a brand-new product that has never been published.
+    !(publishedVersion === null && fields.length === 0);
+  const publishChanges = () =>
+    changesFetcher.submit({ _action: "publish_changes" }, { method: "post" });
+
+  // Warn before navigating away from the product with unpublished changes (SL-123).
+  // Drafts are already saved to the DB, so this is a "not live yet" nudge, not a
+  // data-loss warning. beforeunload can't be used — it's blocked in the App Bridge
+  // iframe — so this only covers in-app navigation, which is the common case.
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      hasUnpublishedChanges && currentLocation.pathname !== nextLocation.pathname
+  );
+  const [publishThenLeave, setPublishThenLeave] = useState(false);
+  useEffect(() => {
+    if (publishThenLeave && changesFetcher.state === "idle" && changesFetcher.data?.ok) {
+      setPublishThenLeave(false);
+      blocker.proceed?.();
+    }
+  }, [publishThenLeave, changesFetcher.state, changesFetcher.data, blocker]);
+
   const previewFetcher = useFetcher<{ ok?: boolean }>();
   const optimisticPreview =
     previewFetcher.state !== "idle"
@@ -2631,7 +2672,7 @@ export default function ProductDetailPage() {
       title={product.title}
       titleMetadata={
         <Badge tone={optimisticPublished ? "success" : "new"}>
-          {optimisticPublished ? "Published" : "Draft"}
+          {optimisticPublished ? "Active" : "Inactive"}
         </Badge>
       }
       backAction={{ content: "Products", url: "/app/products" }}
@@ -2641,15 +2682,21 @@ export default function ProductDetailPage() {
           loading: tokenFetcher.state !== "idle",
           onAction: () => tokenFetcher.submit({ _action: "generate_preview_token" }, { method: "post" }),
         },
+        {
+          content: optimisticPublished ? "Deactivate" : "Activate",
+          loading: isPublishing,
+          onAction: () =>
+            publishFetcher.submit(
+              { _action: "set_published", published: String(!optimisticPublished) },
+              { method: "post" }
+            ),
+        },
       ]}
       primaryAction={{
-        content: optimisticPublished ? "Unpublish" : "Publish",
-        loading: isPublishing,
-        onAction: () =>
-          publishFetcher.submit(
-            { _action: "set_published", published: String(!optimisticPublished) },
-            { method: "post" }
-          ),
+        content: "Publish changes",
+        disabled: !hasUnpublishedChanges,
+        loading: isPublishingChanges,
+        onAction: publishChanges,
       }}
     >
       <BlockStack gap="400">
@@ -2809,7 +2856,12 @@ export default function ProductDetailPage() {
                 )}
               </Card>
               {!showAddForm && fields.length > 0 && (
-                <Button onClick={handleAddOpen} variant="primary">Add field</Button>
+                <BlockStack gap="100">
+                  <Button onClick={handleAddOpen} variant="primary">Add field</Button>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Changes aren’t live until you hit Publish.
+                  </Text>
+                </BlockStack>
               )}
               {/* Scroll clearance so the sticky preview can scroll fully alongside — only
                   needed when the preview is open side-by-side; when collapsed it would
@@ -2909,6 +2961,26 @@ export default function ProductDetailPage() {
       </div>
       </BlockStack>
       <TypePickerModal open={showTypePicker} onSelect={handleTypePick} onCancel={handleTypePickCancel} />
+      {/* Unpublished-changes prompt on leave (SL-123) */}
+      <Modal
+        open={blocker.state === "blocked"}
+        onClose={() => blocker.reset?.()}
+        title="Unpublished changes"
+        primaryAction={{
+          content: "Publish changes",
+          loading: isPublishingChanges,
+          onAction: () => { setPublishThenLeave(true); publishChanges(); },
+        }}
+        secondaryActions={[
+          { content: "Leave without publishing", disabled: isPublishingChanges, onAction: () => blocker.proceed?.() },
+        ]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            You have updates that have not been published to your store. If you do not publish your changes, they will be lost.
+          </Text>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }

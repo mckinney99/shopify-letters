@@ -43,6 +43,11 @@ model ProductConfig {
   enabled        Boolean  @default(false)
   published      Boolean  @default(false)
   previewEnabled Boolean  @default(false)
+  // SL-123: published snapshot of the storefront config (fields + conditions) and its
+  // version. The DB rows are the draft; the storefront serves this snapshot until the
+  // merchant clicks "Publish changes". Null until first publish.
+  publishedConfig  Json?
+  publishedVersion String?
   updatedAt      DateTime @updatedAt
 
   @@unique([shop, productId])
