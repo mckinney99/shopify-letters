@@ -29,6 +29,7 @@ import prisma from "../db.server";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
 import { buildThemeEditorDeepLink } from "../utils/themeEditor";
 import { BUILT_IN_TEMPLATES, type TemplateField } from "../utils/templates";
+import { resizeRotatedBox, moveBox, cornerPx, type PlacementBox } from "../utils/placementGeometry";
 
 const PRODUCT_QUERY = `
   query GetProduct($id: ID!) {
@@ -2042,7 +2043,7 @@ function SaveAsTemplateButton() {
   );
 }
 
-type PlacementBox = { x: number; y: number; w: number; h: number; rotation: number };
+// PlacementBox type now lives in ~/utils/placementGeometry (SL-114).
 
 const BOX_COLORS = ["#5c6ac4", "#47c1bf", "#f49342", "#de3618", "#50b83c"];
 
@@ -2084,6 +2085,8 @@ function PreviewPlacementBoxEditor({
     startX: number;
     startY: number;
     startP: PlacementBox;
+    grabOffsetX?: number;
+    grabOffsetY?: number;
   } | null>(null);
 
   const rotating = useRef<{
@@ -2104,20 +2107,26 @@ function PreviewPlacementBoxEditor({
         return;
       }
       if (!dragging.current || !containerRef.current) return;
-      const { fieldId, mode, startX, startY, startP } = dragging.current;
+      const { fieldId, mode, startX, startY, startP, grabOffsetX = 0, grabOffsetY = 0 } = dragging.current;
       const rect = containerRef.current.getBoundingClientRect();
-      const dx = ((e.clientX - startX) / rect.width) * 100;
-      const dy = ((e.clientY - startY) / rect.height) * 100;
+      // Both branches compute from startP + current pointer (no accumulation),
+      // so there's no drift. Resize keeps the opposite corner fixed and works
+      // in the box's rotated local frame (SL-114).
       setPlacementBoxs((prev) => {
-        const p = { ...prev[fieldId] };
         if (mode === "move") {
-          p.x = Math.max(0, Math.min(100 - startP.w, startP.x + dx));
-          p.y = Math.max(0, Math.min(100 - startP.h, startP.y + dy));
-        } else {
-          p.w = Math.max(10, Math.min(100 - startP.x, startP.w + dx));
-          p.h = Math.max(5, Math.min(100 - startP.y, startP.h + dy));
+          const dx = ((e.clientX - startX) / rect.width) * 100;
+          const dy = ((e.clientY - startY) / rect.height) * 100;
+          return { ...prev, [fieldId]: moveBox(startP, dx, dy) };
         }
-        return { ...prev, [fieldId]: p };
+        return {
+          ...prev,
+          [fieldId]: resizeRotatedBox(
+            startP, "se",
+            e.clientX - rect.left, e.clientY - rect.top,
+            rect.width, rect.height,
+            grabOffsetX, grabOffsetY,
+          ),
+        };
       });
     }
     function onMouseUp() {
@@ -2276,7 +2285,16 @@ function PreviewPlacementBoxEditor({
                 onMouseDown={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  dragging.current = { fieldId: field.id, mode: "resize", startX: e.clientX, startY: e.clientY, startP: { ...p } };
+                  // Capture the gap between the pointer and the SE corner so the
+                  // box doesn't jump on the first move (SL-114).
+                  let grabOffsetX = 0, grabOffsetY = 0;
+                  const rect = containerRef.current?.getBoundingClientRect();
+                  if (rect) {
+                    const se = cornerPx(p, rect.width, rect.height, "se");
+                    grabOffsetX = e.clientX - rect.left - se.x;
+                    grabOffsetY = e.clientY - rect.top - se.y;
+                  }
+                  dragging.current = { fieldId: field.id, mode: "resize", startX: e.clientX, startY: e.clientY, startP: { ...p }, grabOffsetX, grabOffsetY };
                 }}
                 style={{
                   position: "absolute",
