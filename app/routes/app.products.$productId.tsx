@@ -79,13 +79,6 @@ async function loadDraftConfig(shop: string, productGid: string) {
   ]);
 }
 
-// Version string for the current draft — the storefront/metafield "published version"
-// is compared against this to detect unpublished changes (SL-123).
-async function computeDraftVersion(shop: string, productGid: string): Promise<string> {
-  const [fields, pricingRules, conditions] = await loadDraftConfig(shop, productGid);
-  return computeConfigVersion(buildPricingConfig(fields, pricingRules, conditions));
-}
-
 // SL-123: "Publish changes" — snapshot the current draft as the customer-facing
 // config (stored on ProductConfig.publishedConfig, served by api.preview) AND write
 // the pricing metafield the Cart Transform function enforces at checkout. Edits no
