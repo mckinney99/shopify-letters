@@ -2760,7 +2760,19 @@ export default function ProductDetailPage() {
             >
               ‹
             </button>
-            <div style={{ flex: 1, width: "2px", minHeight: "60px", borderRadius: "2px", background: "#e1e3e5" }} />
+            {/* Vertical "Live preview" label so the collapsed rail is self-explanatory
+                and obviously clickable (SL-116). */}
+            <button
+              type="button"
+              onClick={togglePreviewCollapsed}
+              title="Show preview"
+              aria-label="Show preview"
+              style={{ flex: 1, minHeight: "80px", display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "transparent", cursor: "pointer", padding: "4px 0" }}
+            >
+              <span style={{ writingMode: "vertical-rl", fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em", color: "#6d7175", userSelect: "none" }}>
+                Live preview
+              </span>
+            </button>
           </div>
         )}
 
