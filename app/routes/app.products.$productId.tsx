@@ -1801,6 +1801,7 @@ function LivePreviewPanel({
   previewEnabled,
   onTogglePreview,
   conditions,
+  onCollapse,
 }: {
   fields: FieldData[];
   pricingRules: PricingRuleData[];
@@ -1810,6 +1811,7 @@ function LivePreviewPanel({
   previewEnabled: boolean;
   onTogglePreview: (enabled: boolean) => void;
   conditions: FieldConditionData[];
+  onCollapse?: () => void;
 }) {
   const textFields = fields.filter((f) => f.type === "text" || f.type === "textarea");
   const [values, setValues] = useState<Record<string, string>>(() =>
@@ -1884,9 +1886,22 @@ function LivePreviewPanel({
 
   return (
     <div style={{ border: "1px solid #e1e3e5", borderRadius: "8px", overflow: "hidden", background: "white", position: "sticky", top: "16px" }}>
-      {/* Header — collapse is handled by the rail toggle in the layout (SL-113) */}
-      <div style={{ background: "#303030", padding: "10px 14px", display: "flex", alignItems: "center" }}>
+      {/* Header — carries the collapse chevron side-by-side; the same dark bar becomes
+          the vertical side rail when collapsed (SL-118). */}
+      <div style={{ background: "#303030", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ color: "white", fontWeight: 600, fontSize: "13px" }}>Live Preview</span>
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            title="Hide preview"
+            aria-label="Hide preview"
+            aria-expanded={true}
+            style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.85)", cursor: "pointer", fontSize: "18px", lineHeight: 1, padding: "0 2px", display: "flex", alignItems: "center" }}
+          >
+            ›
+          </button>
+        )}
       </div>
 
       {/* Product image + draggable overlay (text fields) + static overlays (all other field types with placement) */}
@@ -2700,48 +2715,37 @@ export default function ProductDetailPage() {
               {!showAddForm && fields.length > 0 && (
                 <Button onClick={handleAddOpen} variant="primary">Add field</Button>
               )}
-              {/* Scroll clearance so the sticky preview can scroll fully alongside — only needed side-by-side */}
-              {!isNarrow && <div style={{ height: "80px" }} />}
+              {/* Scroll clearance so the sticky preview can scroll fully alongside — only
+                  needed when the preview is open side-by-side; when collapsed it would
+                  make the side rail run past the fields (SL-118). */}
+              {!isNarrow && !previewCollapsed && <div style={{ height: "80px" }} />}
             </BlockStack>
           )}
         </div>
 
-        {/* SL-111 draggable divider + SL-113 collapse chevron — expanded, side-by-side only */}
+        {/* SL-111 draggable divider — resize only now; collapse lives in the preview
+            header (SL-118). Side-by-side, expanded only. */}
         {!isNarrow && (editingField || fields.length > 0) && !previewCollapsed && (
           <div
+            role="separator"
             aria-orientation="vertical"
+            title="Drag to resize the preview"
             onMouseEnter={() => setDividerHover(true)}
             onMouseLeave={() => setDividerHover(false)}
-            style={{ alignSelf: "stretch", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", paddingTop: "10px" }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              draggingDivider.current = true;
+              document.body.style.userSelect = "none";
+            }}
+            style={{ alignSelf: "stretch", display: "flex", justifyContent: "center", cursor: "col-resize", paddingTop: "16px" }}
           >
-            {/* Collapse the preview → fields expand */}
-            <button
-              type="button"
-              onClick={togglePreviewCollapsed}
-              title="Hide preview"
-              aria-label="Hide preview"
-              aria-expanded={true}
-              style={{ width: "20px", height: "20px", borderRadius: "4px", border: "1px solid #e1e3e5", background: "#fff", color: "#6d7175", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", lineHeight: 1, padding: 0 }}
-            >
-              ›
-            </button>
-            {/* Drag to resize */}
             <div
-              role="separator"
-              aria-orientation="vertical"
-              title="Drag to resize the preview"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                draggingDivider.current = true;
-                document.body.style.userSelect = "none";
-              }}
               style={{
-                flex: 1,
                 width: dividerHover ? "4px" : "3px",
+                alignSelf: "stretch",
                 minHeight: "60px",
                 borderRadius: "2px",
                 background: dividerHover ? "#8c9196" : "#c9cccf",
-                cursor: "col-resize",
                 transition: "background 0.1s, width 0.1s",
               }}
             />
@@ -2762,7 +2766,6 @@ export default function ProductDetailPage() {
             aria-expanded={false}
             style={{
               alignSelf: "stretch",
-              minHeight: "120px",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -2797,6 +2800,7 @@ export default function ProductDetailPage() {
               productTitle={product.title}
               previewEnabled={optimisticPreview}
               conditions={conditions}
+              onCollapse={isNarrow ? undefined : togglePreviewCollapsed}
               onTogglePreview={(checked) =>
                 previewFetcher.submit(
                   { _action: "toggle_preview", previewEnabled: String(checked) },
