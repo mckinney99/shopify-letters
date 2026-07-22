@@ -91,18 +91,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Upload setup failed" }, { status: 502, headers: CORS_HEADERS });
   }
 
-  // Step 2: Upload the file to the staged URL with the required parameters.
-  const uploadForm = new FormData();
-  for (const { name, value } of target.parameters) {
-    uploadForm.append(name, value);
-  }
-  uploadForm.append("file", file);
-
+  // Step 2: Upload the bytes. Shopify staged FILE/IMAGE targets are Google Cloud
+  // Storage V4 *pre-signed URLs* (X-Goog-Signature in the query, SignedHeaders=host)
+  // — they require a PUT of the raw body. A multipart POST (params as form fields)
+  // makes Google recompute a different signature → 403 SignatureDoesNotMatch (SL-122).
+  // Only `host` is signed, so we send just the body + Content-Type (no x-goog-* headers).
   try {
-    const uploadRes = await fetch(target.url, { method: "POST", body: uploadForm });
-    if (!uploadRes.ok) {
-      const body = await uploadRes.text();
-      console.error("[api.upload] staged PUT failed:", uploadRes.status, body.slice(0, 200));
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const putRes = await fetch(target.url, {
+      method: "PUT",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: bytes,
+    });
+    if (!putRes.ok) {
+      const body = await putRes.text();
+      console.error("[api.upload] staged PUT failed:", putRes.status, body.slice(0, 300));
       return json({ error: "Upload failed" }, { status: 502, headers: CORS_HEADERS });
     }
   } catch (err) {
@@ -110,7 +113,65 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ error: "Upload failed" }, { status: 502, headers: CORS_HEADERS });
   }
 
-  return json({ url: target.resourceUrl }, { headers: CORS_HEADERS });
+  // Step 3: register the staged object with the Files API so it becomes a permanent
+  // Shopify CDN asset — staged uploads are temporary and get garbage-collected, so we
+  // can't just return resourceUrl.
+  const isImage = (file.type || "").startsWith("image/");
+  const FILE_CREATE = `
+    mutation FileCreate($files: [FileCreateInput!]!) {
+      fileCreate(files: $files) {
+        files {
+          id
+          ... on MediaImage { image { url } }
+          ... on GenericFile { url }
+        }
+        userErrors { field message }
+      }
+    }`;
+  let fileId: string;
+  let cdnUrl: string | null;
+  try {
+    const res = await admin.graphql(FILE_CREATE, {
+      variables: { files: [{ originalSource: target.resourceUrl, contentType: isImage ? "IMAGE" : "FILE" }] },
+    });
+    const { data: fcData } = await res.json();
+    const created = fcData?.fileCreate?.files?.[0];
+    const errs = fcData?.fileCreate?.userErrors ?? [];
+    if (!created || errs.length) {
+      console.error("[api.upload] fileCreate userErrors:", errs);
+      return json({ error: "Upload registration failed" }, { status: 502, headers: CORS_HEADERS });
+    }
+    fileId = created.id;
+    cdnUrl = created.image?.url ?? created.url ?? null;
+  } catch (err) {
+    console.error("[api.upload] fileCreate error:", err);
+    return json({ error: "Upload registration failed" }, { status: 502, headers: CORS_HEADERS });
+  }
+
+  // Step 4: the CDN url is often null immediately after fileCreate (still processing) —
+  // poll the file node briefly until it resolves.
+  const FILE_NODE = `
+    query FileNode($id: ID!) {
+      node(id: $id) {
+        ... on MediaImage { fileStatus image { url } }
+        ... on GenericFile { fileStatus url }
+      }
+    }`;
+  for (let i = 0; i < 10 && !cdnUrl; i++) {
+    await new Promise((r) => setTimeout(r, 600));
+    try {
+      const res = await admin.graphql(FILE_NODE, { variables: { id: fileId } });
+      const { data: nodeData } = await res.json();
+      cdnUrl = nodeData?.node?.image?.url ?? nodeData?.node?.url ?? null;
+    } catch {
+      /* keep polling */
+    }
+  }
+
+  if (!cdnUrl) {
+    return json({ error: "Image is still processing — try again in a moment." }, { status: 202, headers: CORS_HEADERS });
+  }
+  return json({ url: cdnUrl }, { headers: CORS_HEADERS });
 };
 
 // Remix calls loader for non-POST methods on resource routes — return 405.
