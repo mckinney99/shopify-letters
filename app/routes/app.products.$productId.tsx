@@ -2381,6 +2381,7 @@ export default function ProductDetailPage() {
   const previewPctRef = useRef(previewPct);
   useEffect(() => { previewPctRef.current = previewPct; }, [previewPct]);
   const [dividerHover, setDividerHover] = useState(false);
+  const [railHover, setRailHover] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const draggingDivider = useRef(false);
 
@@ -2637,7 +2638,7 @@ export default function ProductDetailPage() {
         style={isNarrow
           ? { display: "flex", flexDirection: "column", gap: "16px" }
           : (editingField || fields.length > 0)
-            ? { display: "grid", gridTemplateColumns: previewCollapsed ? "1fr 28px" : `${100 - previewPct}fr 16px ${previewPct}fr`, alignItems: "flex-start" }
+            ? { display: "grid", gridTemplateColumns: previewCollapsed ? "1fr 34px" : `${100 - previewPct}fr 16px ${previewPct}fr`, alignItems: "flex-start" }
             : { display: "block" }}>
         {/* Left column */}
         <div>
@@ -2747,33 +2748,40 @@ export default function ProductDetailPage() {
           </div>
         )}
 
-        {/* SL-113 collapsed rail — click the chevron to reopen the preview (side-by-side only) */}
+        {/* SL-117 collapsed rail — a single full-height vertical button. Reuses the
+            dark #303030 of the Live Preview panel header so it reads as the preview,
+            with the chevron grouped directly above the vertical label. */}
         {!isNarrow && (editingField || fields.length > 0) && previewCollapsed && (
-          <div style={{ alignSelf: "stretch", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", paddingTop: "10px" }}>
-            <button
-              type="button"
-              onClick={togglePreviewCollapsed}
-              title="Show preview"
-              aria-label="Show preview"
-              aria-expanded={false}
-              style={{ width: "24px", height: "24px", borderRadius: "4px", border: "1px solid #e1e3e5", background: "#fff", color: "#303030", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", lineHeight: 1, padding: 0 }}
-            >
-              ‹
-            </button>
-            {/* Vertical "Live preview" label so the collapsed rail is self-explanatory
-                and obviously clickable (SL-116). */}
-            <button
-              type="button"
-              onClick={togglePreviewCollapsed}
-              title="Show preview"
-              aria-label="Show preview"
-              style={{ flex: 1, minHeight: "80px", display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "transparent", cursor: "pointer", padding: "4px 0" }}
-            >
-              <span style={{ writingMode: "vertical-rl", fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em", color: "#6d7175", userSelect: "none" }}>
-                Live preview
-              </span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={togglePreviewCollapsed}
+            onMouseEnter={() => setRailHover(true)}
+            onMouseLeave={() => setRailHover(false)}
+            title="Show preview"
+            aria-label="Show preview"
+            aria-expanded={false}
+            style={{
+              alignSelf: "stretch",
+              minHeight: "120px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              padding: "12px 0",
+              border: "none",
+              borderRadius: "8px",
+              background: railHover ? "#1a1a1a" : "#303030",
+              color: "#fff",
+              cursor: "pointer",
+              transition: "background 0.12s",
+            }}
+          >
+            <span style={{ fontSize: "15px", lineHeight: 1 }}>‹</span>
+            <span style={{ writingMode: "vertical-rl", fontSize: "11px", fontWeight: 600, letterSpacing: "0.02em", userSelect: "none" }}>
+              Live preview
+            </span>
+          </button>
         )}
 
         {/* Right column: live preview (unified — all field types).
