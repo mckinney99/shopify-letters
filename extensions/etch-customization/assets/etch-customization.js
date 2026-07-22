@@ -1055,10 +1055,14 @@
 
   // ── Display-only: text block (SL-79) ─────────────────────────────────────
   function renderTextBlock(field, wrapper, label) {
-    var p = document.createElement('p');
-    p.className = 'etch-customization__text-block';
-    p.textContent = field.helpText || '';
-    wrapper.appendChild(p);
+    // Show the label (heading) and/or the content, not just the content (SL-115).
+    if (field.label) wrapper.appendChild(label);
+    if (field.helpText) {
+      var p = document.createElement('p');
+      p.className = 'etch-customization__text-block';
+      p.textContent = field.helpText;
+      wrapper.appendChild(p);
+    }
   }
 
   // ── Display-only: static image (SL-79) ───────────────────────────────────

@@ -1779,7 +1779,14 @@ function PreviewFieldInput({
   }
   if (field.type === "date") return <input type="date" value={value} onChange={(e) => onChange(e.target.value)} style={inputStyle} />;
   if (field.type === "number") return <input type="number" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" style={inputStyle} />;
-  if (field.type === "text-block") return <p style={{ fontSize: "13px", color: "#6d7175", margin: 0 }}>{field.helpText ?? field.label}</p>;
+  if (field.type === "text-block") return (
+    // Display-only text block: show the label (heading) and/or the content, not
+    // one falling back to the other (SL-115).
+    <>
+      {field.label && <div style={{ fontSize: "13px", fontWeight: 600, color: "#303030", marginBottom: "2px" }}>{field.label}</div>}
+      {field.helpText && <p style={{ fontSize: "13px", color: "#6d7175", margin: 0 }}>{field.helpText}</p>}
+    </>
+  );
   if (field.type === "image-static") return field.helpText ? <img src={field.helpText} style={{ maxWidth: "100%", borderRadius: "4px" }} alt={field.label} /> : null;
   if (field.type === "upload") return <div style={{ border: "1px dashed #c9cccf", borderRadius: "6px", padding: "8px 12px", fontSize: "12px", color: "#6d7175" }}>File upload (preview only)</div>;
   return null;
