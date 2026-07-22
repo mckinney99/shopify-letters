@@ -7,6 +7,7 @@ import { calculateProductPrice } from "../utils/pricing";
 import type { FieldInput, FieldPricingRule, PricingCondition } from "../utils/pricing";
 import type { FieldRules } from "../utils/normalize";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
+import { buildStorefrontConfig } from "../utils/storefrontConfig";
 import { logEvent, shortHash } from "../utils/log";
 import { recordPreviewLatency } from "../utils/metrics";
 import { makeRateLimiter } from "../utils/rateLimit";
@@ -63,68 +64,47 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const productGid = `gid://shopify/Product/${productId}`;
-  const [config, dbFields, pricingRules, conditions] = await Promise.all([
-    prisma.productConfig.findUnique({
-      where: { shop_productId: { shop, productId: productGid } },
-      select: { published: true, previewEnabled: true },
-    }),
-    prisma.customizationField.findMany({
-      where: { shop, productId: productGid },
-      orderBy: { position: "asc" },
-      select: {
-        id: true, label: true, type: true, required: true,
-        minChars: true, maxChars: true, allowedChars: true, disallowedChars: true,
-        allowSpaces: true, countSpaces: true,
-        helpText: true, dateFutureOnly: true, fontOptions: true, textColorOptions: true, fontSizeOptions: true, fileAccept: true,
-        previewX: true, previewY: true, previewW: true, previewH: true, previewRotation: true,
-        options: { select: { label: true, priceDelta: true, swatchColor: true, imageUrl: true }, orderBy: { position: "asc" } },
-      },
-    }),
-    prisma.pricingRule.findMany({
-      where: { shop, productId: productGid, fieldId: { not: "" } },
-      select: { fieldId: true, perCharPrice: true, mode: true, amount: true, charGroups: { select: { label: true, pricePerChar: true } } },
-    }),
-    prisma.fieldCondition.findMany({
-      where: { shop, productId: productGid },
-      select: { fieldId: true, triggerFieldId: true, operator: true, value: true },
-    }),
-  ]);
+  const config = await prisma.productConfig.findUnique({
+    where: { shop_productId: { shop, productId: productGid } },
+    select: { published: true, previewEnabled: true, publishedConfig: true },
+  });
 
   if (!config?.published && !previewMode) {
     return json({ error: "Not found" }, { status: 404, headers: CORS_HEADERS });
   }
 
-  const ruleByFieldId = Object.fromEntries(pricingRules.map((r) => [r.fieldId, r]));
-  const fields = dbFields.map((f) => ({
-    id: f.id,
-    label: f.label,
-    type: f.type,
-    required: f.required,
-    minChars: f.minChars,
-    maxChars: f.maxChars,
-    allowedChars: f.allowedChars,
-    disallowedChars: f.disallowedChars,
-    allowSpaces: f.allowSpaces,
-    countSpaces: f.countSpaces,
-    options: f.options,
-    helpText: f.helpText,
-    dateFutureOnly: f.dateFutureOnly,
-    fontOptions: f.fontOptions,
-    textColorOptions: f.textColorOptions,
-    fontSizeOptions: f.fontSizeOptions,
-    fileAccept: f.fileAccept,
-    perCharPrice: ruleByFieldId[f.id]?.perCharPrice ?? null,
-    mode: ruleByFieldId[f.id]?.mode ?? "per_char",
-    amount: ruleByFieldId[f.id]?.amount ?? 0,
-    charGroups: ruleByFieldId[f.id]?.charGroups ?? [],
-    previewX: f.previewX,
-    previewY: f.previewY,
-    previewW: f.previewW,
-    previewH: f.previewH,
-    previewRotation: f.previewRotation,
-  }));
+  // SL-123: customers see the last-published snapshot. Admin "Preview on store"
+  // (previewMode) — and products published before snapshots existed (no snapshot yet)
+  // — fall back to the live draft so nothing breaks until the first explicit publish.
+  const snap = config?.publishedConfig as
+    | { fields: unknown[]; pricingRules: unknown[]; conditions: unknown[] }
+    | null;
+  let built;
+  if (previewMode || !snap) {
+    const [dbFields, pricingRules, conditions] = await Promise.all([
+      prisma.customizationField.findMany({
+        where: { shop, productId: productGid },
+        orderBy: { position: "asc" },
+        include: { options: { orderBy: { position: "asc" } } },
+      }),
+      prisma.pricingRule.findMany({
+        where: { shop, productId: productGid },
+        include: { charGroups: true },
+      }),
+      prisma.fieldCondition.findMany({
+        where: { shop, productId: productGid },
+        select: { fieldId: true, triggerFieldId: true, operator: true, value: true },
+      }),
+    ]);
+    built = buildStorefrontConfig(dbFields as any, pricingRules as any, conditions);
+  } else {
+    built = buildStorefrontConfig(snap.fields as any, snap.pricingRules as any, snap.conditions as any);
+  }
 
-  return json({ fields, conditions, previewEnabled: config?.previewEnabled ?? false, previewMode }, { headers: CORS_HEADERS });
+  return json(
+    { fields: built.fields, conditions: built.conditions, previewEnabled: config?.previewEnabled ?? false, previewMode },
+    { headers: CORS_HEADERS }
+  );
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -168,31 +148,47 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const productBaseMinor = typeof baseMinor === "number" && baseMinor >= 0 ? Math.round(baseMinor) : 0;
 
-  const [config, dbFields, pricingRules, dbConditions] = await Promise.all([
-    prisma.productConfig.findUnique({
-      where: { shop_productId: { shop, productId: productGid } },
-      select: { published: true },
-    }),
-    prisma.customizationField.findMany({
-      where: { shop, productId: productGid },
-      orderBy: { position: "asc" },
-      include: { options: { orderBy: { position: "asc" } } },
-    }),
-    prisma.pricingRule.findMany({
-      where: { shop, productId: productGid },
-      include: { charGroups: true },
-    }),
-    prisma.fieldCondition.findMany({
-      where: { shop, productId: productGid },
-      select: { fieldId: true, triggerFieldId: true, operator: true, value: true },
-    }),
-  ]);
+  const config = await prisma.productConfig.findUnique({
+    where: { shop_productId: { shop, productId: productGid } },
+    select: { published: true, publishedConfig: true },
+  });
 
   if (!config?.published) {
     return json(
       { error: "Product configuration not found or not published" },
       { status: 404, headers: CORS_HEADERS }
     );
+  }
+
+  // SL-123: the price preview must match what checkout enforces, so it reads the
+  // published snapshot (same source the pricing metafield was built from). Products
+  // published before snapshots existed fall back to the live draft.
+  const snap = config.publishedConfig as
+    | { fields: any[]; pricingRules: any[]; conditions: any[] }
+    | null;
+  let dbFields: any[];
+  let pricingRules: any[];
+  let dbConditions: any[];
+  if (snap) {
+    dbFields = snap.fields;
+    pricingRules = snap.pricingRules;
+    dbConditions = snap.conditions;
+  } else {
+    [dbFields, pricingRules, dbConditions] = await Promise.all([
+      prisma.customizationField.findMany({
+        where: { shop, productId: productGid },
+        orderBy: { position: "asc" },
+        include: { options: { orderBy: { position: "asc" } } },
+      }),
+      prisma.pricingRule.findMany({
+        where: { shop, productId: productGid },
+        include: { charGroups: true },
+      }),
+      prisma.fieldCondition.findMany({
+        where: { shop, productId: productGid },
+        select: { fieldId: true, triggerFieldId: true, operator: true, value: true },
+      }),
+    ]);
   }
 
   // Normalize each field and collect errors
@@ -247,7 +243,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!selected) {
         if (dbField.required) allErrors.push(`${dbField.label}: Please select an option.`);
       } else {
-        const opt = dbField.options.find((o) => o.label === selected);
+        const opt = dbField.options.find((o: any) => o.label === selected);
         if (!opt) allErrors.push(`${dbField.label}: Invalid selection.`);
         else optionDeltaMinor += Math.round(opt.priceDelta * 100);
       }
@@ -262,7 +258,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       disallowedChars: dbField.disallowedChars,
       allowSpaces: dbField.allowSpaces,
       charGroups:
-        fieldRule?.charGroups.map((g) => ({
+        fieldRule?.charGroups.map((g: any) => ({
           label: g.label,
           characters: g.characters,
         })) ?? [],
@@ -285,7 +281,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       perCharPrice: r.perCharPrice,
       mode: (r.mode as "per_char" | "flat" | "percent") ?? "per_char",
       amount: r.amount ?? 0,
-      charGroups: r.charGroups.map((g) => ({
+      charGroups: r.charGroups.map((g: any) => ({
         label: g.label,
         characters: g.characters,
         pricePerChar: g.pricePerChar,
