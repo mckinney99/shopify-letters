@@ -22,6 +22,7 @@ import {
   Combobox,
   Listbox,
   Tag,
+  DropZone,
 } from "@shopify/polaris";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
@@ -712,6 +713,79 @@ function TypePickerModal({ open, onSelect, onCancel }: { open: boolean; onSelect
   );
 }
 
+// Reusable image input (SL-120): drag-and-drop, a click-to-browse "Upload a file"
+// link (opens the native OS/photo picker on desktop and mobile), OR a pasted URL.
+// Uploads go through the existing /api/upload (Shopify staged upload → CDN URL) and
+// resolve to the same string a pasted URL would, so callers store one value.
+function ImageUploadField({
+  value,
+  onChange,
+  label = "Image",
+  helpText,
+  compact = false,
+}: {
+  value: string;
+  onChange: (url: string) => void;
+  label?: string;
+  helpText?: string;
+  compact?: boolean;
+}) {
+  const { shop } = useLoaderData<typeof loader>();
+  const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploading = uploadFetcher.state !== "idle";
+
+  useEffect(() => {
+    if (uploadFetcher.data?.url) { onChange(uploadFetcher.data.url); setUploadError(null); }
+    if (uploadFetcher.data?.error) setUploadError(uploadFetcher.data.error);
+    // onChange is stable enough for this use; deliberately not a dep.
+  }, [uploadFetcher.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDrop = useCallback(
+    (_: File[], accepted: File[]) => {
+      const file = accepted[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { setUploadError("File too large (max 10 MB)"); return; }
+      setUploadError(null);
+      const fd = new FormData();
+      fd.append("shop", shop);
+      fd.append("file", file);
+      uploadFetcher.submit(fd, { method: "post", action: "/api/upload" });
+    },
+    [uploadFetcher, shop]
+  );
+
+  return (
+    <BlockStack gap="200">
+      {uploadError && <Banner tone="critical" onDismiss={() => setUploadError(null)}>{uploadError}</Banner>}
+      <DropZone accept="image/*" type="image" allowMultiple={false} onDrop={handleDrop} disabled={uploading}>
+        {uploading ? (
+          <Box padding="400">
+            <Text as="p" alignment="center" tone="subdued">Uploading…</Text>
+          </Box>
+        ) : (
+          <DropZone.FileUpload
+            actionTitle="Upload a file"
+            actionHint={compact ? "or drop an image" : "or drop a JPEG, PNG, WebP, or GIF (max 10 MB)"}
+          />
+        )}
+      </DropZone>
+      <TextField
+        label={`${label} URL`}
+        labelHidden={compact}
+        value={value}
+        onChange={onChange}
+        autoComplete="off"
+        placeholder="https://… (or upload above)"
+        helpText={compact ? undefined : (helpText ?? "Upload a file, or paste an image URL.")}
+      />
+      {value && !compact && (
+        <img src={value} alt="preview" style={{ maxWidth: "8rem", maxHeight: "8rem", objectFit: "cover", borderRadius: "6px", border: "1px solid #ddd" }} />
+      )}
+    </BlockStack>
+  );
+}
+
 function FieldForm({
   field,
   actionType,
@@ -870,15 +944,23 @@ function FieldForm({
             helpText="Choose how shoppers interact with this field."
           />
 
-          {/* ── Display-only elements (SL-79) ─────────────────────────────── */}
-          {isDisplay && (
+          {/* ── Display-only elements (SL-79; image upload SL-120) ────────── */}
+          {isDisplay && type === "text-block" && (
             <TextField
-              label={type === "text-block" ? "Content" : "Image URL"}
-              helpText={type === "text-block" ? "This text appears as instructions in your form." : "Paste the URL of an image to display (e.g. a sizing guide)."}
+              label="Content"
+              helpText="This text appears as instructions in your form."
               value={helpText}
               onChange={setHelpText}
-              multiline={type === "text-block" ? 3 : undefined}
+              multiline={3}
               autoComplete="off"
+            />
+          )}
+          {isDisplay && type === "image-static" && (
+            <ImageUploadField
+              label="Image"
+              value={helpText}
+              onChange={setHelpText}
+              helpText="Upload an image to display (e.g. a sizing guide), or paste an image URL."
             />
           )}
 
@@ -990,13 +1072,11 @@ function FieldForm({
                     )}
                     {type === "image-swatches" && (
                       <div style={{ flex: 2 }}>
-                        <TextField
-                          label="Image URL"
-                          labelHidden
-                          placeholder="https://... (image URL)"
+                        <ImageUploadField
+                          compact
+                          label="Image"
                           value={opt.imageUrl}
                           onChange={(v) => updateOption(i, "imageUrl", v)}
-                          autoComplete="off"
                         />
                       </div>
                     )}
