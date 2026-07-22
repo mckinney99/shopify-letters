@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { createHmac } from "node:crypto";
-import { useLoaderData, useFetcher, useRouteError, useNavigate } from "@remix-run/react";
+import { useLoaderData, useFetcher, useRouteError, useNavigate, useBlocker } from "@remix-run/react";
 import {
   Page,
   Card,
@@ -2581,6 +2581,22 @@ export default function ProductDetailPage() {
   const publishChanges = () =>
     changesFetcher.submit({ _action: "publish_changes" }, { method: "post" });
 
+  // Warn before navigating away from the product with unpublished changes (SL-123).
+  // Drafts are already saved to the DB, so this is a "not live yet" nudge, not a
+  // data-loss warning. beforeunload can't be used — it's blocked in the App Bridge
+  // iframe — so this only covers in-app navigation, which is the common case.
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      hasUnpublishedChanges && currentLocation.pathname !== nextLocation.pathname
+  );
+  const [publishThenLeave, setPublishThenLeave] = useState(false);
+  useEffect(() => {
+    if (publishThenLeave && changesFetcher.state === "idle" && changesFetcher.data?.ok) {
+      setPublishThenLeave(false);
+      blocker.proceed?.();
+    }
+  }, [publishThenLeave, changesFetcher.state, changesFetcher.data, blocker]);
+
   const previewFetcher = useFetcher<{ ok?: boolean }>();
   const optimisticPreview =
     previewFetcher.state !== "idle"
@@ -2684,22 +2700,6 @@ export default function ProductDetailPage() {
       }}
     >
       <BlockStack gap="400">
-        {hasUnpublishedChanges && (
-          <Banner tone="warning" title="You have unpublished changes">
-            <BlockStack gap="200">
-              <Text as="p">
-                Your edits are shown in the live preview but customers still see the last
-                published version{optimisticPublished ? "" : " (this product is inactive)"}.
-                Publish to make them live.
-              </Text>
-              <InlineStack>
-                <Button variant="primary" onClick={publishChanges} loading={isPublishingChanges}>
-                  Publish changes
-                </Button>
-              </InlineStack>
-            </BlockStack>
-          </Banner>
-        )}
         {showCongrats && (
           <Banner
             title="You're all set! Your first custom pricing is live."
@@ -2856,7 +2856,12 @@ export default function ProductDetailPage() {
                 )}
               </Card>
               {!showAddForm && fields.length > 0 && (
-                <Button onClick={handleAddOpen} variant="primary">Add field</Button>
+                <BlockStack gap="100">
+                  <Button onClick={handleAddOpen} variant="primary">Add field</Button>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Changes aren’t live until you hit Publish.
+                  </Text>
+                </BlockStack>
               )}
               {/* Scroll clearance so the sticky preview can scroll fully alongside — only
                   needed when the preview is open side-by-side; when collapsed it would
@@ -2956,6 +2961,27 @@ export default function ProductDetailPage() {
       </div>
       </BlockStack>
       <TypePickerModal open={showTypePicker} onSelect={handleTypePick} onCancel={handleTypePickCancel} />
+      {/* Unpublished-changes prompt on leave (SL-123) */}
+      <Modal
+        open={blocker.state === "blocked"}
+        onClose={() => blocker.reset?.()}
+        title="Unpublished changes"
+        primaryAction={{
+          content: "Publish changes",
+          loading: isPublishingChanges,
+          onAction: () => { setPublishThenLeave(true); publishChanges(); },
+        }}
+        secondaryActions={[
+          { content: "Leave without publishing", disabled: isPublishingChanges, onAction: () => blocker.proceed?.() },
+        ]}
+      >
+        <Modal.Section>
+          <Text as="p">
+            You have changes that haven’t been published. They’re saved as a draft, but
+            customers won’t see them until you publish. Publish now, or leave and finish later?
+          </Text>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }
