@@ -2609,21 +2609,15 @@ export default function ProductDetailPage() {
   const publishChanges = () =>
     changesFetcher.submit({ _action: "publish_changes" }, { method: "post" });
 
-  // Warn before navigating away from the product with unpublished changes (SL-123).
-  // Drafts are already saved to the DB, so this is a "not live yet" nudge, not a
-  // data-loss warning. beforeunload can't be used — it's blocked in the App Bridge
-  // iframe — so this only covers in-app navigation, which is the common case.
+  // Warn before leaving the product page only when a field editor has unsaved input —
+  // drafts are always saved, so unpublished changes are NOT a reason to prompt (SL-133).
+  // beforeunload can't be used (blocked in the App Bridge iframe), so this covers in-app
+  // navigation only, which is the common case.
+  const [fieldEditorDirty, setFieldEditorDirty] = useState(false);
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      hasUnpublishedChanges && currentLocation.pathname !== nextLocation.pathname
+      fieldEditorDirty && currentLocation.pathname !== nextLocation.pathname
   );
-  const [publishThenLeave, setPublishThenLeave] = useState(false);
-  useEffect(() => {
-    if (publishThenLeave && changesFetcher.state === "idle" && changesFetcher.data?.ok) {
-      setPublishThenLeave(false);
-      blocker.proceed?.();
-    }
-  }, [publishThenLeave, changesFetcher.state, changesFetcher.data, blocker]);
 
   const previewFetcher = useFetcher<{ ok?: boolean }>();
   const optimisticPreview =
@@ -2835,7 +2829,7 @@ export default function ProductDetailPage() {
                 <Text as="span" variant="bodySm" tone="subdued">Editing: <b>{editingField.label}</b></Text>
               </InlineStack>
               <Card>
-                <FieldForm field={editingField} actionType="update" onClose={handleEditClose} assets={assets} />
+                <FieldForm field={editingField} actionType="update" onClose={handleEditClose} assets={assets} onDirtyChange={setFieldEditorDirty} />
               </Card>
               <FieldConditionEditor field={editingField} allFields={fields} conditions={conditions} />
               {(editingField.type === "text" || editingField.type === "textarea") && (
@@ -2876,7 +2870,7 @@ export default function ProductDetailPage() {
                       <Box padding="400">
                         <BlockStack gap="300">
                           <Text as="h3" variant="headingSm">New field</Text>
-                          <FieldForm actionType="create" onClose={handleAddClose} assets={assets} initialType={pickedType ?? undefined} />
+                          <FieldForm actionType="create" onClose={handleAddClose} assets={assets} initialType={pickedType ?? undefined} onDirtyChange={setFieldEditorDirty} />
                         </BlockStack>
                       </Box>
                     )}
@@ -2989,23 +2983,20 @@ export default function ProductDetailPage() {
       </div>
       </BlockStack>
       <TypePickerModal open={showTypePicker} onSelect={handleTypePick} onCancel={handleTypePickCancel} />
-      {/* Unpublished-changes prompt on leave (SL-123) */}
+      {/* Unsaved-field prompt on leave (SL-133) */}
       <Modal
         open={blocker.state === "blocked"}
         onClose={() => blocker.reset?.()}
-        title="Unpublished changes"
-        primaryAction={{
-          content: "Publish changes",
-          loading: isPublishingChanges,
-          onAction: () => { setPublishThenLeave(true); publishChanges(); },
-        }}
+        title="You’re still editing a field"
+        primaryAction={{ content: "Keep editing", onAction: () => blocker.reset?.() }}
         secondaryActions={[
-          { content: "Leave without publishing", disabled: isPublishingChanges, onAction: () => blocker.proceed?.() },
+          { content: "Leave anyway", onAction: () => blocker.proceed?.() },
         ]}
       >
         <Modal.Section>
           <Text as="p">
-            You have updates that have not been published to your store. If you do not publish your changes, they will be lost.
+            You have a field open with changes you haven’t saved. If you leave now, those
+            edits won’t be saved. Leave anyway?
           </Text>
         </Modal.Section>
       </Modal>
