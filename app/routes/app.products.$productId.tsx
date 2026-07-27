@@ -23,7 +23,10 @@ import {
   Listbox,
   Tag,
   DropZone,
+  Tooltip,
+  Icon,
 } from "@shopify/polaris";
+import { InfoIcon } from "@shopify/polaris-icons";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -808,6 +811,31 @@ function ImageUploadField({
   );
 }
 
+// Small hover "i" that explains a field in plain language (SL-124). Clicking it does
+// not toggle/submit the field it labels.
+function InfoTip({ content }: { content: string }) {
+  return (
+    <Tooltip content={content} dismissOnMouseOut>
+      <span
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        style={{ display: "inline-flex", verticalAlign: "middle", cursor: "help" }}
+      >
+        <Icon source={InfoIcon} tone="subdued" />
+      </span>
+    </Tooltip>
+  );
+}
+
+// A field label followed by an InfoTip — usable as the `label` of a TextField/Checkbox.
+function LabelWithInfo({ text, info }: { text: string; info: string }) {
+  return (
+    <InlineStack gap="100" blockAlign="center">
+      <Text as="span" variant="bodyMd">{text}</Text>
+      <InfoTip content={info} />
+    </InlineStack>
+  );
+}
+
 function FieldForm({
   field,
   actionType,
@@ -1154,16 +1182,16 @@ function FieldForm({
           {isText && (
             <>
               <FormLayout.Group>
-                <TextField label="Min characters" type="number" value={minChars} onChange={setMinChars} autoComplete="off" />
-                <TextField label="Max characters" type="number" value={maxChars} onChange={setMaxChars} autoComplete="off" />
+                <TextField label={<LabelWithInfo text="Min characters" info="The fewest characters a shopper must type in this field. Leave blank for no minimum." />} type="number" value={minChars} onChange={setMinChars} autoComplete="off" />
+                <TextField label={<LabelWithInfo text="Max characters" info="The most characters a shopper can type in this field. Leave blank for no maximum." />} type="number" value={maxChars} onChange={setMaxChars} autoComplete="off" />
               </FormLayout.Group>
               <FormLayout.Group>
-                <TextField label="Allowed characters" helpText="Only these characters will be accepted (leave blank for all)" value={allowedChars} onChange={setAllowedChars} autoComplete="off" />
-                <TextField label="Disallowed characters" helpText="These characters will be rejected (leave blank to allow all)" value={disallowedChars} onChange={setDisallowedChars} autoComplete="off" />
+                <TextField label={<LabelWithInfo text="Allowed characters" info="Only these characters will be accepted. Leave blank to allow all characters." />} value={allowedChars} onChange={setAllowedChars} autoComplete="off" />
+                <TextField label={<LabelWithInfo text="Disallowed characters" info="These characters will be rejected. Leave blank to allow all characters." />} value={disallowedChars} onChange={setDisallowedChars} autoComplete="off" />
               </FormLayout.Group>
               <FormLayout.Group>
-                <Checkbox label="Allow spaces" helpText="Customers can type spaces in this field" checked={allowSpaces} onChange={setAllowSpaces} />
-                <Checkbox label="Count spaces toward price" helpText="When off, spaces are excluded from the billed character count" checked={countSpaces} onChange={setCountSpaces} />
+                <Checkbox label={<LabelWithInfo text="Block spaces" info="Check this box if you don't want to allow spaces in this text field." />} checked={!allowSpaces} onChange={(v) => setAllowSpaces(!v)} />
+                <Checkbox label={<LabelWithInfo text="Count spaces toward price" info="When off, spaces don't count toward the per-character price the shopper is charged." />} checked={countSpaces} onChange={setCountSpaces} />
               </FormLayout.Group>
               {/* Font chooser (SL-81, searchable SL-98) */}
               <Checkbox
