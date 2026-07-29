@@ -135,6 +135,7 @@ type FieldOptionData = {
   priceDelta: number;
   swatchColor?: string | null;
   imageUrl?: string | null;
+  previewImageUrl?: string | null;
 };
 
 type FieldData = {
@@ -220,10 +221,10 @@ function normalizeFieldType(value: string | null): string {
 
 // Parse the JSON options blob posted by the field form into clean rows.
 // Drops blank-label rows and coerces price to a number.
-function parseOptions(raw: string | null): { label: string; priceDelta: number; swatchColor?: string; imageUrl?: string }[] {
+function parseOptions(raw: string | null): { label: string; priceDelta: number; swatchColor?: string; imageUrl?: string; previewImageUrl?: string }[] {
   if (!raw) return [];
   try {
-    const arr = JSON.parse(raw) as Array<{ label?: unknown; priceDelta?: unknown; swatchColor?: unknown; imageUrl?: unknown }>;
+    const arr = JSON.parse(raw) as Array<{ label?: unknown; priceDelta?: unknown; swatchColor?: unknown; imageUrl?: unknown; previewImageUrl?: unknown }>;
     if (!Array.isArray(arr)) return [];
     return arr
       .map((o) => ({
@@ -231,6 +232,7 @@ function parseOptions(raw: string | null): { label: string; priceDelta: number; 
         priceDelta: Number(o.priceDelta) || 0,
         swatchColor: typeof o.swatchColor === "string" ? o.swatchColor : undefined,
         imageUrl: typeof o.imageUrl === "string" ? o.imageUrl : undefined,
+        previewImageUrl: typeof o.previewImageUrl === "string" ? o.previewImageUrl : undefined,
       }))
       .filter((o) => o.label !== "");
   } catch {
@@ -389,7 +391,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         fileAccept,
         position: count,
         options: {
-          create: options.map((o, i) => ({ label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, position: i })),
+          create: options.map((o, i) => ({ label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, previewImageUrl: o.previewImageUrl ?? null, position: i })),
         },
       },
     });
@@ -446,7 +448,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       await prisma.fieldOption.deleteMany({ where: { fieldId, field: { shop } } });
       if (options.length > 0) {
         await prisma.fieldOption.createMany({
-          data: options.map((o, i) => ({ fieldId, label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, position: i })),
+          data: options.map((o, i) => ({ fieldId, label: o.label, priceDelta: o.priceDelta, swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, previewImageUrl: o.previewImageUrl ?? null, position: i })),
         });
       }
     }
@@ -644,7 +646,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         await prisma.fieldOption.createMany({
           data: f.options.map((o, j) => ({
             fieldId: created.id, label: o.label, priceDelta: o.priceDelta,
-            swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, position: j,
+            swatchColor: o.swatchColor ?? null, imageUrl: o.imageUrl ?? null, previewImageUrl: o.previewImageUrl ?? null, position: j,
           })),
         });
       }
@@ -672,7 +674,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       fileAccept: f.fileAccept,
       options: f.options.map((o) => ({
         label: o.label, priceDelta: o.priceDelta,
-        swatchColor: o.swatchColor ?? undefined, imageUrl: o.imageUrl ?? undefined,
+        swatchColor: o.swatchColor ?? undefined, imageUrl: o.imageUrl ?? undefined, previewImageUrl: o.previewImageUrl ?? undefined,
       })),
     }));
     await prisma.template.create({ data: { shop, name, payload: JSON.stringify(payload) } });
@@ -901,8 +903,9 @@ function FieldForm({
     priceDelta: String(o.priceDelta),
     swatchColor: o.swatchColor ?? "#000000",
     imageUrl: o.imageUrl ?? "",
+    previewImageUrl: (o as any).previewImageUrl ?? "",
   }));
-  const [options, setOptions] = useState<{ label: string; priceDelta: string; swatchColor: string; imageUrl: string }[]>(initialOptions);
+  const [options, setOptions] = useState<{ label: string; priceDelta: string; swatchColor: string; imageUrl: string; previewImageUrl: string }[]>(initialOptions);
   const initialCheckboxPrice = field?.options?.[0] ? String(field.options[0].priceDelta) : "";
   const [checkboxPrice, setCheckboxPrice] = useState(initialCheckboxPrice);
 
@@ -915,9 +918,9 @@ function FieldForm({
   const isText = type === "text" || type === "textarea";
   const choice = isChoiceType(type);
   const optionsPayload = isCheckbox ? [{ label: "Yes", priceDelta: checkboxPrice }] : options;
-  const addOption = () => setOptions((prev) => [...prev, { label: "", priceDelta: "", swatchColor: "#000000", imageUrl: "" }]);
+  const addOption = () => setOptions((prev) => [...prev, { label: "", priceDelta: "", swatchColor: "#000000", imageUrl: "", previewImageUrl: "" }]);
   const removeOption = (i: number) => setOptions((prev) => prev.filter((_, idx) => idx !== i));
-  const updateOption = (i: number, key: "label" | "priceDelta" | "swatchColor" | "imageUrl", val: string) =>
+  const updateOption = (i: number, key: "label" | "priceDelta" | "swatchColor" | "imageUrl" | "previewImageUrl", val: string) =>
     setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)));
 
   // Font size options (SL-97) — stored as JSON string[] e.g. ["12px","16px","24px"]
@@ -1078,7 +1081,7 @@ function FieldForm({
                       <select
                         onChange={(e) => {
                           const os = assets.optionSets.find((s) => s.id === e.target.value);
-                          if (os) setOptions(os.entries.map((en) => ({ label: en.label, priceDelta: String(en.priceDelta), swatchColor: "#000000", imageUrl: "" })));
+                          if (os) setOptions(os.entries.map((en) => ({ label: en.label, priceDelta: String(en.priceDelta), swatchColor: "#000000", imageUrl: "", previewImageUrl: "" })));
                           e.target.value = "";
                         }}
                         style={{ fontSize: "0.8125rem" }}
@@ -1095,7 +1098,7 @@ function FieldForm({
                       <select
                         onChange={(e) => {
                           const cs = assets.colorSets.find((s) => s.id === e.target.value);
-                          if (cs) setOptions(cs.entries.map((en) => ({ label: en.label, priceDelta: "0", swatchColor: en.color, imageUrl: "" })));
+                          if (cs) setOptions(cs.entries.map((en) => ({ label: en.label, priceDelta: "0", swatchColor: en.color, imageUrl: "", previewImageUrl: "" })));
                           e.target.value = "";
                         }}
                         style={{ fontSize: "0.8125rem" }}
@@ -1112,7 +1115,7 @@ function FieldForm({
                       <select
                         onChange={(e) => {
                           const img = assets.images.find((im) => im.id === e.target.value);
-                          if (img) setOptions((prev) => [...prev, { label: img.name, priceDelta: "0", swatchColor: "#000000", imageUrl: img.url }]);
+                          if (img) setOptions((prev) => [...prev, { label: img.name, priceDelta: "0", swatchColor: "#000000", imageUrl: img.url, previewImageUrl: "" }]);
                           e.target.value = "";
                         }}
                         style={{ fontSize: "0.8125rem" }}
@@ -1125,7 +1128,8 @@ function FieldForm({
                   )}
                 </InlineStack>
                 {options.map((opt, i) => (
-                  <InlineStack key={i} gap="200" blockAlign="end" wrap={false}>
+                  <BlockStack key={i} gap="150">
+                  <InlineStack gap="200" blockAlign="end" wrap={false}>
                     {type === "swatches" && (
                       <input
                         type="color"
@@ -1169,6 +1173,14 @@ function FieldForm({
                     </div>
                     <Button onClick={() => removeOption(i)} accessibilityLabel="Remove option">Remove</Button>
                   </InlineStack>
+                  {/* SL-135: image shown in the live preview when this option is selected */}
+                  <Box paddingInlineStart="200">
+                    <BlockStack gap="050">
+                      <Text as="span" variant="bodySm" tone="subdued">Preview image when selected (optional)</Text>
+                      <ImageUploadField compact label="Preview" value={opt.previewImageUrl} onChange={(v) => updateOption(i, "previewImageUrl", v)} />
+                    </BlockStack>
+                  </Box>
+                  </BlockStack>
                 ))}
                 <div><Button onClick={addOption}>Add option</Button></div>
               </BlockStack>
@@ -2331,6 +2343,14 @@ function PreviewPlacementBoxEditor({
 
   if (textFields.length === 0) return null;
 
+  // SL-135: if a selected choice option carries a preview image, show it as the base
+  // image instead of the product photo (last selected option with one wins).
+  const selectedPreviewImage = fields.reduce<string | null>((acc, f) => {
+    const sel = (f.options ?? []).find((o) => o.label === (previewValues?.[f.id] ?? ""));
+    return sel?.previewImageUrl || acc;
+  }, null);
+  const baseImageUrl = selectedPreviewImage || productImageUrl;
+
   return (
     <BlockStack gap="200">
       <Text as="p" tone="subdued">
@@ -2343,9 +2363,9 @@ function PreviewPlacementBoxEditor({
         // tall images (e.g. snowboards) compact instead of dominating the panel (SL-110).
         style={{ position: "relative", display: "block", width: "fit-content", maxWidth: "100%", margin: "0 auto", userSelect: "none" }}
       >
-        {productImageUrl ? (
+        {baseImageUrl ? (
           <img
-            src={productImageUrl}
+            src={baseImageUrl}
             alt="Product"
             style={{ display: "block", width: "auto", height: "auto", maxWidth: "100%", maxHeight: "440px", borderRadius: "8px" }}
           />

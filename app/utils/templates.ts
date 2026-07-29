@@ -21,6 +21,7 @@ export type TemplateField = {
     priceDelta: number;
     swatchColor?: string;
     imageUrl?: string;
+    previewImageUrl?: string;
   }>;
 };
 
