@@ -256,6 +256,30 @@
     var inputMap = {};
     var fieldErrorEls = {};
 
+    // SL-136: swap the theme's product image when a chosen option carries a preview
+    // image (last selected option with one wins); restore the original otherwise.
+    // Safe no-op if the theme image can't be found.
+    var etchProductImgEl = findEtchProductImage();
+    var etchProductImgOriginalSrc = etchProductImgEl ? etchProductImgEl.getAttribute('src') : null;
+    function applyOptionPreviewImage() {
+      if (!etchProductImgEl) return;
+      var newSrc = null;
+      fields.forEach(function (f) {
+        if (!f.options) return;
+        f.options.forEach(function (o) {
+          if (o.label === inputMap[f.id] && o.previewImageUrl) newSrc = o.previewImageUrl;
+        });
+      });
+      etchProductImgEl.src = newSrc || etchProductImgOriginalSrc || '';
+    }
+
+    // Shared handler for choice fields: persist input, reprice, swap preview image.
+    function onChoiceChange() {
+      etchInputsEl.value = JSON.stringify(inputMap);
+      schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
+      applyOptionPreviewImage();
+    }
+
     fields.forEach(function (field) {
       var uid = 'etch-' + blockId + '-' + field.id;
       var errorId = uid + '-error';
@@ -279,10 +303,7 @@
       // ── Choice field: <select> dropdown ──────────────────────────────────
       if (field.type === 'dropdown') {
         renderDropdown(field, uid, errorId, wrapper, label, fieldError, formTarget,
-          validityMap, inputMap, updateBtn, function () {
-            etchInputsEl.value = JSON.stringify(inputMap);
-            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
-          });
+          validityMap, inputMap, updateBtn, onChoiceChange);
         fieldsEl.appendChild(wrapper);
         inputMap[field.id] = '';
         return; // done with this field (forEach callback)
@@ -305,10 +326,7 @@
       // ── Image swatches (SL-77) ───────────────────────────────────────────
       if (field.type === 'image-swatches') {
         renderImageSwatches(field, uid, errorId, wrapper, label, fieldError, formTarget,
-          validityMap, inputMap, updateBtn, function () {
-            etchInputsEl.value = JSON.stringify(inputMap);
-            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
-          });
+          validityMap, inputMap, updateBtn, onChoiceChange);
         fieldsEl.appendChild(wrapper);
         inputMap[field.id] = '';
         return;
@@ -329,10 +347,7 @@
       // ── Choice field: color swatches (single-select) ────────────────────
       if (field.type === 'swatches') {
         renderSwatches(field, uid, errorId, wrapper, label, fieldError, formTarget,
-          validityMap, inputMap, updateBtn, function () {
-            etchInputsEl.value = JSON.stringify(inputMap);
-            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
-          });
+          validityMap, inputMap, updateBtn, onChoiceChange);
         fieldsEl.appendChild(wrapper);
         inputMap[field.id] = '';
         return;
@@ -341,10 +356,7 @@
       // ── Choice field: button group (single-select) ───────────────────────
       if (field.type === 'buttons') {
         renderButtons(field, uid, errorId, wrapper, label, fieldError, formTarget,
-          validityMap, inputMap, updateBtn, function () {
-            etchInputsEl.value = JSON.stringify(inputMap);
-            schedulePreview(shop, productId, appUrl, inputMap, fields, priceEl, errorEl, fieldErrorEls, breakdownEl, onPriceUpdate, correlationId, renderPriceEl);
-          });
+          validityMap, inputMap, updateBtn, onChoiceChange);
         fieldsEl.appendChild(wrapper);
         inputMap[field.id] = '';
         return;
@@ -1404,6 +1416,23 @@
 
   function formatDollar(amount) {
     return '$' + Number(amount).toFixed(2);
+  }
+
+  // Finds the theme's main product image element across common themes (SL-136).
+  function findEtchProductImage() {
+    var SELECTORS = [
+      '.product__media--featured img',
+      '.product__media img',
+      '.product-single__photo img',
+      '.product-featured-media img',
+      '[data-product-featured-image]',
+      '.product-image img',
+    ];
+    for (var i = 0; i < SELECTORS.length; i++) {
+      var el = document.querySelector(SELECTORS[i]);
+      if (el) return el;
+    }
+    return null;
   }
 
   // Overlays the shopper's typed text on the product image in real time.
