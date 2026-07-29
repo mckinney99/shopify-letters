@@ -44,10 +44,18 @@ const PRODUCT_QUERY = `
       featuredImage {
         url
       }
+      media(first: 10) {
+        nodes {
+          ... on MediaImage {
+            image { url }
+          }
+        }
+      }
       variants(first: 50) {
         edges {
           node {
             price
+            image { url }
           }
         }
       }
@@ -295,10 +303,17 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   // "You have unpublished changes" state and the Publish changes button.
   const liveVersion = computeConfigVersion(buildPricingConfig(fields, pricingRules, conditions));
 
+  // SL-134: always show a picture if the product has one anywhere — featured image,
+  // else any media image, else a variant image.
+  const p = data.product as any;
+  const firstMediaImage = (p.media?.nodes ?? []).map((n: any) => n?.image?.url).find(Boolean);
+  const firstVariantImage = (p.variants?.edges ?? []).map((e: any) => e.node?.image?.url).find(Boolean);
+  const productImageUrl: string | null = p.featuredImage?.url ?? firstMediaImage ?? firstVariantImage ?? null;
+
   return json({
     product: data.product as { id: string; title: string; handle: string },
     shop: session.shop,
-    productImageUrl: (data.product as any).featuredImage?.url ?? null,
+    productImageUrl,
     published: config?.published ?? false,
     previewEnabled: config?.previewEnabled ?? false,
     liveVersion,
