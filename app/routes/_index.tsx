@@ -57,11 +57,11 @@ const schema = {
     "Etch adds per-character and per-letter pricing to Shopify products. Merchants set a flat fee and a price per character typed, and Etch automatically calculates and adds the right amount to the cart at checkout. No code required.",
   offers: {
     "@type": "Offer",
-    price: "9.99",
+    price: "5.00",
     priceCurrency: "USD",
     priceSpecification: {
       "@type": "UnitPriceSpecification",
-      price: "9.99",
+      price: "5.00",
       priceCurrency: "USD",
       billingDuration: "P1M",
     },
@@ -169,7 +169,7 @@ export default function LandingPage() {
             <a href={APP_STORE_URL} className="btn btn-lg" rel="noopener noreferrer" target="_blank">
               Start free 14-day trial →
             </a>
-            <p className="hero-small">$9.99/month after trial · Cancel anytime</p>
+            <p className="hero-small">$5/month after trial · Cancel anytime</p>
           </div>
         </div>
       </section>
@@ -229,7 +229,7 @@ export default function LandingPage() {
           <div className="price-card">
             <div className="price-top">
               <p className="price-name">Monthly</p>
-              <p className="price-amount"><span className="price-dollar">$</span>9.99<span className="price-period">/month</span></p>
+              <p className="price-amount"><span className="price-dollar">$</span>5<span className="price-period">/month</span></p>
               <p className="price-trial">14-day free trial included</p>
             </div>
             <ul className="price-includes">
