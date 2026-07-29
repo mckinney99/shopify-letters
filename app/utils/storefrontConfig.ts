@@ -4,7 +4,7 @@
 //   - the "Publish changes" action (snapshot the draft into ProductConfig.publishedConfig)
 // Pure — callers do the Prisma queries and pass the rows in.
 
-type DbOption = { label: string; priceDelta: number; swatchColor: string | null; imageUrl: string | null };
+type DbOption = { label: string; priceDelta: number; swatchColor: string | null; imageUrl: string | null; previewImageUrl?: string | null };
 
 export type StorefrontFieldRow = {
   id: string;

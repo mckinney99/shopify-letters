@@ -104,6 +104,9 @@ model FieldOption {
   priceDelta  Float    @default(0)
   swatchColor String?
   imageUrl    String?
+  // SL-135: big product photo shown in the preview when this option is selected
+  // (distinct from imageUrl, which is the swatch thumbnail).
+  previewImageUrl String?
   position    Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
