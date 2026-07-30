@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { useLoaderData, useFetcher, useRouteError, useNavigate, useBlocker } from "@remix-run/react";
 import {
   Page,
@@ -283,7 +283,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     }),
     prisma.productConfig.findUnique({
       where: { shop_productId: { shop: session.shop, productId: productGid } },
-      select: { published: true, previewEnabled: true, publishedVersion: true },
+      select: { published: true, previewEnabled: true, publishedVersion: true, publishedConfig: true },
     }),
     prisma.fontAsset.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, select: { id: true, name: true, url: true } }),
     prisma.colorSet.findMany({ where: { shop: session.shop }, orderBy: { name: "asc" }, include: { entries: { orderBy: { position: "asc" } } } }),
@@ -301,9 +301,20 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     data.product.variants?.edges ?? []
   ).map((e: { node: { price: string } }) => parseFloat(e.node.price));
 
-  // SL-123: version of the current draft vs the last-published snapshot — drives the
-  // "You have unpublished changes" state and the Publish changes button.
+  // Pricing-only version (audit trail attached to order line items) — deliberately
+  // excludes display-only option fields (previewImageUrl/imageUrl/swatchColor) so
+  // cosmetic edits don't churn the "why was this priced this way" identifier.
   const liveVersion = computeConfigVersion(buildPricingConfig(fields, pricingRules, conditions));
+
+  // "You have unpublished changes" state and the Publish changes button must catch
+  // ANY draft change the snapshot would ship (including cosmetic option fields that
+  // liveVersion above ignores) — hash the exact raw shape publishConfig() snapshots.
+  const liveContentHash = createHash("sha256")
+    .update(JSON.stringify({ fields, pricingRules, conditions }))
+    .digest("hex");
+  const publishedContentHash = config?.publishedConfig
+    ? createHash("sha256").update(JSON.stringify(config.publishedConfig)).digest("hex")
+    : null;
 
   // SL-134: always show a picture if the product has one anywhere — featured image,
   // else any media image, else a variant image.
@@ -320,6 +331,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     previewEnabled: config?.previewEnabled ?? false,
     liveVersion,
     publishedVersion: config?.publishedVersion ?? null,
+    liveContentHash,
+    publishedContentHash,
     fields,
     pricingRules,
     conditions,
@@ -2545,7 +2558,7 @@ function PreviewPlacementBoxEditor({
 }
 
 export default function ProductDetailPage() {
-  const { product, shop, productImageUrl, published, previewEnabled, liveVersion, publishedVersion, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
+  const { product, shop, productImageUrl, published, previewEnabled, liveContentHash, publishedContentHash, fields, pricingRules, conditions, variantPrices, assets, merchantTemplates, themeEditorDeepLink } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -2636,9 +2649,9 @@ export default function ProductDetailPage() {
   const isPublishingChanges = changesFetcher.state !== "idle";
   const hasUnpublishedChanges =
     !isPublishingChanges && !isPublishing &&
-    liveVersion !== publishedVersion &&
+    liveContentHash !== publishedContentHash &&
     // Nothing to publish on a brand-new product that has never been published.
-    !(publishedVersion === null && fields.length === 0);
+    !(publishedContentHash === null && fields.length === 0);
   const publishChanges = () =>
     changesFetcher.submit({ _action: "publish_changes" }, { method: "post" });
 
