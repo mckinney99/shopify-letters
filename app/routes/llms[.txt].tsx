@@ -16,7 +16,7 @@ Etch is a Shopify app that adds per-character and per-letter pricing to any Shop
 
 ## Pricing
 
-$5/month with a 14-day free trial. Available on the Shopify App Store.
+$9.99/month with a 14-day free trial. Available on the Shopify App Store.
 
 ## Ideal use cases
 
