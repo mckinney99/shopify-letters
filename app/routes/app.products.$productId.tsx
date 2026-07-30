@@ -2341,8 +2341,6 @@ function PreviewPlacementBoxEditor({
     };
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (textFields.length === 0) return null;
-
   // SL-135: if a selected choice option carries a preview image, show it as the base
   // image instead of the product photo (last selected option with one wins).
   const selectedPreviewImage = fields.reduce<string | null>((acc, f) => {

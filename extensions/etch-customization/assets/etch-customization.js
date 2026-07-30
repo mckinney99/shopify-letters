@@ -261,6 +261,12 @@
     // Safe no-op if the theme image can't be found.
     var etchProductImgEl = findEtchProductImage();
     var etchProductImgOriginalSrc = etchProductImgEl ? etchProductImgEl.getAttribute('src') : null;
+    // Many themes (e.g. Dawn) render the product image with srcset/sizes for
+    // responsive loading. Browsers pick the rendered source from srcset when
+    // present, so setting .src alone is silently ignored — srcset/sizes must
+    // be cleared (and restored) alongside it.
+    var etchProductImgOriginalSrcset = etchProductImgEl ? etchProductImgEl.getAttribute('srcset') : null;
+    var etchProductImgOriginalSizes = etchProductImgEl ? etchProductImgEl.getAttribute('sizes') : null;
     function applyOptionPreviewImage() {
       if (!etchProductImgEl) return;
       var newSrc = null;
@@ -270,7 +276,15 @@
           if (o.label === inputMap[f.id] && o.previewImageUrl) newSrc = o.previewImageUrl;
         });
       });
-      etchProductImgEl.src = newSrc || etchProductImgOriginalSrc || '';
+      if (newSrc) {
+        etchProductImgEl.removeAttribute('srcset');
+        etchProductImgEl.removeAttribute('sizes');
+        etchProductImgEl.src = newSrc;
+      } else {
+        if (etchProductImgOriginalSrcset) etchProductImgEl.setAttribute('srcset', etchProductImgOriginalSrcset);
+        if (etchProductImgOriginalSizes) etchProductImgEl.setAttribute('sizes', etchProductImgOriginalSizes);
+        etchProductImgEl.src = etchProductImgOriginalSrc || '';
+      }
     }
 
     // Shared handler for choice fields: persist input, reprice, swap preview image.
