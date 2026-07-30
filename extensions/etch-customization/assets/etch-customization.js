@@ -1433,6 +1433,10 @@
   }
 
   // Finds the theme's main product image element across common themes (SL-136).
+  // Products with more than one image render one <img> per gallery slide, so a
+  // plain querySelector (first DOM match) can grab a hidden/inactive slide instead
+  // of the one actually shown — prefer an element marked active, else the first
+  // one that's actually visible.
   function findEtchProductImage() {
     var SELECTORS = [
       '.product__media--featured img',
@@ -1443,8 +1447,19 @@
       '.product-image img',
     ];
     for (var i = 0; i < SELECTORS.length; i++) {
-      var el = document.querySelector(SELECTORS[i]);
-      if (el) return el;
+      var els = document.querySelectorAll(SELECTORS[i]);
+      if (!els.length) continue;
+      var active = null;
+      var visible = null;
+      for (var j = 0; j < els.length; j++) {
+        var el = els[j];
+        if (!active && el.closest('.is-active, [aria-hidden="false"]')) active = el;
+        if (!visible) {
+          var rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) visible = el;
+        }
+      }
+      return active || visible || els[0];
     }
     return null;
   }
