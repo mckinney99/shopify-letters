@@ -2154,14 +2154,16 @@ function LivePreviewPanel({
           Add to cart (preview only)
         </div>
 
-        <div style={{ borderTop: "1px solid #f1f2f4", paddingTop: "10px" }}>
-          <Checkbox
-            label="Show text overlay on storefront"
-            helpText="Customers see the overlay live as they type"
-            checked={previewEnabled}
-            onChange={onTogglePreview}
-          />
-        </div>
+        {textFields.length > 0 && (
+          <div style={{ borderTop: "1px solid #f1f2f4", paddingTop: "10px" }}>
+            <Checkbox
+              label="Show text overlay on storefront"
+              helpText="Customers see the overlay live as they type"
+              checked={previewEnabled}
+              onChange={onTogglePreview}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
