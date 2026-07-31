@@ -825,15 +825,26 @@ function ImageUploadField({
           />
         )}
       </DropZone>
-      <TextField
-        label={`${label} URL`}
-        labelHidden={compact}
-        value={value}
-        onChange={onChange}
-        autoComplete="off"
-        placeholder="https://… (or upload above)"
-        helpText={compact ? undefined : (helpText ?? "Upload a file, or paste an image URL.")}
-      />
+      <InlineStack gap="200" blockAlign="end" wrap={false}>
+        <Box width="100%">
+          <TextField
+            label={`${label} URL`}
+            labelHidden={compact}
+            value={value}
+            onChange={onChange}
+            autoComplete="off"
+            placeholder="https://… (or upload above)"
+            helpText={compact ? undefined : (helpText ?? "Upload a file, or paste an image URL.")}
+          />
+        </Box>
+        {/* SL-139: clearing used to mean clicking into the URL field and backspacing
+            the whole value out — a one-click way to remove it instead. */}
+        {value && (
+          <Button variant="plain" tone="critical" size="micro" onClick={() => onChange("")}>
+            Remove image
+          </Button>
+        )}
+      </InlineStack>
       {value && !compact && (
         <img src={value} alt="preview" style={{ maxWidth: "8rem", maxHeight: "8rem", objectFit: "cover", borderRadius: "6px", border: "1px solid #ddd" }} />
       )}
