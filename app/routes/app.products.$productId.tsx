@@ -1192,11 +1192,22 @@ function FieldForm({
                   </InlineStack>
                   {/* SL-135: image shown in the live preview when this option is selected.
                       SL-137: collapsed to a small button by default — most merchants don't
-                      set one per option, so a full dropzone on every row wastes space. */}
+                      set one per option, so a full dropzone on every row wastes space. An
+                      explicit expandedPreviewImage[i] (true/false) overrides the previewImageUrl
+                      default so an already-set image can still be collapsed away. */}
                   <Box paddingInlineStart="200">
-                    {opt.previewImageUrl || expandedPreviewImage[i] ? (
+                    {expandedPreviewImage[i] ?? !!opt.previewImageUrl ? (
                       <BlockStack gap="050">
-                        <Text as="span" variant="bodySm" tone="subdued">Preview image when selected (optional)</Text>
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">Preview image when selected (optional)</Text>
+                          <Button
+                            variant="plain"
+                            size="micro"
+                            onClick={() => setExpandedPreviewImage((prev) => ({ ...prev, [i]: false }))}
+                          >
+                            - Hide preview
+                          </Button>
+                        </InlineStack>
                         <ImageUploadField compact label="Preview" value={opt.previewImageUrl} onChange={(v) => updateOption(i, "previewImageUrl", v)} />
                       </BlockStack>
                     ) : (
