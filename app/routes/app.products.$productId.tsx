@@ -936,6 +936,10 @@ function FieldForm({
   const updateOption = (i: number, key: "label" | "priceDelta" | "swatchColor" | "imageUrl" | "previewImageUrl", val: string) =>
     setOptions((prev) => prev.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)));
 
+  // SL-137: most merchants never set a per-option preview image — start each
+  // option's uploader collapsed to a small button unless it already has one set.
+  const [expandedPreviewImage, setExpandedPreviewImage] = useState<Record<number, boolean>>({});
+
   // Font size options (SL-97) — stored as JSON string[] e.g. ["12px","16px","24px"]
   const initialSizes: string[] = field?.fontSizeOptions ? (JSON.parse(field.fontSizeOptions) as string[]) : [];
   const [enableSizes, setEnableSizes] = useState(initialSizes.length > 0);
@@ -1186,12 +1190,24 @@ function FieldForm({
                     </div>
                     <Button onClick={() => removeOption(i)} accessibilityLabel="Remove option">Remove</Button>
                   </InlineStack>
-                  {/* SL-135: image shown in the live preview when this option is selected */}
+                  {/* SL-135: image shown in the live preview when this option is selected.
+                      SL-137: collapsed to a small button by default — most merchants don't
+                      set one per option, so a full dropzone on every row wastes space. */}
                   <Box paddingInlineStart="200">
-                    <BlockStack gap="050">
-                      <Text as="span" variant="bodySm" tone="subdued">Preview image when selected (optional)</Text>
-                      <ImageUploadField compact label="Preview" value={opt.previewImageUrl} onChange={(v) => updateOption(i, "previewImageUrl", v)} />
-                    </BlockStack>
+                    {opt.previewImageUrl || expandedPreviewImage[i] ? (
+                      <BlockStack gap="050">
+                        <Text as="span" variant="bodySm" tone="subdued">Preview image when selected (optional)</Text>
+                        <ImageUploadField compact label="Preview" value={opt.previewImageUrl} onChange={(v) => updateOption(i, "previewImageUrl", v)} />
+                      </BlockStack>
+                    ) : (
+                      <Button
+                        variant="plain"
+                        size="micro"
+                        onClick={() => setExpandedPreviewImage((prev) => ({ ...prev, [i]: true }))}
+                      >
+                        + Add preview image
+                      </Button>
+                    )}
                   </Box>
                   </BlockStack>
                 ))}
