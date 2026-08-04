@@ -62,17 +62,34 @@ async function checkWidgetActivated(shop: string, accessToken: string): Promise<
 }
 
 async function fetchTotalProductCount(
-  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"]
+  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"],
+  shop: string
 ): Promise<number> {
-  const response = await admin.graphql(`#graphql
-    query ProductsCount {
-      productsCount {
-        count
+  try {
+    const response = await admin.graphql(`#graphql
+      query ProductsCount {
+        productsCount {
+          count
+        }
       }
+    `);
+    const { data, errors } = (await response.json()) as {
+      data?: { productsCount?: { count?: number } };
+      errors?: unknown;
+    };
+    if (errors) {
+      logEvent("products_count_fetch_failed", { shop: shortHash(shop), stage: "graphql_errors", errors });
+      return 0;
     }
-  `);
-  const { data } = (await response.json()) as { data?: { productsCount?: { count?: number } } };
-  return data?.productsCount?.count ?? 0;
+    return data?.productsCount?.count ?? 0;
+  } catch (err) {
+    logEvent("products_count_fetch_failed", {
+      shop: shortHash(shop),
+      stage: "exception",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return 0;
+  }
 }
 
 async function fetchDraftCount(shop: string): Promise<number> {
@@ -95,7 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
   const [totalProductCount, publishedCount, draftCount, widgetActivated] = await Promise.all([
-    fetchTotalProductCount(admin),
+    fetchTotalProductCount(admin, session.shop),
     prisma.productConfig.count({ where: { shop: session.shop, published: true } }),
     fetchDraftCount(session.shop),
     checkWidgetActivated(session.shop, session.accessToken ?? ""),
