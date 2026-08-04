@@ -563,17 +563,14 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
 function TemplatesTab({ templates }: { templates: TemplateRow[] }) {
   return (
     <BlockStack gap="400">
+      <BlockStack gap="100">
+        <Text variant="headingMd" as="h3">Saved templates ({templates.length})</Text>
+        <Text as="p" tone="subdued" variant="bodySm">
+          Templates are saved from the product Fields tab ("Save as template"). Apply them from any product's empty-field state.
+        </Text>
+      </BlockStack>
       <Card>
-        <Box padding="400" background="bg-surface-secondary">
-          <BlockStack gap="200">
-            <Text variant="headingMd" as="h3">Saved templates ({templates.length})</Text>
-            <Text as="p" tone="subdued" variant="bodySm">
-              Templates are saved from the product Fields tab ("Save as template"). Apply them from any product's empty-field state.
-            </Text>
-          </BlockStack>
-        </Box>
-        <Divider />
-        <Box paddingInline="400">
+        <Box paddingInline="400" paddingBlockStart="400">
           {templates.length === 0 ? (
             <Box paddingBlock="400">
               <Text as="p" tone="subdued">No saved templates yet. Go to a product's Fields tab and click "Save as template".</Text>
