@@ -267,7 +267,7 @@ export default function Index() {
                   </BlockStack>
                   <BlockStack gap="100">
                     <Text as="p" variant="headingXl" fontWeight="bold">{publishedCount}</Text>
-                    <Text as="p" tone="subdued">Customized Etch products</Text>
+                    <Text as="p" tone="subdued">Customized Etch products (live)</Text>
                   </BlockStack>
                   <BlockStack gap="100">
                     <Text as="p" variant="headingXl" fontWeight="bold">{draftCount}</Text>
