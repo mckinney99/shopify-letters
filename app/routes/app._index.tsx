@@ -16,7 +16,7 @@ import {
   Badge,
 } from "@shopify/polaris";
 import { CheckCircleIcon, MinusCircleIcon } from "@shopify/polaris-icons";
-import { authenticate } from "../shopify.server";
+import { authenticate, apiVersion } from "../shopify.server";
 import { buildAppEmbedDeepLink, isEtchEmbedEnabled } from "../utils/themeEditor";
 import { logEvent, shortHash } from "../utils/log";
 import prisma from "../db.server";
@@ -32,7 +32,7 @@ async function checkWidgetActivated(shop: string, accessToken: string): Promise<
     return false;
   };
   try {
-    const themesRes = await fetch(`https://${shop}/admin/api/2024-01/themes.json`, {
+    const themesRes = await fetch(`https://${shop}/admin/api/${apiVersion}/themes.json`, {
       headers: { "X-Shopify-Access-Token": accessToken },
     });
     if (!themesRes.ok) return fail("themes_fetch", { status: themesRes.status });
@@ -41,7 +41,7 @@ async function checkWidgetActivated(shop: string, accessToken: string): Promise<
     if (!mainTheme) return fail("no_main_theme");
 
     const assetRes = await fetch(
-      `https://${shop}/admin/api/2024-01/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
+      `https://${shop}/admin/api/${apiVersion}/themes/${mainTheme.id}/assets.json?asset[key]=config/settings_data.json`,
       { headers: { "X-Shopify-Access-Token": accessToken } }
     );
     if (!assetRes.ok) return fail("asset_fetch", { status: assetRes.status });
