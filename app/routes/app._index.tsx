@@ -61,12 +61,60 @@ async function checkWidgetActivated(shop: string, accessToken: string): Promise<
   }
 }
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+async function fetchTotalProductCount(
+  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"],
+  shop: string
+): Promise<number> {
+  try {
+    const response = await admin.graphql(`#graphql
+      query ProductsCount {
+        productsCount {
+          count
+        }
+      }
+    `);
+    const { data, errors } = (await response.json()) as {
+      data?: { productsCount?: { count?: number } };
+      errors?: unknown;
+    };
+    if (errors) {
+      logEvent("products_count_fetch_failed", { shop: shortHash(shop), stage: "graphql_errors", errors });
+      return 0;
+    }
+    return data?.productsCount?.count ?? 0;
+  } catch (err) {
+    logEvent("products_count_fetch_failed", {
+      shop: shortHash(shop),
+      stage: "exception",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return 0;
+  }
+}
 
-  const [enabledCount, publishedCount, widgetActivated] = await Promise.all([
-    prisma.productConfig.count({ where: { shop: session.shop, enabled: true } }),
+async function fetchDraftCount(shop: string): Promise<number> {
+  const [configuredFields, publishedConfigs] = await Promise.all([
+    prisma.customizationField.findMany({
+      where: { shop },
+      distinct: ["productId"],
+      select: { productId: true },
+    }),
+    prisma.productConfig.findMany({
+      where: { shop, published: true },
+      select: { productId: true },
+    }),
+  ]);
+  const publishedProductIds = new Set(publishedConfigs.map((c) => c.productId));
+  return configuredFields.filter((f) => !publishedProductIds.has(f.productId)).length;
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { admin, session } = await authenticate.admin(request);
+
+  const [totalProductCount, publishedCount, draftCount, widgetActivated] = await Promise.all([
+    fetchTotalProductCount(admin, session.shop),
     prisma.productConfig.count({ where: { shop: session.shop, published: true } }),
+    fetchDraftCount(session.shop),
     checkWidgetActivated(session.shop, session.accessToken ?? ""),
   ]);
 
@@ -76,7 +124,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       extensionUuid: process.env.SHOPIFY_THEME_APP_EXTENSION_UUID,
     }) ?? `https://${session.shop}/admin/themes/current/editor?context=apps`;
 
-  return json({ enabledCount, publishedCount, widgetActivated, activateUrl, shop: session.shop });
+  return json({
+    totalProductCount,
+    publishedCount,
+    draftCount,
+    widgetActivated,
+    activateUrl,
+    shop: session.shop,
+  });
 };
 
 type StepRowProps = {
@@ -122,7 +177,7 @@ function StepRow({ done, title, description, actionLabel, actionUrl, external }:
 const DISMISSED_KEY = "etch_setup_guide_dismissed";
 
 export default function Index() {
-  const { enabledCount, publishedCount, widgetActivated, activateUrl, shop } =
+  const { totalProductCount, publishedCount, draftCount, widgetActivated, activateUrl, shop } =
     useLoaderData<typeof loader>();
 
   const [dismissed, setDismissed] = useState(false);
@@ -141,7 +196,7 @@ export default function Index() {
       external: true,
     },
     {
-      done: enabledCount > 0 || publishedCount > 0,
+      done: draftCount > 0 || publishedCount > 0,
       title: "Add customization to a product",
       description: "Pick a product and add a text field, dropdown, or other input.",
       actionLabel: "Go to Products",
@@ -202,38 +257,34 @@ export default function Index() {
               </Card>
             )}
 
-            {publishedCount > 0 && (
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Your products</Text>
-                  <InlineStack gap="800">
-                    <BlockStack gap="100">
-                      <Text as="p" variant="headingXl" fontWeight="bold">{publishedCount}</Text>
-                      <Text as="p" tone="subdued">Published</Text>
-                    </BlockStack>
-                    <BlockStack gap="100">
-                      <Text as="p" variant="headingXl" fontWeight="bold">{enabledCount}</Text>
-                      <Text as="p" tone="subdued">Configured</Text>
-                    </BlockStack>
-                  </InlineStack>
-                  <Box>
-                    <Button url="/app/products" variant="primary">Manage products</Button>
-                  </Box>
-                </BlockStack>
-              </Card>
-            )}
-
-            {publishedCount === 0 && !showGuide && (
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Get started</Text>
-                  <Text as="p">Add customization fields to your products to start charging input-based pricing.</Text>
-                  <Box>
-                    <Button url="/app/products" variant="primary">Go to Products</Button>
-                  </Box>
-                </BlockStack>
-              </Card>
-            )}
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">Your products</Text>
+                <InlineStack gap="800" wrap>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="headingXl" fontWeight="bold">{totalProductCount}</Text>
+                    <Text as="p" tone="subdued">Total products</Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="headingXl" fontWeight="bold">{publishedCount}</Text>
+                    <Text as="p" tone="subdued">Customized Etch products</Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="headingXl" fontWeight="bold">{draftCount}</Text>
+                    <Text as="p" tone="subdued">Draft Etch products</Text>
+                  </BlockStack>
+                </InlineStack>
+                <Box>
+                  <Button url="/app/products" variant="primary">Manage products</Button>
+                </Box>
+                <Divider />
+                <InlineStack gap="300" wrap>
+                  <Button url="/app/orders" variant="tertiary">Orders</Button>
+                  <Button url="/app/assets" variant="tertiary">Assets</Button>
+                  <Button url="/app/support" variant="tertiary">Support</Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
           </BlockStack>
         </Layout.Section>
       </Layout>
