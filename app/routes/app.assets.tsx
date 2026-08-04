@@ -228,8 +228,8 @@ function FontsTab({ fonts }: { fonts: FontRow[] }) {
       </Card>
 
       <Card>
-        <Box padding="400">
-          <Text variant="headingSm" as="h3">Saved fonts ({fonts.length})</Text>
+        <Box padding="400" background="bg-surface-secondary">
+          <Text variant="headingMd" as="h3">Saved fonts ({fonts.length})</Text>
         </Box>
         <Divider />
         <Box paddingInline="400">
@@ -332,8 +332,8 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
       </Card>
 
       <Card>
-        <Box padding="400">
-          <Text variant="headingSm" as="h3">Saved images ({images.length})</Text>
+        <Box padding="400" background="bg-surface-secondary">
+          <Text variant="headingMd" as="h3">Saved images ({images.length})</Text>
         </Box>
         <Divider />
         <Box paddingInline="400">
@@ -430,8 +430,8 @@ function ColorsTab({ colorSets }: { colorSets: ColorSetRow[] }) {
       )}
 
       <Card>
-        <Box padding="400">
-          <Text variant="headingSm" as="h3">Saved color sets ({colorSets.length})</Text>
+        <Box padding="400" background="bg-surface-secondary">
+          <Text variant="headingMd" as="h3">Saved color sets ({colorSets.length})</Text>
         </Box>
         <Divider />
         <Box paddingInline="400">
@@ -529,8 +529,8 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
       )}
 
       <Card>
-        <Box padding="400">
-          <Text variant="headingSm" as="h3">Saved option sets ({optionSets.length})</Text>
+        <Box padding="400" background="bg-surface-secondary">
+          <Text variant="headingMd" as="h3">Saved option sets ({optionSets.length})</Text>
         </Box>
         <Divider />
         <Box paddingInline="400">
@@ -564,9 +564,9 @@ function TemplatesTab({ templates }: { templates: TemplateRow[] }) {
   return (
     <BlockStack gap="400">
       <Card>
-        <Box padding="400">
+        <Box padding="400" background="bg-surface-secondary">
           <BlockStack gap="200">
-            <Text variant="headingSm" as="h3">Saved templates ({templates.length})</Text>
+            <Text variant="headingMd" as="h3">Saved templates ({templates.length})</Text>
             <Text as="p" tone="subdued" variant="bodySm">
               Templates are saved from the product Fields tab ("Save as template"). Apply them from any product's empty-field state.
             </Text>
