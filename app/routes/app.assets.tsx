@@ -33,17 +33,40 @@ type OptionEntry = { label: string; priceDelta: string };
 type OptionSetRow = { id: string; name: string; entries: (OptionEntry & { id: string; position: number })[] };
 type TemplateRow = { id: string; name: string; payload: string };
 
-// Parses the JSON field list posted from the Templates tab editor. Drops any
-// field missing a label — mirrors the client-side "at least a label" guard.
+// Parses the JSON field list posted from the Templates tab editor, trimming
+// field/option labels. Validation (rejecting rather than silently dropping
+// bad fields) happens separately in validateTemplateFields.
 function parseTemplateFields(raw: string | null): TemplateField[] {
   if (!raw) return [];
   try {
     const arr = JSON.parse(raw) as TemplateField[];
     if (!Array.isArray(arr)) return [];
-    return arr.filter((f) => typeof f?.label === "string" && f.label.trim());
+    return arr.map((f) => ({
+      ...f,
+      label: typeof f?.label === "string" ? f.label.trim() : "",
+      options: Array.isArray(f?.options)
+        ? f.options
+            .map((o) => ({ ...o, label: typeof o?.label === "string" ? o.label.trim() : "" }))
+            .filter((o) => o.label)
+        : [],
+    }));
   } catch {
     return [];
   }
+}
+
+// Choice-type fields (dropdown/buttons/swatches/image-swatches) with zero
+// options render an unselectable field on the storefront — if required, the
+// product becomes unbuyable. Reject rather than silently save a broken field.
+function validateTemplateFields(fields: TemplateField[]): string | null {
+  if (fields.length === 0) return "Add at least one field.";
+  for (const f of fields) {
+    if (!f.label) return "Every field needs a label.";
+    if (isChoiceType(f.type) && f.type !== "checkbox" && f.options.length === 0) {
+      return `"${f.label}" needs at least one option.`;
+    }
+  }
+  return null;
 }
 
 // ── Loader ────────────────────────────────────────────────────────────────────
@@ -244,7 +267,8 @@ export async function action({ request }: ActionFunctionArgs) {
     const fieldsRaw = form.get("fields") as string;
     if (!name) return json({ error: "Name is required." }, { status: 422 });
     const fields = parseTemplateFields(fieldsRaw);
-    if (fields.length === 0) return json({ error: "Add at least one field." }, { status: 422 });
+    const fieldsError = validateTemplateFields(fields);
+    if (fieldsError) return json({ error: fieldsError }, { status: 422 });
     await prisma.template.create({ data: { shop, name, payload: JSON.stringify(fields) } });
     return json({ ok: true });
   }
@@ -256,7 +280,8 @@ export async function action({ request }: ActionFunctionArgs) {
     if (!name) return json({ error: "Name is required." }, { status: 422 });
     if (fieldsRaw !== null) {
       const fields = parseTemplateFields(fieldsRaw);
-      if (fields.length === 0) return json({ error: "Add at least one field." }, { status: 422 });
+      const fieldsError = validateTemplateFields(fields);
+      if (fieldsError) return json({ error: fieldsError }, { status: 422 });
       await prisma.template.updateMany({ where: { id, shop }, data: { name, payload: JSON.stringify(fields) } });
     } else {
       await prisma.template.updateMany({ where: { id, shop }, data: { name } });
@@ -955,7 +980,14 @@ function TemplatesTab({ templates }: { templates: TemplateRow[] }) {
   }, [fetcher, formMode, isEditing, name, fields]);
 
   const error = fetcher.data?.error;
-  const canSave = name.trim() && fields.some((f) => f.label.trim());
+  const canSave =
+    name.trim() &&
+    fields.length > 0 &&
+    fields.every(
+      (f) =>
+        f.label.trim() &&
+        (!isChoiceType(f.type) || f.type === "checkbox" || f.options.some((o) => o.label.trim()))
+    );
 
   return (
     <BlockStack gap="400">
