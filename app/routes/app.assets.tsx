@@ -193,22 +193,46 @@ function AssetRow({ children }: { children: React.ReactNode }) {
 
 // ── Fonts tab ─────────────────────────────────────────────────────────────────
 
-function FontsTab({ fonts }: { fonts: FontRow[] }) {
+function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
   const fetcher = useFetcher<{ error?: string }>();
+  const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const busy = fetcher.state !== "idle";
+  const uploading = uploadFetcher.state !== "idle";
+
+  useEffect(() => {
+    if (uploadFetcher.data?.url) { setUrl(uploadFetcher.data.url); setUploadError(null); }
+    if (uploadFetcher.data?.error) setUploadError(uploadFetcher.data.error);
+  }, [uploadFetcher.data]);
+
+  const handleDrop = useCallback(
+    (_: File[], accepted: File[]) => {
+      const file = accepted[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { setUploadError("File too large (max 10 MB)"); return; }
+      setUploadError(null);
+      const fd = new FormData();
+      fd.append("shop", shop);
+      fd.append("file", file);
+      // Files must go as multipart/form-data; without encType Remix urlencodes the
+      // FormData and the server receives an empty file (SL-121).
+      uploadFetcher.submit(fd, { method: "post", action: "/api/upload", encType: "multipart/form-data" });
+    },
+    [uploadFetcher, shop]
+  );
 
   const submit = useCallback(() => {
     fetcher.submit({ _action: "create_font", name, url }, { method: "post" });
-    setName(""); setUrl("");
+    setName(""); setUrl(""); setUploadError(null);
   }, [fetcher, name, url]);
 
-  const error = fetcher.data?.error;
+  const error = fetcher.data?.error ?? uploadError;
 
   return (
     <BlockStack gap="400">
-      {error && <Banner tone="critical">{error}</Banner>}
+      {error && <Banner tone="critical" onDismiss={() => setUploadError(null)}>{error}</Banner>}
       <Card>
         <BlockStack gap="0">
           <Box padding="400">
@@ -218,8 +242,24 @@ function FontsTab({ fonts }: { fonts: FontRow[] }) {
           <Box padding="400">
             <BlockStack gap="300">
               <TextField label="Name" value={name} onChange={setName} autoComplete="off" placeholder="e.g. Dancing Script" />
-              <TextField label="Font URL" value={url} onChange={setUrl} autoComplete="off" placeholder="https://fonts.gstatic.com/..." helpText="Paste a CSS @font-face src URL or Google Fonts file URL." />
-              <Button variant="primary" onClick={submit} loading={busy} disabled={busy || !name.trim() || !url.trim()}>
+              <DropZone
+                label="Upload font file"
+                accept=".woff,.woff2,.ttf,.otf,font/woff,font/woff2,font/ttf,font/otf"
+                type="file"
+                allowMultiple={false}
+                onDrop={handleDrop}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <Box padding="400">
+                    <Text as="p" alignment="center" tone="subdued">Uploading…</Text>
+                  </Box>
+                ) : (
+                  <DropZone.FileUpload actionTitle="Add font file" actionHint="or drop a WOFF, WOFF2, TTF, or OTF file (max 10 MB)" />
+                )}
+              </DropZone>
+              <TextField label="Font URL" value={url} onChange={setUrl} autoComplete="off" placeholder="https://fonts.gstatic.com/..." helpText="Upload a file above, or paste a CSS @font-face src URL or Google Fonts file URL directly." />
+              <Button variant="primary" onClick={submit} loading={busy} disabled={busy || uploading || !name.trim() || !url.trim()}>
                 Save font
               </Button>
             </BlockStack>
@@ -625,7 +665,7 @@ export default function AssetsPage() {
     <Page title="Assets" subtitle="Reusable fonts, colors, images, option sets, and templates — copy into any field.">
       <Tabs tabs={TABS} selected={activeIndex} onSelect={handleTabChange}>
         <Box paddingBlockStart="400">
-          {activeIndex === 0 && <FontsTab fonts={fonts as FontRow[]} />}
+          {activeIndex === 0 && <FontsTab fonts={fonts as FontRow[]} shop={shop} />}
           {activeIndex === 1 && <ColorsTab colorSets={colorSets as ColorSetRow[]} />}
           {activeIndex === 2 && <ImagesTab images={images as ImageRow[]} shop={shop} />}
           {activeIndex === 3 && <OptionSetsTab optionSets={optionSets as OptionSetRow[]} />}
