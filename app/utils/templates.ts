@@ -32,7 +32,28 @@ export type BuiltInTemplate = {
   fields: TemplateField[];
 };
 
-const defaults: Omit<TemplateField, "label" | "type" | "options"> = {
+export const FIELD_TYPE_OPTIONS = [
+  { label: "Short text", value: "text" },
+  { label: "Paragraph text", value: "textarea" },
+  { label: "Number", value: "number" },
+  { label: "Date", value: "date" },
+  { label: "Dropdown", value: "dropdown" },
+  { label: "Buttons", value: "buttons" },
+  { label: "Color swatches", value: "swatches" },
+  { label: "Image swatches", value: "image-swatches" },
+  { label: "Checkbox", value: "checkbox" },
+  { label: "File upload", value: "upload" },
+  { label: "Text block (display only)", value: "text-block" },
+  { label: "Image (display only)", value: "image-static" },
+];
+
+// Choice fields present a fixed list of options instead of free text.
+export const CHOICE_TYPES = ["dropdown", "checkbox", "buttons", "swatches", "image-swatches"];
+export function isChoiceType(type: string): boolean {
+  return CHOICE_TYPES.includes(type);
+}
+
+export const templateFieldDefaults: Omit<TemplateField, "label" | "type" | "options"> = {
   required: false,
   minChars: null,
   maxChars: null,
@@ -55,7 +76,7 @@ export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
     description: "3-initial monogram — exactly 3 letters, required",
     fields: [
       {
-        ...defaults,
+        ...templateFieldDefaults,
         label: "Monogram initials",
         type: "text",
         required: true,
@@ -72,7 +93,7 @@ export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
     description: "Optional freeform message up to 150 characters",
     fields: [
       {
-        ...defaults,
+        ...templateFieldDefaults,
         label: "Gift message",
         type: "textarea",
         required: false,
@@ -88,7 +109,7 @@ export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
     description: "Single name field, required, up to 30 characters",
     fields: [
       {
-        ...defaults,
+        ...templateFieldDefaults,
         label: "Name to engrave",
         type: "text",
         required: true,
@@ -103,7 +124,7 @@ export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
     description: "A name plus an optional date — good for anniversary gifts",
     fields: [
       {
-        ...defaults,
+        ...templateFieldDefaults,
         label: "Name",
         type: "text",
         required: true,
@@ -111,7 +132,7 @@ export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
         options: [],
       },
       {
-        ...defaults,
+        ...templateFieldDefaults,
         label: "Date (optional)",
         type: "date",
         required: false,
@@ -125,7 +146,7 @@ export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
     description: "Line 1 (required) and Line 2 (optional) — classic for plaques",
     fields: [
       {
-        ...defaults,
+        ...templateFieldDefaults,
         label: "Line 1",
         type: "text",
         required: true,
@@ -133,7 +154,7 @@ export const BUILT_IN_TEMPLATES: BuiltInTemplate[] = [
         options: [],
       },
       {
-        ...defaults,
+        ...templateFieldDefaults,
         label: "Line 2",
         type: "text",
         required: false,

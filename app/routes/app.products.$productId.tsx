@@ -32,7 +32,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { buildPricingConfig, computeConfigVersion } from "../utils/pricingConfig";
 import { buildThemeEditorDeepLink } from "../utils/themeEditor";
-import { BUILT_IN_TEMPLATES, type TemplateField } from "../utils/templates";
+import { BUILT_IN_TEMPLATES, FIELD_TYPE_OPTIONS, isChoiceType, type TemplateField } from "../utils/templates";
 import { resizeRotatedBox, moveBox, cornerPx, type PlacementBox } from "../utils/placementGeometry";
 
 const PRODUCT_QUERY = `
@@ -177,21 +177,6 @@ type PricingRuleData = {
   charGroups: CharPriceGroupData[];
 };
 
-const FIELD_TYPE_OPTIONS = [
-  { label: "Short text", value: "text" },
-  { label: "Paragraph text", value: "textarea" },
-  { label: "Number", value: "number" },
-  { label: "Date", value: "date" },
-  { label: "Dropdown", value: "dropdown" },
-  { label: "Buttons", value: "buttons" },
-  { label: "Color swatches", value: "swatches" },
-  { label: "Image swatches", value: "image-swatches" },
-  { label: "Checkbox", value: "checkbox" },
-  { label: "File upload", value: "upload" },
-  { label: "Text block (display only)", value: "text-block" },
-  { label: "Image (display only)", value: "image-static" },
-];
-
 // Built-in fonts offered for the per-field font chooser (SL-81, expanded SL-98).
 const BUILT_IN_FONTS = [
   // Web-safe (no Google Fonts load needed)
@@ -206,12 +191,6 @@ const BUILT_IN_FONTS = [
   "Alex Brush", "Allura", "Caveat", "Dancing Script", "Great Vibes",
   "Kaushan Script", "Pinyon Script", "Sacramento", "Satisfy",
 ];
-
-// Choice fields present a fixed list of options instead of free text.
-const CHOICE_TYPES = ["dropdown", "checkbox", "buttons", "swatches", "image-swatches"];
-function isChoiceType(type: string): boolean {
-  return CHOICE_TYPES.includes(type);
-}
 
 // Coerce any submitted field type to a known value, defaulting to "text".
 // Guards against a stale/hand-crafted form posting an unsupported type.
