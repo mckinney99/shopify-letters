@@ -83,6 +83,15 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ ok: true });
   }
 
+  if (intent === "update_font") {
+    const id = form.get("id") as string;
+    const name = (form.get("name") as string)?.trim();
+    const url = (form.get("url") as string)?.trim();
+    if (!name || !url) return json({ error: "Name and URL are required." }, { status: 422 });
+    await prisma.fontAsset.updateMany({ where: { id, shop }, data: { name, url } });
+    return json({ ok: true });
+  }
+
   if (intent === "delete_font") {
     const id = form.get("id") as string;
     await prisma.fontAsset.deleteMany({ where: { id, shop } });
@@ -94,6 +103,15 @@ export async function action({ request }: ActionFunctionArgs) {
     const url = (form.get("url") as string)?.trim();
     if (!name || !url) return json({ error: "Name and URL are required." }, { status: 422 });
     await prisma.imageAsset.create({ data: { shop, name, url } });
+    return json({ ok: true });
+  }
+
+  if (intent === "update_image") {
+    const id = form.get("id") as string;
+    const name = (form.get("name") as string)?.trim();
+    const url = (form.get("url") as string)?.trim();
+    if (!name || !url) return json({ error: "Name and URL are required." }, { status: 422 });
+    await prisma.imageAsset.updateMany({ where: { id, shop }, data: { name, url } });
     return json({ ok: true });
   }
 
@@ -115,6 +133,29 @@ export async function action({ request }: ActionFunctionArgs) {
         shop,
         name,
         entries: { create: entries.map((e, i) => ({ label: e.label.trim(), color: e.color, position: i })) },
+      },
+    });
+    return json({ ok: true });
+  }
+
+  if (intent === "update_color_set") {
+    const id = form.get("id") as string;
+    const name = (form.get("name") as string)?.trim();
+    const entriesRaw = form.get("entries") as string;
+    if (!name) return json({ error: "Name is required." }, { status: 422 });
+    const owned = await prisma.colorSet.findFirst({ where: { id, shop }, select: { id: true } });
+    if (!owned) return json({ error: "Color set not found." }, { status: 404 });
+    let entries: ColorEntry[] = [];
+    try { entries = JSON.parse(entriesRaw) as ColorEntry[]; } catch { /* ok */ }
+    entries = entries.filter((e) => e.label.trim() && e.color);
+    await prisma.colorSet.update({
+      where: { id },
+      data: {
+        name,
+        entries: {
+          deleteMany: {},
+          create: entries.map((e, i) => ({ label: e.label.trim(), color: e.color, position: i })),
+        },
       },
     });
     return json({ ok: true });
@@ -149,9 +190,44 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ ok: true });
   }
 
+  if (intent === "update_option_set") {
+    const id = form.get("id") as string;
+    const name = (form.get("name") as string)?.trim();
+    const entriesRaw = form.get("entries") as string;
+    if (!name) return json({ error: "Name is required." }, { status: 422 });
+    const owned = await prisma.optionSet.findFirst({ where: { id, shop }, select: { id: true } });
+    if (!owned) return json({ error: "Option set not found." }, { status: 404 });
+    let entries: OptionEntry[] = [];
+    try { entries = JSON.parse(entriesRaw) as OptionEntry[]; } catch { /* ok */ }
+    entries = entries.filter((e) => e.label.trim());
+    await prisma.optionSet.update({
+      where: { id },
+      data: {
+        name,
+        entries: {
+          deleteMany: {},
+          create: entries.map((e, i) => ({
+            label: e.label.trim(),
+            priceDelta: parseFloat(e.priceDelta) || 0,
+            position: i,
+          })),
+        },
+      },
+    });
+    return json({ ok: true });
+  }
+
   if (intent === "delete_option_set") {
     const id = form.get("id") as string;
     await prisma.optionSet.deleteMany({ where: { id, shop } });
+    return json({ ok: true });
+  }
+
+  if (intent === "update_template") {
+    const id = form.get("id") as string;
+    const name = (form.get("name") as string)?.trim();
+    if (!name) return json({ error: "Name is required." }, { status: 422 });
+    await prisma.template.updateMany({ where: { id, shop }, data: { name } });
     return json({ ok: true });
   }
 
@@ -196,11 +272,13 @@ function AssetRow({ children }: { children: React.ReactNode }) {
 function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
   const fetcher = useFetcher<{ error?: string }>();
   const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const busy = fetcher.state !== "idle";
   const uploading = uploadFetcher.state !== "idle";
+  const isEditing = editingId !== null;
 
   useEffect(() => {
     if (uploadFetcher.data?.url) { setUrl(uploadFetcher.data.url); setUploadError(null); }
@@ -223,10 +301,21 @@ function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
     [uploadFetcher, shop]
   );
 
+  const reset = useCallback(() => {
+    setEditingId(null); setName(""); setUrl(""); setUploadError(null);
+  }, []);
+
+  const startEdit = useCallback((f: FontRow) => {
+    setEditingId(f.id); setName(f.name); setUrl(f.url); setUploadError(null);
+  }, []);
+
   const submit = useCallback(() => {
-    fetcher.submit({ _action: "create_font", name, url }, { method: "post" });
-    setName(""); setUrl(""); setUploadError(null);
-  }, [fetcher, name, url]);
+    fetcher.submit(
+      editingId ? { _action: "update_font", id: editingId, name, url } : { _action: "create_font", name, url },
+      { method: "post" }
+    );
+    reset();
+  }, [fetcher, editingId, name, url, reset]);
 
   const error = fetcher.data?.error ?? uploadError;
 
@@ -236,7 +325,10 @@ function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
       <Card>
         <BlockStack gap="0">
           <Box padding="400">
-            <Text variant="headingSm" as="h3">Add font</Text>
+            <InlineStack align="space-between">
+              <Text variant="headingSm" as="h3">{isEditing ? "Edit font" : "Add font"}</Text>
+              {isEditing && <Button variant="plain" onClick={reset}>Cancel</Button>}
+            </InlineStack>
           </Box>
           <Divider />
           <Box padding="400">
@@ -260,7 +352,7 @@ function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
               </DropZone>
               <TextField label="Font URL" value={url} onChange={setUrl} autoComplete="off" placeholder="https://fonts.gstatic.com/..." helpText="Upload a file above, or paste a CSS @font-face src URL or Google Fonts file URL directly." />
               <Button variant="primary" onClick={submit} loading={busy} disabled={busy || uploading || !name.trim() || !url.trim()}>
-                Save font
+                {isEditing ? "Save changes" : "Save font"}
               </Button>
             </BlockStack>
           </Box>
@@ -283,7 +375,10 @@ function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
                 <Text as="span" fontWeight="semibold">{f.name}</Text>
                 <Text as="span" tone="subdued" variant="bodySm">{f.url}</Text>
               </BlockStack>
-              <DeleteButton intent="delete_font" id={f.id} />
+              <InlineStack gap="300" blockAlign="center">
+                <Button variant="plain" onClick={() => startEdit(f)}>Edit</Button>
+                <DeleteButton intent="delete_font" id={f.id} />
+              </InlineStack>
             </AssetRow>
           ))}
         </Box>
@@ -297,11 +392,13 @@ function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
 function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
   const fetcher = useFetcher<{ error?: string }>();
   const uploadFetcher = useFetcher<{ url?: string; error?: string }>();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const busy = fetcher.state !== "idle";
   const uploading = uploadFetcher.state !== "idle";
+  const isEditing = editingId !== null;
 
   useEffect(() => {
     if (uploadFetcher.data?.url) { setUrl(uploadFetcher.data.url); setUploadError(null); }
@@ -324,10 +421,21 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
     [uploadFetcher, shop]
   );
 
+  const reset = useCallback(() => {
+    setEditingId(null); setName(""); setUrl(""); setUploadError(null);
+  }, []);
+
+  const startEdit = useCallback((img: ImageRow) => {
+    setEditingId(img.id); setName(img.name); setUrl(img.url); setUploadError(null);
+  }, []);
+
   const submit = useCallback(() => {
-    fetcher.submit({ _action: "create_image", name, url }, { method: "post" });
-    setName(""); setUrl(""); setUploadError(null);
-  }, [fetcher, name, url]);
+    fetcher.submit(
+      editingId ? { _action: "update_image", id: editingId, name, url } : { _action: "create_image", name, url },
+      { method: "post" }
+    );
+    reset();
+  }, [fetcher, editingId, name, url, reset]);
 
   const error = fetcher.data?.error ?? uploadError;
 
@@ -337,7 +445,10 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
       <Card>
         <BlockStack gap="0">
           <Box padding="400">
-            <Text variant="headingSm" as="h3">Add image</Text>
+            <InlineStack align="space-between">
+              <Text variant="headingSm" as="h3">{isEditing ? "Edit image" : "Add image"}</Text>
+              {isEditing && <Button variant="plain" onClick={reset}>Cancel</Button>}
+            </InlineStack>
           </Box>
           <Divider />
           <Box padding="400">
@@ -364,7 +475,7 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
                 <img src={url} alt={name || "preview"} style={{ maxWidth: "8rem", maxHeight: "8rem", objectFit: "cover", borderRadius: "6px", border: "1px solid #ddd" }} />
               )}
               <Button variant="primary" onClick={submit} loading={busy} disabled={busy || uploading || !name.trim() || !url.trim()}>
-                Save image
+                {isEditing ? "Save changes" : "Save image"}
               </Button>
             </BlockStack>
           </Box>
@@ -387,7 +498,10 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
                 <img src={img.url} alt={img.name} style={{ width: "3rem", height: "3rem", objectFit: "cover", borderRadius: "4px", border: "1px solid #ddd", flexShrink: 0 }} />
                 <Text as="span" fontWeight="semibold">{img.name}</Text>
               </InlineStack>
-              <DeleteButton intent="delete_image" id={img.id} />
+              <InlineStack gap="300" blockAlign="center">
+                <Button variant="plain" onClick={() => startEdit(img)}>Edit</Button>
+                <DeleteButton intent="delete_image" id={img.id} />
+              </InlineStack>
             </AssetRow>
           ))}
         </Box>
@@ -400,18 +514,36 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
 
 function ColorsTab({ colorSets }: { colorSets: ColorSetRow[] }) {
   const fetcher = useFetcher<{ error?: string }>();
-  const [showForm, setShowForm] = useState(false);
+  // "closed" = no form; "new" = blank create form; any other string = id of the set being edited.
+  const [formMode, setFormMode] = useState<"closed" | "new" | string>("closed");
   const [name, setName] = useState("");
   const [entries, setEntries] = useState<ColorEntry[]>([{ label: "", color: "#000000" }]);
   const busy = fetcher.state !== "idle";
+  const isEditing = formMode !== "closed" && formMode !== "new";
+
+  const close = useCallback(() => {
+    setFormMode("closed"); setName(""); setEntries([{ label: "", color: "#000000" }]);
+  }, []);
+
+  const startCreate = useCallback(() => {
+    setFormMode("new"); setName(""); setEntries([{ label: "", color: "#000000" }]);
+  }, []);
+
+  const startEdit = useCallback((cs: ColorSetRow) => {
+    setFormMode(cs.id);
+    setName(cs.name);
+    setEntries(cs.entries.map((e) => ({ label: e.label, color: e.color })));
+  }, []);
 
   const submit = useCallback(() => {
     fetcher.submit(
-      { _action: "create_color_set", name, entries: JSON.stringify(entries) },
+      isEditing
+        ? { _action: "update_color_set", id: formMode, name, entries: JSON.stringify(entries) }
+        : { _action: "create_color_set", name, entries: JSON.stringify(entries) },
       { method: "post" }
     );
-    setShowForm(false); setName(""); setEntries([{ label: "", color: "#000000" }]);
-  }, [fetcher, name, entries]);
+    close();
+  }, [fetcher, formMode, isEditing, name, entries, close]);
 
   const updateEntry = (i: number, key: keyof ColorEntry, val: string) =>
     setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, [key]: val } : e)));
@@ -422,13 +554,13 @@ function ColorsTab({ colorSets }: { colorSets: ColorSetRow[] }) {
     <BlockStack gap="400">
       {error && <Banner tone="critical">{error}</Banner>}
 
-      {showForm ? (
+      {formMode !== "closed" ? (
         <Card>
           <BlockStack gap="0">
             <Box padding="400">
               <InlineStack align="space-between">
-                <Text variant="headingSm" as="h3">New color set</Text>
-                <Button variant="plain" onClick={() => setShowForm(false)}>Cancel</Button>
+                <Text variant="headingSm" as="h3">{isEditing ? "Edit color set" : "New color set"}</Text>
+                <Button variant="plain" onClick={close}>Cancel</Button>
               </InlineStack>
             </Box>
             <Divider />
@@ -459,14 +591,14 @@ function ColorsTab({ colorSets }: { colorSets: ColorSetRow[] }) {
                   </Button>
                 </BlockStack>
                 <Button variant="primary" onClick={submit} loading={busy} disabled={busy || !name.trim() || entries.every((e) => !e.label.trim())}>
-                  Save color set
+                  {isEditing ? "Save changes" : "Save color set"}
                 </Button>
               </BlockStack>
             </Box>
           </BlockStack>
         </Card>
       ) : (
-        <Button onClick={() => setShowForm(true)}>New color set</Button>
+        <Button onClick={startCreate}>New color set</Button>
       )}
 
       <Card>
@@ -490,7 +622,10 @@ function ColorsTab({ colorSets }: { colorSets: ColorSetRow[] }) {
                   <Text as="span" tone="subdued" variant="bodySm">{cs.entries.length} color{cs.entries.length !== 1 ? "s" : ""}</Text>
                 </InlineStack>
               </BlockStack>
-              <DeleteButton intent="delete_color_set" id={cs.id} />
+              <InlineStack gap="300" blockAlign="center">
+                <Button variant="plain" onClick={() => startEdit(cs)}>Edit</Button>
+                <DeleteButton intent="delete_color_set" id={cs.id} />
+              </InlineStack>
             </AssetRow>
           ))}
         </Box>
@@ -503,18 +638,36 @@ function ColorsTab({ colorSets }: { colorSets: ColorSetRow[] }) {
 
 function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
   const fetcher = useFetcher<{ error?: string }>();
-  const [showForm, setShowForm] = useState(false);
+  // "closed" = no form; "new" = blank create form; any other string = id of the set being edited.
+  const [formMode, setFormMode] = useState<"closed" | "new" | string>("closed");
   const [name, setName] = useState("");
   const [entries, setEntries] = useState<OptionEntry[]>([{ label: "", priceDelta: "" }]);
   const busy = fetcher.state !== "idle";
+  const isEditing = formMode !== "closed" && formMode !== "new";
+
+  const close = useCallback(() => {
+    setFormMode("closed"); setName(""); setEntries([{ label: "", priceDelta: "" }]);
+  }, []);
+
+  const startCreate = useCallback(() => {
+    setFormMode("new"); setName(""); setEntries([{ label: "", priceDelta: "" }]);
+  }, []);
+
+  const startEdit = useCallback((os: OptionSetRow) => {
+    setFormMode(os.id);
+    setName(os.name);
+    setEntries(os.entries.map((e) => ({ label: e.label, priceDelta: String(e.priceDelta) })));
+  }, []);
 
   const submit = useCallback(() => {
     fetcher.submit(
-      { _action: "create_option_set", name, entries: JSON.stringify(entries) },
+      isEditing
+        ? { _action: "update_option_set", id: formMode, name, entries: JSON.stringify(entries) }
+        : { _action: "create_option_set", name, entries: JSON.stringify(entries) },
       { method: "post" }
     );
-    setShowForm(false); setName(""); setEntries([{ label: "", priceDelta: "" }]);
-  }, [fetcher, name, entries]);
+    close();
+  }, [fetcher, formMode, isEditing, name, entries, close]);
 
   const updateEntry = (i: number, key: keyof OptionEntry, val: string) =>
     setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, [key]: val } : e)));
@@ -525,13 +678,13 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
     <BlockStack gap="400">
       {error && <Banner tone="critical">{error}</Banner>}
 
-      {showForm ? (
+      {formMode !== "closed" ? (
         <Card>
           <BlockStack gap="0">
             <Box padding="400">
               <InlineStack align="space-between">
-                <Text variant="headingSm" as="h3">New option set</Text>
-                <Button variant="plain" onClick={() => setShowForm(false)}>Cancel</Button>
+                <Text variant="headingSm" as="h3">{isEditing ? "Edit option set" : "New option set"}</Text>
+                <Button variant="plain" onClick={close}>Cancel</Button>
               </InlineStack>
             </Box>
             <Divider />
@@ -558,14 +711,14 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
                   </Button>
                 </BlockStack>
                 <Button variant="primary" onClick={submit} loading={busy} disabled={busy || !name.trim() || entries.every((e) => !e.label.trim())}>
-                  Save option set
+                  {isEditing ? "Save changes" : "Save option set"}
                 </Button>
               </BlockStack>
             </Box>
           </BlockStack>
         </Card>
       ) : (
-        <Button onClick={() => setShowForm(true)}>New option set</Button>
+        <Button onClick={startCreate}>New option set</Button>
       )}
 
       <Card>
@@ -588,6 +741,7 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
               </BlockStack>
               <InlineStack gap="300" blockAlign="center">
                 <Badge>{`${os.entries.length} option${os.entries.length !== 1 ? "s" : ""}`}</Badge>
+                <Button variant="plain" onClick={() => startEdit(os)}>Edit</Button>
                 <DeleteButton intent="delete_option_set" id={os.id} />
               </InlineStack>
             </AssetRow>
@@ -600,7 +754,51 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
 
 // ── Templates tab ─────────────────────────────────────────────────────────────
 
+function TemplateRowDetail({ template }: { template: TemplateRow }) {
+  const fetcher = useFetcher<{ error?: string }>();
+  const [name, setName] = useState(template.name);
+  const busy = fetcher.state !== "idle";
+
+  const fields = (() => {
+    try {
+      return JSON.parse(template.payload) as Array<{ label: string; type?: string }>;
+    } catch {
+      return [];
+    }
+  })();
+
+  const submit = useCallback(() => {
+    fetcher.submit({ _action: "update_template", id: template.id, name }, { method: "post" });
+  }, [fetcher, template.id, name]);
+
+  return (
+    <Box paddingBlock="300" paddingInlineStart="200">
+      <BlockStack gap="300">
+        {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
+        <TextField label="Name" value={name} onChange={setName} autoComplete="off" />
+        <Button variant="primary" size="slim" onClick={submit} loading={busy} disabled={busy || !name.trim() || name.trim() === template.name}>
+          Save changes
+        </Button>
+        <BlockStack gap="100">
+          <Text as="p" variant="bodySm" fontWeight="semibold">Fields ({fields.length})</Text>
+          {fields.map((f, i) => (
+            <InlineStack key={i} gap="200">
+              <Text as="span" variant="bodySm">{f.label}</Text>
+              {f.type && <Badge>{f.type}</Badge>}
+            </InlineStack>
+          ))}
+        </BlockStack>
+        <Text as="p" tone="subdued" variant="bodySm">
+          To change which fields are in this template, save an updated version from the product Fields tab ("Save as template").
+        </Text>
+      </BlockStack>
+    </Box>
+  );
+}
+
 function TemplatesTab({ templates }: { templates: TemplateRow[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   return (
     <BlockStack gap="400">
       <BlockStack gap="100">
@@ -623,14 +821,24 @@ function TemplatesTab({ templates }: { templates: TemplateRow[] }) {
               fieldCount = fields.length;
               fieldLabels = fields.map((f) => f.label).join(", ");
             } catch { /* ok */ }
+            const expanded = expandedId === t.id;
             return (
-              <AssetRow key={t.id}>
-                <BlockStack gap="050">
-                  <Text as="span" fontWeight="semibold">{t.name}</Text>
-                  <Text as="span" tone="subdued" variant="bodySm">{fieldCount} field{fieldCount !== 1 ? "s" : ""}: {fieldLabels}</Text>
-                </BlockStack>
-                <DeleteButton intent="delete_template" id={t.id} />
-              </AssetRow>
+              <Box key={t.id}>
+                <AssetRow>
+                  <Button
+                    variant="plain"
+                    onClick={() => setExpandedId(expanded ? null : t.id)}
+                    disclosure={expanded ? "up" : "down"}
+                  >
+                    {t.name}
+                  </Button>
+                  <InlineStack gap="300" blockAlign="center">
+                    <Text as="span" tone="subdued" variant="bodySm">{fieldCount} field{fieldCount !== 1 ? "s" : ""}: {fieldLabels}</Text>
+                    <DeleteButton intent="delete_template" id={t.id} />
+                  </InlineStack>
+                </AssetRow>
+                {expanded && <TemplateRowDetail template={t} />}
+              </Box>
             );
           })}
         </Box>
