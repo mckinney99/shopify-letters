@@ -305,6 +305,12 @@ function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
     setEditingId(null); setName(""); setUrl(""); setUploadError(null);
   }, []);
 
+  // Only clear the form once the save actually succeeds — clearing on submit
+  // would discard the user's edits if the request errors (e.g. a stale id).
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && !fetcher.data.error) reset();
+  }, [fetcher.state, fetcher.data, reset]);
+
   const startEdit = useCallback((f: FontRow) => {
     setEditingId(f.id); setName(f.name); setUrl(f.url); setUploadError(null);
   }, []);
@@ -314,8 +320,7 @@ function FontsTab({ fonts, shop }: { fonts: FontRow[]; shop: string }) {
       editingId ? { _action: "update_font", id: editingId, name, url } : { _action: "create_font", name, url },
       { method: "post" }
     );
-    reset();
-  }, [fetcher, editingId, name, url, reset]);
+  }, [fetcher, editingId, name, url]);
 
   const error = fetcher.data?.error ?? uploadError;
 
@@ -425,6 +430,12 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
     setEditingId(null); setName(""); setUrl(""); setUploadError(null);
   }, []);
 
+  // Only clear the form once the save actually succeeds — clearing on submit
+  // would discard the user's edits if the request errors (e.g. a stale id).
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && !fetcher.data.error) reset();
+  }, [fetcher.state, fetcher.data, reset]);
+
   const startEdit = useCallback((img: ImageRow) => {
     setEditingId(img.id); setName(img.name); setUrl(img.url); setUploadError(null);
   }, []);
@@ -434,8 +445,7 @@ function ImagesTab({ images, shop }: { images: ImageRow[]; shop: string }) {
       editingId ? { _action: "update_image", id: editingId, name, url } : { _action: "create_image", name, url },
       { method: "post" }
     );
-    reset();
-  }, [fetcher, editingId, name, url, reset]);
+  }, [fetcher, editingId, name, url]);
 
   const error = fetcher.data?.error ?? uploadError;
 
@@ -525,6 +535,12 @@ function ColorsTab({ colorSets }: { colorSets: ColorSetRow[] }) {
     setFormMode("closed"); setName(""); setEntries([{ label: "", color: "#000000" }]);
   }, []);
 
+  // Only clear the form once the save actually succeeds — clearing on submit
+  // would discard the user's edits if the request errors (e.g. a stale id).
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && !fetcher.data.error) close();
+  }, [fetcher.state, fetcher.data, close]);
+
   const startCreate = useCallback(() => {
     setFormMode("new"); setName(""); setEntries([{ label: "", color: "#000000" }]);
   }, []);
@@ -542,8 +558,7 @@ function ColorsTab({ colorSets }: { colorSets: ColorSetRow[] }) {
         : { _action: "create_color_set", name, entries: JSON.stringify(entries) },
       { method: "post" }
     );
-    close();
-  }, [fetcher, formMode, isEditing, name, entries, close]);
+  }, [fetcher, formMode, isEditing, name, entries]);
 
   const updateEntry = (i: number, key: keyof ColorEntry, val: string) =>
     setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, [key]: val } : e)));
@@ -649,6 +664,12 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
     setFormMode("closed"); setName(""); setEntries([{ label: "", priceDelta: "" }]);
   }, []);
 
+  // Only clear the form once the save actually succeeds — clearing on submit
+  // would discard the user's edits if the request errors (e.g. a stale id).
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && !fetcher.data.error) close();
+  }, [fetcher.state, fetcher.data, close]);
+
   const startCreate = useCallback(() => {
     setFormMode("new"); setName(""); setEntries([{ label: "", priceDelta: "" }]);
   }, []);
@@ -666,8 +687,7 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
         : { _action: "create_option_set", name, entries: JSON.stringify(entries) },
       { method: "post" }
     );
-    close();
-  }, [fetcher, formMode, isEditing, name, entries, close]);
+  }, [fetcher, formMode, isEditing, name, entries]);
 
   const updateEntry = (i: number, key: keyof OptionEntry, val: string) =>
     setEntries((prev) => prev.map((e, j) => (j === i ? { ...e, [key]: val } : e)));
