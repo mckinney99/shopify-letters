@@ -15,10 +15,13 @@ import {
   Box,
   Badge,
   DropZone,
+  Select,
+  Checkbox,
 } from "@shopify/polaris";
 import { useState, useCallback, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { FIELD_TYPE_OPTIONS, isChoiceType, templateFieldDefaults, type TemplateField } from "../utils/templates";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,6 +32,42 @@ type ColorSetRow = { id: string; name: string; entries: (ColorEntry & { id: stri
 type OptionEntry = { label: string; priceDelta: string };
 type OptionSetRow = { id: string; name: string; entries: (OptionEntry & { id: string; position: number })[] };
 type TemplateRow = { id: string; name: string; payload: string };
+
+// Parses the JSON field list posted from the Templates tab editor, trimming
+// field/option labels. Validation (rejecting rather than silently dropping
+// bad fields) happens separately in validateTemplateFields.
+function parseTemplateFields(raw: string | null): TemplateField[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw) as TemplateField[];
+    if (!Array.isArray(arr)) return [];
+    return arr.map((f) => ({
+      ...f,
+      label: typeof f?.label === "string" ? f.label.trim() : "",
+      options: Array.isArray(f?.options)
+        ? f.options
+            .map((o) => ({ ...o, label: typeof o?.label === "string" ? o.label.trim() : "" }))
+            .filter((o) => o.label)
+        : [],
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// Choice-type fields (dropdown/buttons/swatches/image-swatches) with zero
+// options render an unselectable field on the storefront — if required, the
+// product becomes unbuyable. Reject rather than silently save a broken field.
+function validateTemplateFields(fields: TemplateField[]): string | null {
+  if (fields.length === 0) return "Add at least one field.";
+  for (const f of fields) {
+    if (!f.label) return "Every field needs a label.";
+    if (isChoiceType(f.type) && f.type !== "checkbox" && f.options.length === 0) {
+      return `"${f.label}" needs at least one option.`;
+    }
+  }
+  return null;
+}
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 
@@ -223,11 +262,30 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ ok: true });
   }
 
+  if (intent === "create_template") {
+    const name = (form.get("name") as string)?.trim();
+    const fieldsRaw = form.get("fields") as string;
+    if (!name) return json({ error: "Name is required." }, { status: 422 });
+    const fields = parseTemplateFields(fieldsRaw);
+    const fieldsError = validateTemplateFields(fields);
+    if (fieldsError) return json({ error: fieldsError }, { status: 422 });
+    await prisma.template.create({ data: { shop, name, payload: JSON.stringify(fields) } });
+    return json({ ok: true });
+  }
+
   if (intent === "update_template") {
     const id = form.get("id") as string;
     const name = (form.get("name") as string)?.trim();
+    const fieldsRaw = form.get("fields") as string | null;
     if (!name) return json({ error: "Name is required." }, { status: 422 });
-    await prisma.template.updateMany({ where: { id, shop }, data: { name } });
+    if (fieldsRaw !== null) {
+      const fields = parseTemplateFields(fieldsRaw);
+      const fieldsError = validateTemplateFields(fields);
+      if (fieldsError) return json({ error: fieldsError }, { status: 422 });
+      await prisma.template.updateMany({ where: { id, shop }, data: { name, payload: JSON.stringify(fields) } });
+    } else {
+      await prisma.template.updateMany({ where: { id, shop }, data: { name } });
+    }
     return json({ ok: true });
   }
 
@@ -774,91 +832,220 @@ function OptionSetsTab({ optionSets }: { optionSets: OptionSetRow[] }) {
 
 // ── Templates tab ─────────────────────────────────────────────────────────────
 
-function TemplateRowDetail({ template }: { template: TemplateRow }) {
-  const fetcher = useFetcher<{ error?: string }>();
-  const [name, setName] = useState(template.name);
-  const busy = fetcher.state !== "idle";
+function emptyTemplateField(): TemplateField {
+  return { ...templateFieldDefaults, label: "", type: "text", options: [] };
+}
 
-  const fields = (() => {
-    try {
-      return JSON.parse(template.payload) as Array<{ label: string; type?: string }>;
-    } catch {
-      return [];
-    }
-  })();
+function parseFields(payload: string): TemplateField[] {
+  try {
+    const arr = JSON.parse(payload) as TemplateField[];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
 
-  const submit = useCallback(() => {
-    fetcher.submit({ _action: "update_template", id: template.id, name }, { method: "post" });
-  }, [fetcher, template.id, name]);
+// Edits the fields inside a template. Covers the properties that matter for
+// most templates (label, type, required, help text, min/max chars, choice
+// options with price deltas) — skips the product Fields tab's deeper extras
+// (font/color/size pickers, date-future-only, file-accept) to keep this
+// reasonably sized; those stay a product-only concern.
+function TemplateFieldEditor({ fields, onChange }: { fields: TemplateField[]; onChange: (fields: TemplateField[]) => void }) {
+  const updateField = (i: number, patch: Partial<TemplateField>) =>
+    onChange(fields.map((f, j) => (j === i ? { ...f, ...patch } : f)));
+  const removeField = (i: number) => onChange(fields.filter((_, j) => j !== i));
+  const addField = () => onChange([...fields, emptyTemplateField()]);
+
+  const updateOption = (fi: number, oi: number, patch: Partial<TemplateField["options"][number]>) =>
+    updateField(fi, { options: fields[fi].options.map((o, j) => (j === oi ? { ...o, ...patch } : o)) });
+  const addOption = (fi: number) => updateField(fi, { options: [...fields[fi].options, { label: "", priceDelta: 0 }] });
+  const removeOption = (fi: number, oi: number) => updateField(fi, { options: fields[fi].options.filter((_, j) => j !== oi) });
 
   return (
-    <Box paddingBlock="300" paddingInlineStart="200">
-      <BlockStack gap="300">
-        {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
-        <TextField label="Name" value={name} onChange={setName} autoComplete="off" />
-        <Button variant="primary" size="slim" onClick={submit} loading={busy} disabled={busy || !name.trim() || name.trim() === template.name}>
-          Save changes
-        </Button>
-        <BlockStack gap="100">
-          <Text as="p" variant="bodySm" fontWeight="semibold">Fields ({fields.length})</Text>
-          {fields.map((f, i) => (
-            <InlineStack key={i} gap="200">
-              <Text as="span" variant="bodySm">{f.label}</Text>
-              {f.type && <Badge>{f.type}</Badge>}
-            </InlineStack>
-          ))}
-        </BlockStack>
-        <Text as="p" tone="subdued" variant="bodySm">
-          To change which fields are in this template, save an updated version from the product Fields tab ("Save as template").
-        </Text>
-      </BlockStack>
-    </Box>
+    <BlockStack gap="300">
+      {fields.map((field, i) => {
+        const choice = isChoiceType(field.type) && field.type !== "checkbox";
+        const isCheckbox = field.type === "checkbox";
+        const isTextLike = field.type === "text" || field.type === "textarea" || field.type === "number";
+        return (
+          <Box key={i} padding="300" borderWidth="025" borderColor="border" borderRadius="200">
+            <BlockStack gap="200">
+              <InlineStack gap="200" blockAlign="start" wrap={false}>
+                <div style={{ flex: 2 }}>
+                  <TextField label="Label" labelHidden value={field.label} onChange={(v) => updateField(i, { label: v })} autoComplete="off" placeholder="e.g. Name to engrave" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Select label="Type" labelHidden options={FIELD_TYPE_OPTIONS} value={field.type} onChange={(v) => updateField(i, { type: v, options: [] })} />
+                </div>
+                <Button variant="plain" tone="critical" onClick={() => removeField(i)}>Remove</Button>
+              </InlineStack>
+              <Checkbox label="Required" checked={field.required} onChange={(v) => updateField(i, { required: v })} />
+              <TextField label="Help text" value={field.helpText ?? ""} onChange={(v) => updateField(i, { helpText: v || null })} autoComplete="off" />
+              {isTextLike && (
+                <InlineStack gap="200">
+                  <div style={{ flex: 1 }}>
+                    <TextField label="Min characters" value={field.minChars?.toString() ?? ""} onChange={(v) => updateField(i, { minChars: v ? parseInt(v) || null : null })} autoComplete="off" type="number" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <TextField label="Max characters" value={field.maxChars?.toString() ?? ""} onChange={(v) => updateField(i, { maxChars: v ? parseInt(v) || null : null })} autoComplete="off" type="number" />
+                  </div>
+                </InlineStack>
+              )}
+              {isCheckbox && (
+                <TextField
+                  label="Add-on price"
+                  prefix="$"
+                  value={field.options[0] ? String(field.options[0].priceDelta) : ""}
+                  onChange={(v) => updateField(i, { options: [{ label: "Yes", priceDelta: parseFloat(v) || 0 }] })}
+                  autoComplete="off"
+                />
+              )}
+              {choice && (
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm" fontWeight="semibold">Options</Text>
+                  {field.options.map((opt, oi) => (
+                    <InlineStack key={oi} gap="200" blockAlign="center">
+                      {field.type === "swatches" && (
+                        <input
+                          type="color"
+                          value={opt.swatchColor ?? "#000000"}
+                          onChange={(e) => updateOption(i, oi, { swatchColor: e.target.value })}
+                          aria-label="Color"
+                          style={{ width: "2.25rem", height: "2.25rem", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", flexShrink: 0 }}
+                        />
+                      )}
+                      <div style={{ flex: 2 }}>
+                        <TextField label="Label" labelHidden value={opt.label} onChange={(v) => updateOption(i, oi, { label: v })} autoComplete="off" placeholder="e.g. Small" />
+                      </div>
+                      {field.type === "image-swatches" && (
+                        <div style={{ flex: 2 }}>
+                          <TextField label="Image URL" labelHidden value={opt.imageUrl ?? ""} onChange={(v) => updateOption(i, oi, { imageUrl: v })} autoComplete="off" placeholder="https://cdn.shopify.com/..." />
+                        </div>
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <TextField label="Add-on price" labelHidden value={String(opt.priceDelta)} onChange={(v) => updateOption(i, oi, { priceDelta: parseFloat(v) || 0 })} autoComplete="off" prefix="$" />
+                      </div>
+                      <Button variant="plain" tone="critical" onClick={() => removeOption(i, oi)} disabled={field.options.length === 1}>Remove</Button>
+                    </InlineStack>
+                  ))}
+                  <Button variant="plain" onClick={() => addOption(i)}>+ Add option</Button>
+                </BlockStack>
+              )}
+            </BlockStack>
+          </Box>
+        );
+      })}
+      <Button variant="plain" onClick={addField}>+ Add field</Button>
+    </BlockStack>
   );
 }
 
 function TemplatesTab({ templates }: { templates: TemplateRow[] }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const fetcher = useFetcher<{ error?: string }>();
+  // "closed" = no form; "new" = blank create form; any other string = id of the template being edited.
+  const [formMode, setFormMode] = useState<"closed" | "new" | string>("closed");
+  const [name, setName] = useState("");
+  const [fields, setFields] = useState<TemplateField[]>([emptyTemplateField()]);
+  const busy = fetcher.state !== "idle";
+  const isEditing = formMode !== "closed" && formMode !== "new";
+
+  const close = useCallback(() => {
+    setFormMode("closed"); setName(""); setFields([emptyTemplateField()]);
+  }, []);
+
+  // Only clear the form once the save actually succeeds — clearing on submit
+  // would discard the user's edits if the request errors.
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && !fetcher.data.error) close();
+  }, [fetcher.state, fetcher.data, close]);
+
+  const startCreate = useCallback(() => {
+    setFormMode("new"); setName(""); setFields([emptyTemplateField()]);
+  }, []);
+
+  const startEdit = useCallback((t: TemplateRow) => {
+    setFormMode(t.id);
+    setName(t.name);
+    const parsed = parseFields(t.payload);
+    setFields(parsed.length > 0 ? parsed : [emptyTemplateField()]);
+  }, []);
+
+  const submit = useCallback(() => {
+    fetcher.submit(
+      isEditing
+        ? { _action: "update_template", id: formMode, name, fields: JSON.stringify(fields) }
+        : { _action: "create_template", name, fields: JSON.stringify(fields) },
+      { method: "post" }
+    );
+  }, [fetcher, formMode, isEditing, name, fields]);
+
+  const error = fetcher.data?.error;
+  const canSave =
+    name.trim() &&
+    fields.length > 0 &&
+    fields.every(
+      (f) =>
+        f.label.trim() &&
+        (!isChoiceType(f.type) || f.type === "checkbox" || f.options.some((o) => o.label.trim()))
+    );
 
   return (
     <BlockStack gap="400">
       <BlockStack gap="100">
         <Text variant="headingMd" as="h3">Saved templates ({templates.length})</Text>
         <Text as="p" tone="subdued" variant="bodySm">
-          Templates are saved from the product Fields tab ("Save as template"). Apply them from any product's empty-field state.
+          Build reusable field sets here, or save one from a product's Fields tab ("Save as template") — apply either from any product's empty-field state.
         </Text>
       </BlockStack>
+
+      {error && <Banner tone="critical">{error}</Banner>}
+
+      {formMode !== "closed" ? (
+        <Card>
+          <BlockStack gap="0">
+            <Box padding="400">
+              <InlineStack align="space-between">
+                <Text variant="headingSm" as="h3">{isEditing ? "Edit template" : "New template"}</Text>
+                <Button variant="plain" onClick={close}>Cancel</Button>
+              </InlineStack>
+            </Box>
+            <Divider />
+            <Box padding="400">
+              <BlockStack gap="400">
+                <TextField label="Template name" value={name} onChange={setName} autoComplete="off" placeholder="e.g. Jewelry engraving" />
+                <TemplateFieldEditor fields={fields} onChange={setFields} />
+                <Button variant="primary" onClick={submit} loading={busy} disabled={busy || !canSave}>
+                  {isEditing ? "Save changes" : "Save template"}
+                </Button>
+              </BlockStack>
+            </Box>
+          </BlockStack>
+        </Card>
+      ) : (
+        <Button onClick={startCreate}>New template</Button>
+      )}
+
       <Card>
         <Box paddingInline="400" paddingBlockStart="400">
           {templates.length === 0 ? (
             <Box paddingBlock="400">
-              <Text as="p" tone="subdued">No saved templates yet. Go to a product's Fields tab and click "Save as template".</Text>
+              <Text as="p" tone="subdued">No saved templates yet.</Text>
             </Box>
           ) : templates.map((t) => {
-            let fieldCount = 0;
-            let fieldLabels = "";
-            try {
-              const fields = JSON.parse(t.payload) as Array<{ label: string }>;
-              fieldCount = fields.length;
-              fieldLabels = fields.map((f) => f.label).join(", ");
-            } catch { /* ok */ }
-            const expanded = expandedId === t.id;
+            const fieldsForRow = parseFields(t.payload);
             return (
-              <Box key={t.id}>
-                <AssetRow>
-                  <Button
-                    variant="plain"
-                    onClick={() => setExpandedId(expanded ? null : t.id)}
-                    disclosure={expanded ? "up" : "down"}
-                  >
-                    {t.name}
-                  </Button>
-                  <InlineStack gap="300" blockAlign="center">
-                    <Text as="span" tone="subdued" variant="bodySm">{fieldCount} field{fieldCount !== 1 ? "s" : ""}: {fieldLabels}</Text>
-                    <DeleteButton intent="delete_template" id={t.id} />
-                  </InlineStack>
-                </AssetRow>
-                {expanded && <TemplateRowDetail template={t} />}
-              </Box>
+              <AssetRow key={t.id}>
+                <BlockStack gap="050">
+                  <Text as="span" fontWeight="semibold">{t.name}</Text>
+                  <Text as="span" tone="subdued" variant="bodySm">
+                    {fieldsForRow.length} field{fieldsForRow.length !== 1 ? "s" : ""}: {fieldsForRow.map((f) => f.label).join(", ")}
+                  </Text>
+                </BlockStack>
+                <InlineStack gap="300" blockAlign="center">
+                  <Button variant="plain" onClick={() => startEdit(t)}>Edit</Button>
+                  <DeleteButton intent="delete_template" id={t.id} />
+                </InlineStack>
+              </AssetRow>
             );
           })}
         </Box>
