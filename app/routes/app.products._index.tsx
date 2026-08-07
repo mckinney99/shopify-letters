@@ -87,12 +87,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const productIds = edges.map((e: { node: { id: string } }) => e.node.id);
 
-  const configs = await prisma.productConfig.findMany({
-    where: { shop: session.shop, productId: { in: productIds } },
-    select: { productId: true, published: true },
-  });
+  const [configs, configuredFields] = await Promise.all([
+    prisma.productConfig.findMany({
+      where: { shop: session.shop, productId: { in: productIds } },
+      select: { productId: true, published: true },
+    }),
+    prisma.customizationField.findMany({
+      where: { shop: session.shop, productId: { in: productIds } },
+      select: { productId: true },
+      distinct: ["productId"],
+    }),
+  ]);
 
   const configMap = new Map(configs.map((c) => [c.productId, c]));
+  const configuredProductIds = new Set(configuredFields.map((f) => f.productId));
 
   const products = edges.map(({ node }: { node: any }) => ({
     id: node.id,
@@ -103,6 +111,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     imageUrl: node.featuredImage?.url ?? null,
     imageAlt: node.featuredImage?.altText ?? node.title,
     published: configMap.get(node.id)?.published ?? false,
+    hasFields: configuredProductIds.has(node.id),
   }));
 
   return json({ products, pageInfo });
@@ -193,9 +202,13 @@ export default function ProductsPage() {
                   </Badge>
                 </IndexTable.Cell>
                 <IndexTable.Cell>
-                  <Badge tone={product.published ? "success" : "new"}>
-                    {product.published ? "Active" : "Not configured"}
-                  </Badge>
+                  {product.published ? (
+                    <Badge tone="success">Active</Badge>
+                  ) : product.hasFields ? (
+                    <Badge tone="attention">Draft</Badge>
+                  ) : (
+                    <Badge tone="new">Not configured</Badge>
+                  )}
                 </IndexTable.Cell>
                 <IndexTable.Cell>
                   <Link to={`/app/products/${product.numericId}`}>Add custom pricing</Link>
