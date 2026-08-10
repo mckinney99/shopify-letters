@@ -60,26 +60,26 @@ export default function Support() {
 
             <FaqSection title="Getting started">
               <QA q="How do I turn Etch on?">
-                From the Etch home page, click &quot;Activate widget&quot; — it opens your
+                From the Etch home page, click &quot;Activate widget.&quot; It opens your
                 theme editor with the &quot;Etch Customization&quot; app embed pre-selected.
                 Toggle it on and save. This is a one-time, store-wide setup: once
                 enabled, Etch&apos;s widget is available on every product page
                 automatically, with nothing to add manually. (There&apos;s also an
                 alternative &quot;app block&quot; you can drag onto a specific
                 template/section instead, if you want more manual control over
-                placement — you only need one method active.)
+                placement. You only need one method active.)
               </QA>
               <QA q="What do the stat tiles on the home page mean?">
                 &quot;Total products&quot; is your full Shopify catalog count. &quot;Customized
                 Etch products (live)&quot; is how many products have published,
                 customer-facing customization right now. &quot;Draft Etch products&quot;
-                is how many have fields set up but not yet published — started,
+                is how many have fields set up but not yet published: started,
                 not finished.
               </QA>
               <QA q="What do the statuses on the Products page mean?">
-                &quot;Not configured&quot; — Etch hasn&apos;t been set up on this product at
-                all. &quot;Draft&quot; — fields have been added but aren&apos;t live yet.
-                &quot;Active&quot; — the product&apos;s customization is published and visible
+                &quot;Not configured&quot; means Etch hasn&apos;t been set up on this product at
+                all. &quot;Draft&quot; means fields have been added but aren&apos;t live yet.
+                &quot;Active&quot; means the product&apos;s customization is published and visible
                 to customers.
               </QA>
             </FaqSection>
@@ -106,18 +106,18 @@ export default function Support() {
               </QA>
               <QA q="How does pricing work?">
                 Each priceable field uses one of three pricing modes: <b>Per
-                letter</b> (a price per character typed — e.g. $0.50/char makes
+                letter</b> (a price per character typed, e.g. $0.50/char makes
                 &quot;Hello&quot; add $2.50), <b>Flat fee</b> (a fixed amount added whenever
                 the field has any value), or <b>Percentage of base price</b> (a %
                 of the product&apos;s price added when filled in). Per-letter pricing
-                also supports optional <b>character groups</b> — charge a
+                also supports optional <b>character groups</b>, which charge a
                 different rate for specific characters (e.g. emoji costing more
                 than regular letters). Choice-type fields (dropdown, buttons,
                 swatches, checkbox) are priced per option instead, set right on
                 each option in the field editor.
               </QA>
               <QA q="Can I show or hide a field based on another field?">
-                Yes — each field has a &quot;Visibility&quot; setting where you can add a
+                Yes. Each field has a &quot;Visibility&quot; setting where you can add a
                 condition like &quot;Show this field when [another field] is [exact
                 value].&quot; You can stack multiple conditions on one field. If you
                 delete a field that other fields depend on, those conditions are
@@ -125,7 +125,7 @@ export default function Support() {
               </QA>
               <QA q="How do I control where the customer's text appears on my product photo?">
                 In the Live Preview panel, drag, resize, and rotate the overlay
-                box directly on your product image — that box controls exactly
+                box directly on your product image. That box controls exactly
                 where a shopper&apos;s typed text (in their chosen font, color, and
                 size) renders, both in your preview and on the live storefront.
                 Non-text fields can get a similar static placement. A &quot;Show text
@@ -134,28 +134,28 @@ export default function Support() {
                 image staying static.
               </QA>
               <QA q="Can I collapse the Live Preview panel?">
-                Yes — use the collapse control on the preview rail to shrink it to
+                Yes. Use the collapse control on the preview rail to shrink it to
                 a thin strip and give the field editor more room, or drag the
                 divider to resize it. Your preference is remembered for next time.
               </QA>
               <QA q="How do I upload an image or font?">
                 Anywhere Etch asks for an image or font (option images, static
                 images, custom fonts), you can either drag and drop a file
-                (images or font files, up to 10 MB) or paste a URL directly —
-                uploading just fills in the URL field for you, so both paths end
+                (images or font files, up to 10 MB) or paste a URL directly.
+                Uploading just fills in the URL field for you, so both paths end
                 up in the same place.
               </QA>
             </FaqSection>
 
             <FaqSection title="Publishing & activating">
               <QA q="What's the difference between a draft and Publish changes?">
-                Every edit you make — adding a field, changing pricing, tweaking a
-                condition — saves automatically as a <b>draft</b>. Customers never
-                see a draft; they keep seeing whatever you last published. Click
-                <b> &quot;Publish changes&quot;</b> (enabled once your draft differs from
-                what&apos;s live) to push your edits to the storefront and checkout in
-                one step. You can keep editing after publishing — those changes
-                stay in draft again until you publish once more.
+                Every edit you make, like adding a field, changing pricing, or
+                tweaking a condition, saves automatically as a <b>draft</b>.
+                Customers never see a draft; they keep seeing whatever you last
+                published. Click <b>&quot;Publish changes&quot;</b> (enabled once your draft
+                differs from what&apos;s live) to push your edits to the storefront
+                and checkout in one step. You can keep editing after publishing;
+                those changes stay in draft again until you publish once more.
               </QA>
               <QA q="What's the difference between Active/Inactive and Publish changes?">
                 <b>Active/Inactive</b> is the on/off switch for whether customers
@@ -163,11 +163,11 @@ export default function Support() {
                 pushes your latest edits live. The first time you activate a
                 product, Etch automatically publishes your current draft too, so
                 a product never goes live showing stale or empty fields.
-                Deactivating hides the widget without deleting anything — your
+                Deactivating hides the widget without deleting anything. Your
                 fields and pricing are still there when you turn it back on.
               </QA>
               <QA q="How do I preview my changes before publishing?">
-                Click &quot;Preview on store&quot; on the product page — it opens your live
+                Click &quot;Preview on store&quot; on the product page. It opens your live
                 storefront product page in a new tab with a short-lived, signed
                 link that shows your current draft, even if the product isn&apos;t
                 Active yet.
@@ -180,8 +180,8 @@ export default function Support() {
                 in one click. On a product with no fields yet, use &quot;Start from a
                 template&quot; to apply one of Etch&apos;s built-in starters or one you&apos;ve
                 saved. You can build and edit templates directly from
-                Assets → Templates — name it, add fields, set their types and
-                pricing — or capture a product&apos;s current fields as a new
+                Assets → Templates: name it, add fields, set their types and
+                pricing, or capture a product&apos;s current fields as a new
                 template using &quot;Save as template&quot; on that product&apos;s Fields tab.
               </QA>
               <QA q="What's on the Assets page?">
@@ -191,7 +191,7 @@ export default function Support() {
                 for swatches or static image fields), <b>Option sets</b> (named
                 label + price lists, e.g. shirt sizes), and <b>Templates</b>
                 (reusable field sets). Every tab supports creating, editing, and
-                deleting — build something once and reuse it on any product.
+                deleting, so you can build something once and reuse it on any product.
               </QA>
             </FaqSection>
 
@@ -208,7 +208,7 @@ export default function Support() {
                 Etch compares the price it quoted the shopper during checkout
                 against what was actually charged. If they don&apos;t match, the
                 order gets flagged with a &quot;Price mismatch&quot; badge so you can
-                investigate — this is rare, but worth checking if you see it.
+                investigate. This is rare, but worth checking if you see it.
                 Orders placed before this check existed won&apos;t have a price
                 breakdown available.
               </QA>
