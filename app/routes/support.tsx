@@ -1,7 +1,7 @@
 import type { MetaFunction } from "@remix-run/node";
 
 export const meta: MetaFunction = () => [
-  { title: "Support — Etch" },
+  { title: "Support - Etch" },
   {
     name: "description",
     content:
@@ -32,7 +32,7 @@ const HOW_TOS = [
       "Find the product you want to configure and click it.",
       'Click "Add field" to create a new text input.',
       'Give it a label your customers will see (e.g. "Engraving text" or "Monogram initials").',
-      "Set any character restrictions — minimum/maximum characters, allowed or disallowed characters, and whether spaces count.",
+      "Set any character restrictions: minimum/maximum characters, allowed or disallowed characters, and whether spaces count.",
       "Click Save.",
     ],
     note: "You can add as many fields as you need. Each field has its own label and character rules, and can optionally have its own pricing.",
@@ -43,11 +43,11 @@ const HOW_TOS = [
     heading: "Add pricing to a form field",
     steps: [
       "On the product configuration page, click the Pricing tab.",
-      "Set a per-character price — this is the amount charged for each character the customer types.",
+      "Set a per-character price. This is the amount charged for each character the customer types.",
       'Optionally add a base fee charged regardless of length (e.g. a flat "setup" charge).',
       "When finished, toggle the product to Published so the widget and pricing go live.",
     ],
-    note: "Pricing is optional. If you leave the pricing fields empty, Etch still collects the customer's text and saves it to the order — you just won't charge extra for it. This is useful for gift messages, special instructions, or any text you want to gather without a surcharge.",
+    note: "Pricing is optional. If you leave the pricing fields empty, Etch still collects the customer's text and saves it to the order; you just won't charge extra for it. This is useful for gift messages, special instructions, or any text you want to gather without a surcharge.",
   },
   {
     id: "add-characters",
@@ -67,7 +67,7 @@ const HOW_TOS = [
 const FAQS = [
   {
     q: "Does the Etch widget work with my Shopify theme?",
-    a: "Yes. Etch uses Shopify's Theme App Extension system, which is compatible with all Online Store 2.0 themes — the large majority of themes available in the Shopify Theme Store. If you're on a legacy theme, contact us and we'll help.",
+    a: "Yes. Etch uses Shopify's Theme App Extension system, which is compatible with all Online Store 2.0 themes, the large majority of themes available in the Shopify Theme Store. If you're on a legacy theme, contact us and we'll help.",
   },
   {
     q: "Is the price enforced at checkout, or can customers change it?",
@@ -75,11 +75,11 @@ const FAQS = [
   },
   {
     q: "Can I add multiple text fields to one product?",
-    a: "Yes. Add as many fields as you need — each with its own label, character rules, and optional pricing. For example, one field for a first name and another for a second line.",
+    a: "Yes. Add as many fields as you need, each with its own label, character rules, and optional pricing. For example, one field for a first name and another for a second line.",
   },
   {
     q: "Do I need a developer or code changes to use Etch?",
-    a: "No. Everything is configured through the Etch admin in your Shopify dashboard. Adding the widget to your storefront takes about 30 seconds via the Theme Customizer — no code, no file edits, no developer needed.",
+    a: "No. Everything is configured through the Etch admin in your Shopify dashboard. Adding the widget to your storefront takes about 30 seconds via the Theme Customizer: no code, no file edits, no developer needed.",
   },
   {
     q: "Can I charge different prices for different characters?",
@@ -95,7 +95,7 @@ const FAQS = [
   },
   {
     q: "Can I use Etch just to collect text without charging extra?",
-    a: "Absolutely. Pricing rules are optional. You can create a field with no pricing at all — Etch will still display the input on your product page and save the customer's text to the order. This works great for gift messages, special instructions, or any personalisation that doesn't affect the price.",
+    a: "Absolutely. Pricing rules are optional. You can create a field with no pricing at all, and Etch will still display the input on your product page and save the customer's text to the order. This works great for gift messages, special instructions, or any personalisation that doesn't affect the price.",
   },
   {
     q: "Where do I see what the customer typed after an order is placed?",
@@ -171,7 +171,7 @@ export default function SupportPage() {
           <div>
             <h2 className="orders-heading">Finding customer text in orders</h2>
             <p className="orders-body">
-              After a customer places an order, what they typed is saved directly to the order as a line item property. To view it: go to <strong>Shopify admin → Orders</strong>, click the order, then scroll to the line items. The customer's text appears beneath the product name — no extra steps, no export needed.
+              After a customer places an order, what they typed is saved directly to the order as a line item property. To view it: go to <strong>Shopify admin → Orders</strong>, click the order, then scroll to the line items. The customer's text appears beneath the product name. No extra steps, no export needed.
             </p>
           </div>
         </div>
@@ -184,7 +184,7 @@ export default function SupportPage() {
             <div className="noprice-badge">Did you know?</div>
             <h2 className="noprice-heading">You don't have to charge for every field</h2>
             <p className="noprice-body">
-              Pricing rules are completely optional in Etch. If you want to collect a gift message, special instructions, or a personalisation note without adding any cost, just leave the pricing fields empty. Etch will still display the input on your product page and save what the customer types to the order — perfect for any text you need without a surcharge.
+              Pricing rules are completely optional in Etch. If you want to collect a gift message, special instructions, or a personalisation note without adding any cost, just leave the pricing fields empty. Etch will still display the input on your product page and save what the customer types to the order: perfect for any text you need without a surcharge.
             </p>
           </div>
         </div>
