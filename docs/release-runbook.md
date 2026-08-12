@@ -41,8 +41,6 @@ Three scopes are new: `read_files`, `write_files` (asset/image uploads, SL-120â€
 12 migrations exist on `feature/product-options` that aren't on `main`, applied automatically via `prisma migrate deploy` at container start (`package.json` â†’ `"start": "node scripts/check-env.mjs && prisma migrate deploy && remix-serve ..."`):
 
 ```
-20260617103257_add_session_refresh_token
-20260627051854_add_space_toggles
 20260707125706_add_field_options_and_required
 20260707190010_add_swatch_color
 20260707220316_add_field_type_extensions
