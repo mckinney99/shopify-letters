@@ -5,13 +5,29 @@
 
 // ── Types for the metafield payload ──────────────────────────────────────────
 
+type FieldOptionRule = {
+  label: string;
+  priceDelta: number;
+};
+
 type FieldDefinition = {
   id: string;
   label: string;
+  type?: string;
+  required?: boolean;
+  options?: FieldOptionRule[];
   minChars?: number | null;
   maxChars?: number | null;
   allowedChars?: string | null;
   disallowedChars?: string | null;
+  dateFutureOnly?: boolean;
+};
+
+type FieldCondition = {
+  fieldId: string;
+  triggerFieldId: string;
+  operator: string;
+  value: string;
 };
 
 type MetafieldPayload = {
@@ -19,6 +35,7 @@ type MetafieldPayload = {
   // identifier, so it travels via this payload instead (see SL-31).
   shop?: string;
   fields: FieldDefinition[];
+  conditions?: FieldCondition[];
 };
 
 // ── Types for the Shopify Function input (mirrors cart_validations_generate_run.graphql) ──
@@ -56,6 +73,20 @@ type CartValidationsGenerateRunResult = {
   operations: Array<{ validationAdd: { errors: ValidationError[] } }>;
 };
 
+// SL-85: skip validation for conditionally hidden fields.
+function isFieldActive(
+  fieldId: string,
+  etchInputs: Record<string, string>,
+  conditions: FieldCondition[]
+): boolean {
+  const fieldConditions = conditions.filter((c) => c.fieldId === fieldId);
+  if (fieldConditions.length === 0) return true;
+  return fieldConditions.every((cond) => {
+    const triggerValue = (etchInputs[cond.triggerFieldId] ?? "").trim();
+    return cond.operator === "equals" ? triggerValue === cond.value : true;
+  });
+}
+
 // ── Validation logic — port of normalizeText/normalizeInput from app/utils/normalize.ts ──
 // Must stay in sync with normalizeInput in normalize.ts.
 
@@ -64,6 +95,43 @@ function normalizeText(input: string): string {
 }
 
 function validateField(rawInput: string, field: FieldDefinition): string[] {
+  // Display-only elements — no input to validate.
+  if (field.type === "text-block" || field.type === "image-static") return [];
+
+  // Upload fields — only check required.
+  if (field.type === "upload") {
+    return field.required && !rawInput.trim() ? ["Please upload a file."] : [];
+  }
+
+  // Number fields — minChars/maxChars reused as numeric bounds.
+  if (field.type === "number") {
+    if (!rawInput.trim()) return field.required ? ["This field is required."] : [];
+    const n = Number(rawInput);
+    if (isNaN(n)) return ["Must be a number."];
+    const errs: string[] = [];
+    if (field.minChars != null && n < field.minChars) errs.push(`Must be at least ${field.minChars}.`);
+    if (field.maxChars != null && n > field.maxChars) errs.push(`Must be at most ${field.maxChars}.`);
+    return errs;
+  }
+
+  // Date fields — validate format and optional future-only constraint.
+  if (field.type === "date") {
+    if (!rawInput.trim()) return field.required ? ["This field is required."] : [];
+    const d = new Date(rawInput);
+    if (isNaN(d.getTime())) return ["Must be a valid date."];
+    if (field.dateFutureOnly && d < new Date()) return ["Must be a future date."];
+    return [];
+  }
+
+  // Choice fields (dropdown/checkbox/buttons/swatches): the value is an option label.
+  if (field.options && field.options.length > 0) {
+    const selected = rawInput.trim();
+    if (!selected) {
+      return field.required ? ["Please select an option."] : [];
+    }
+    return field.options.some((o) => o.label === selected) ? [] : ["Invalid selection."];
+  }
+
   const normalized = normalizeText(rawInput);
   const chars = [...normalized]; // codepoint-aware — correct for emoji
   const errors: string[] = [];
@@ -145,7 +213,9 @@ export function cartValidationsGenerateRun(input: Input): CartValidationsGenerat
     } else {
       try {
         const etchInputs = JSON.parse(attributeRaw) as Record<string, string>;
+        const conditions = payload.conditions ?? [];
         for (const field of payload.fields) {
+          if (!isFieldActive(field.id, etchInputs, conditions)) continue;
           for (const message of validateField(etchInputs[field.id] ?? "", field)) {
             lineErrors.push(`"${productTitle}" — ${field.label}: ${message}`);
           }

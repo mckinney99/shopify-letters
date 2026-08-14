@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1400">
+<title>Option A — Wider preview + condensed field rows</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f2f4; color: #202223; font-size: 14px; }
+  .topbar { background: #1a1a2e; color: #fff; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 16px; }
+  .topbar-logo { font-weight: 700; font-size: 16px; letter-spacing: -0.5px; color: #e8b86d; }
+  .topbar-crumb { color: rgba(255,255,255,0.5); font-size: 13px; }
+  .topbar-crumb span { color: rgba(255,255,255,0.85); }
+  .page { max-width: 1380px; margin: 0 auto; padding: 24px; }
+  .page-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .page-sub { color: #6d7175; font-size: 13px; margin-bottom: 20px; }
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .btn { border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: #008060; color: #fff; }
+  .btn-plain { background: transparent; color: #2c6ecb; padding: 8px 12px; font-weight: 500; }
+  .btn-outline { background: #fff; border: 1px solid #c9cccf; color: #202223; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #d4edda; color: #1a7240; }
+  .badge-gray { background: #f1f2f4; color: #6d7175; }
+  .badge-blue { background: #e3f0ff; color: #2c6ecb; }
+
+  /* LAYOUT: 35 / 65 split */
+  .layout { display: grid; grid-template-columns: 35% 1fr; gap: 20px; align-items: start; }
+
+  /* LEFT PANEL */
+  .left-panel { display: flex; flex-direction: column; gap: 16px; }
+  .card { background: #fff; border-radius: 12px; border: 1px solid #e1e3e5; overflow: hidden; }
+  .card-header { padding: 14px 16px; border-bottom: 1px solid #e1e3e5; display: flex; align-items: center; justify-content: space-between; }
+  .card-header-title { font-size: 14px; font-weight: 600; }
+  .card-body { padding: 0; }
+
+  /* CONDENSED FIELD ROW — single line */
+  .field-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #f1f2f4; cursor: pointer; transition: background 0.1s; }
+  .field-row:last-child { border-bottom: none; }
+  .field-row:hover { background: #f9fafb; }
+  .field-row-drag { color: #c9cccf; font-size: 16px; flex-shrink: 0; cursor: grab; }
+  .field-row-label { font-weight: 600; font-size: 13px; flex: 1; }
+  .field-row-meta { color: #6d7175; font-size: 12px; }
+  .field-row-actions { display: flex; gap: 6px; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid #e1e3e5; background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; color: #6d7175; }
+  .icon-btn:hover { background: #f1f2f4; }
+
+  /* EDITING STATE — expanded inline editor */
+  .field-row-editing { background: #f9fafb; border: 2px solid #5c6ac4; border-radius: 0; }
+  .field-editor { padding: 16px; background: #f9fafb; border-bottom: 1px solid #e1e3e5; }
+  .form-group { margin-bottom: 12px; }
+  .form-label { font-size: 12px; font-weight: 600; color: #202223; margin-bottom: 4px; display: block; }
+  .form-input { width: 100%; border: 1px solid #c9cccf; border-radius: 8px; padding: 7px 10px; font-size: 13px; color: #202223; }
+  .form-input:focus { outline: none; border-color: #5c6ac4; box-shadow: 0 0 0 2px rgba(92,106,196,0.2); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .editor-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+  /* RIGHT PANEL — wider preview */
+  .right-panel { position: sticky; top: 24px; }
+  .preview-card { background: #1a1a2e; border-radius: 16px; overflow: hidden; }
+  .preview-header { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .preview-title { color: #fff; font-weight: 600; font-size: 14px; }
+  .preview-tabs { display: flex; gap: 4px; }
+  .preview-tab { padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: rgba(255,255,255,0.5); }
+  .preview-tab.active { background: rgba(255,255,255,0.12); color: #fff; }
+  .preview-img-wrap { position: relative; }
+  .preview-img { width: 100%; display: block; height: 340px; object-fit: cover; background: linear-gradient(135deg, #2d3561 0%, #1a1a2e 100%); }
+  .preview-img-placeholder { width: 100%; height: 340px; background: linear-gradient(135deg, #2d3561 0%, #3d2b5c 100%); display: flex; align-items: center; justify-content: center; position: relative; }
+  .mock-product { width: 200px; height: 200px; background: rgba(255,255,255,0.08); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+  .mock-product-icon { font-size: 60px; }
+  .preview-overlay-text { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.3); border: 1.5px dashed rgba(255,255,255,0.5); border-radius: 6px; padding: 8px 20px; color: #fff; font-size: 20px; font-weight: 700; text-shadow: 0 2px 8px rgba(0,0,0,0.8); white-space: nowrap; }
+  .preview-fields { padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .preview-field { display: flex; flex-direction: column; gap: 4px; }
+  .preview-field-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.5px; }
+  .preview-field-input { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px 12px; color: #fff; font-size: 13px; width: 100%; }
+  .preview-field-input::placeholder { color: rgba(255,255,255,0.3); }
+  .preview-price { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; }
+  .preview-price-label { color: rgba(255,255,255,0.5); font-size: 12px; }
+  .preview-price-val { color: #fff; font-size: 20px; font-weight: 700; }
+
+  .annotation { background: #fff3cd; border: 1.5px solid #e8b86d; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #856404; margin-top: 8px; }
+  .annotation strong { display: block; margin-bottom: 3px; }
+
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6d7175; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-logo">Etch</span>
+  <span class="topbar-crumb">Products › <span>Floral Engraving Ring</span></span>
+</div>
+<div class="page">
+  <div class="page-title">Floral Engraving Ring</div>
+  <div class="page-sub">4 customization fields · Published</div>
+  <div class="toolbar">
+    <button class="btn btn-primary">Save changes</button>
+    <button class="btn btn-outline">Preview on store</button>
+    <span class="badge badge-green">● Published</span>
+  </div>
+
+  <div class="layout">
+    <!-- LEFT: condensed field list -->
+    <div class="left-panel">
+      <div class="section-label">Customization fields</div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-header-title">Fields <span style="color:#6d7175;font-weight:400">(4)</span></span>
+          <button class="btn btn-primary" style="padding:5px 12px;font-size:12px">+ Add field</button>
+        </div>
+        <div class="card-body">
+          <!-- Normal condensed row -->
+          <div class="field-row">
+            <span class="field-row-drag">⠿</span>
+            <span class="field-row-label">Custom message</span>
+            <span class="badge badge-blue" style="font-size:10px">Text</span>
+            <span class="field-row-meta">Required · max 40</span>
+            <div class="field-row-actions">
+              <div class="icon-btn">✎</div>
+              <div class="icon-btn">⋮</div>
+            </div>
+          </div>
+
+          <!-- EDITING STATE — highlighted row + inline editor -->
+          <div class="field-row field-row-editing">
+            <span class="field-row-drag">⠿</span>
+            <span class="field-row-label" style="color:#5c6ac4">Font style</span>
+            <span class="badge badge-blue" style="font-size:10px">Dropdown</span>
+            <div class="field-row-actions" style="margin-left:auto">
+              <div class="icon-btn" style="color:#5c6ac4;border-color:#5c6ac4">✓</div>
+              <div class="icon-btn">✕</div>
+            </div>
+          </div>
+          <div class="field-editor">
+            <div class="form-group">
+              <label class="form-label">Field label</label>
+              <input class="form-input" value="Font style" />
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Type</label>
+                <input class="form-input" value="Dropdown" />
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label">Required</label>
+                <input class="form-input" value="Yes" />
+              </div>
+            </div>
+            <div class="editor-actions">
+              <button class="btn btn-primary" style="font-size:12px;padding:6px 14px">Save field</button>
+              <button class="btn btn-plain" style="font-size:12px">Cancel</button>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <span class="field-row-drag">⠿</span>
+            <span class="field-row-label">Ink color</span>
+            <span class="badge badge-blue" style="font-size:10px">Color pick</span>
+            <div class="field-row-actions" style="margin-left:auto">
+              <div class="icon-btn">✎</div>
+              <div class="icon-btn">⋮</div>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <span class="field-row-drag">⠿</span>
+            <span class="field-row-label">Delivery date</span>
+            <span class="badge badge-blue" style="font-size:10px">Date</span>
+            <div class="field-row-actions" style="margin-left:auto">
+              <div class="icon-btn">✎</div>
+              <div class="icon-btn">⋮</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="annotation">
+        <strong>✦ What changed here</strong>
+        Fields are condensed to a single line — label, type badge, metadata, edit/more icons. The inline editor expands below the row being edited (no modal), while the preview stays fully visible on the right. Drag handle (⠿) remains for reordering.
+      </div>
+    </div>
+
+    <!-- RIGHT: wide preview (65%) -->
+    <div class="right-panel">
+      <div class="section-label">Live preview</div>
+      <div class="preview-card">
+        <div class="preview-header">
+          <span class="preview-title">Floral Engraving Ring</span>
+          <div class="preview-tabs">
+            <div class="preview-tab active">Preview</div>
+            <div class="preview-tab">Placement</div>
+          </div>
+        </div>
+        <div class="preview-img-placeholder">
+          <div class="mock-product">
+            <span class="mock-product-icon">💍</span>
+          </div>
+          <div class="preview-overlay-text">Your message here</div>
+        </div>
+        <div class="preview-fields">
+          <div class="preview-field">
+            <label class="preview-field-label">Custom message</label>
+            <input class="preview-field-input" placeholder="e.g. Forever & Always…" />
+          </div>
+          <div class="preview-field">
+            <label class="preview-field-label">Font style</label>
+            <input class="preview-field-input" placeholder="Script · Serif · Sans…" style="border-color:rgba(92,106,196,0.6);background:rgba(92,106,196,0.12)" />
+          </div>
+          <div class="preview-field">
+            <label class="preview-field-label">Ink color</label>
+            <input class="preview-field-input" placeholder="Gold · Silver · Rose Gold…" />
+          </div>
+          <div class="preview-field">
+            <label class="preview-field-label">Delivery date</label>
+            <input class="preview-field-input" placeholder="Select a date…" />
+          </div>
+        </div>
+        <div class="preview-price">
+          <span class="preview-price-label">Estimated price</span>
+          <span class="preview-price-val">$89.00</span>
+        </div>
+      </div>
+      <div class="annotation" style="background:#e3f0ff;border-color:#2c6ecb;color:#1a4480">
+        <strong>✦ Preview is now 65% wide</strong>
+        Previously ~50% (or narrower on smaller screens). The product image and form fields now have room to breathe. Preview stays sticky — editing any field on the left never hides this panel.
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

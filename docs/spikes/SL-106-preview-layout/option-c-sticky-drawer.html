@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1400">
+<title>Option C — Sticky preview + slide-up drawer editor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f2f4; color: #202223; font-size: 14px; }
+  .topbar { background: #1a1a2e; color: #fff; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 16px; }
+  .topbar-logo { font-weight: 700; font-size: 16px; letter-spacing: -0.5px; color: #e8b86d; }
+  .topbar-crumb { color: rgba(255,255,255,0.5); font-size: 13px; }
+  .topbar-crumb span { color: rgba(255,255,255,0.85); }
+  .btn { border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: #008060; color: #fff; }
+  .btn-outline { background: #fff; border: 1px solid #c9cccf; color: #202223; }
+  .btn-plain { background: transparent; color: #2c6ecb; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-blue { background: #e3f0ff; color: #2c6ecb; }
+  .badge-green { background: #d4edda; color: #1a7240; }
+
+  .page { max-width: 1380px; margin: 0 auto; padding: 24px; }
+  .page-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .page-sub { color: #6d7175; font-size: 13px; margin-bottom: 20px; }
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #6d7175; margin-bottom: 8px; }
+
+  /* DEFAULT: single column, large preview on top, field list below */
+  .main-preview { background: #1a1a2e; border-radius: 16px; overflow: hidden; margin-bottom: 20px; }
+  .main-preview-header { padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; }
+  .main-preview-title { color: #fff; font-weight: 600; font-size: 15px; }
+  .preview-tabs { display: flex; gap: 4px; }
+  .preview-tab { padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; color: rgba(255,255,255,0.4); }
+  .preview-tab.active { background: rgba(255,255,255,0.12); color: #fff; }
+
+  /* WIDE product image */
+  .main-img-area { position: relative; background: linear-gradient(135deg, #2d3561 0%, #3d2b5c 100%); height: 360px; display: flex; align-items: center; justify-content: center; }
+  .mock-product-big { width: 220px; height: 220px; background: rgba(255,255,255,0.06); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 80px; }
+  .overlay-text-main { position: absolute; top: 36%; left: 50%; transform: translate(-50%,-50%); color: #fff; font-size: 26px; font-weight: 700; text-shadow: 0 2px 14px rgba(0,0,0,0.9); white-space: nowrap; }
+  .placement-box { position: absolute; top: 55%; left: 20%; width: 60%; height: 14%; border: 2px dashed rgba(255,255,255,0.35); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  .placement-label { color: rgba(255,255,255,0.4); font-size: 11px; }
+
+  /* Inline fields row (horizontal) */
+  .inline-fields { padding: 14px 20px; display: flex; gap: 12px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .inline-field { flex: 1; }
+  .pf-label { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .pf-input { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 7px 10px; color: rgba(255,255,255,0.7); font-size: 12px; width: 100%; }
+  .preview-price-bar { padding: 12px 20px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; }
+  .price-label { color: rgba(255,255,255,0.4); font-size: 12px; }
+  .price-val { color: #fff; font-size: 18px; font-weight: 700; }
+
+  /* Field list below */
+  .field-list { background: #fff; border-radius: 12px; border: 1px solid #e1e3e5; overflow: hidden; }
+  .field-list-header { padding: 12px 16px; border-bottom: 1px solid #e1e3e5; display: flex; align-items: center; justify-content: space-between; }
+  .field-list-title { font-size: 14px; font-weight: 600; }
+  .field-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #f1f2f4; }
+  .field-row:last-child { border-bottom: none; }
+  .field-label { font-weight: 600; font-size: 13px; flex: 1; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid #e1e3e5; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #6d7175; cursor: pointer; }
+
+  .callout-arrow { text-align: center; font-size: 24px; color: #5c6ac4; margin: 20px 0 12px; }
+
+  /* DRAWER STATE */
+  .drawer-scene { position: relative; border-radius: 16px; overflow: hidden; border: 2px solid #5c6ac4; }
+  .drawer-preview { background: #1a1a2e; }
+  .drawer-img-area { position: relative; background: linear-gradient(135deg, #2d3561 0%, #3d2b5c 100%); height: 280px; display: flex; align-items: center; justify-content: center; }
+  .drawer-product { font-size: 70px; }
+  .drawer-overlay-text { position: absolute; top: 36%; left: 50%; transform: translate(-50%,-50%); color: #fff; font-size: 22px; font-weight: 700; text-shadow: 0 2px 12px rgba(0,0,0,0.9); white-space: nowrap; }
+  .drawer-fields { padding: 12px 20px; display: flex; gap: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .drawer-price { padding: 10px 20px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; }
+
+  /* Slide-up drawer */
+  .drawer-panel { background: #fff; border-top: 3px solid #5c6ac4; }
+  .drawer-handle { width: 40px; height: 4px; background: #c9cccf; border-radius: 2px; margin: 10px auto 0; }
+  .drawer-header { padding: 14px 20px 10px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #e1e3e5; }
+  .drawer-title { font-size: 15px; font-weight: 700; flex: 1; }
+  .drawer-body { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-group { }
+  .form-label { font-size: 12px; font-weight: 600; margin-bottom: 4px; display: block; }
+  .form-input { width: 100%; border: 1px solid #c9cccf; border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+  .drawer-footer { padding: 12px 20px; border-top: 1px solid #f1f2f4; display: flex; gap: 10px; }
+
+  .annotation { background: #fff3cd; border: 1.5px solid #e8b86d; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #856404; margin-top: 10px; }
+  .annotation strong { display: block; margin-bottom: 3px; }
+  .annotation-blue { background: #e3f0ff; border-color: #2c6ecb; color: #1a4480; }
+  .annotation-purple { background: #f3f0ff; border-color: #5c6ac4; color: #3d2b9e; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-logo">Etch</span>
+  <span class="topbar-crumb">Products › <span>Floral Engraving Ring</span></span>
+</div>
+<div class="page">
+  <div class="page-title">Floral Engraving Ring</div>
+  <div class="page-sub">4 customization fields · Published</div>
+  <div class="toolbar">
+    <button class="btn btn-primary">Save changes</button>
+    <button class="btn btn-outline">Preview on store</button>
+    <span class="badge badge-green">● Published</span>
+  </div>
+
+  <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#2c6ecb;margin-bottom:12px;padding:6px 12px;background:#e3f0ff;border-radius:8px;display:inline-block">
+    ① Default state — preview on top, full width; fields listed below
+  </div>
+
+  <!-- BIG PREVIEW -->
+  <div class="section-label">Live preview</div>
+  <div class="main-preview">
+    <div class="main-preview-header">
+      <span class="main-preview-title">Floral Engraving Ring</span>
+      <div class="preview-tabs">
+        <div class="preview-tab active">Preview</div>
+        <div class="preview-tab">Placement</div>
+      </div>
+    </div>
+    <div class="main-img-area">
+      <div class="mock-product-big">💍</div>
+      <div class="overlay-text-main">Your message here</div>
+      <div class="placement-box"><span class="placement-label">Custom message placement</span></div>
+    </div>
+    <div class="inline-fields">
+      <div class="inline-field"><div class="pf-label">Custom message</div><input class="pf-input" placeholder="e.g. Forever & Always…" /></div>
+      <div class="inline-field"><div class="pf-label">Font style</div><input class="pf-input" placeholder="Script · Serif…" /></div>
+      <div class="inline-field"><div class="pf-label">Ink color</div><input class="pf-input" placeholder="Gold · Silver…" /></div>
+      <div class="inline-field"><div class="pf-label">Delivery date</div><input class="pf-input" placeholder="Select date…" /></div>
+    </div>
+    <div class="preview-price-bar">
+      <span class="price-label">Estimated price</span>
+      <span class="price-val">$89.00</span>
+    </div>
+  </div>
+
+  <!-- FIELD LIST -->
+  <div class="section-label">Fields (4)</div>
+  <div class="field-list">
+    <div class="field-list-header">
+      <span class="field-list-title">Customization fields</span>
+      <button class="btn btn-primary" style="padding:5px 12px;font-size:12px">+ Add field</button>
+    </div>
+    <div class="field-row"><span style="color:#c9cccf">⠿</span><span class="field-label">Custom message</span><span class="badge badge-blue" style="font-size:10px">Text</span><div style="margin-left:auto;display:flex;gap:6px"><div class="icon-btn">✎</div><div class="icon-btn">⋮</div></div></div>
+    <div class="field-row" style="background:#f3f0ff"><span style="color:#c9cccf">⠿</span><span class="field-label" style="color:#5c6ac4">Font style</span><span class="badge badge-blue" style="font-size:10px">Dropdown</span><div style="margin-left:auto;display:flex;gap:6px"><div class="icon-btn" style="border-color:#5c6ac4;color:#5c6ac4">✎ editing</div></div></div>
+    <div class="field-row"><span style="color:#c9cccf">⠿</span><span class="field-label">Ink color</span><span class="badge badge-blue" style="font-size:10px">Color pick</span><div style="margin-left:auto;display:flex;gap:6px"><div class="icon-btn">✎</div><div class="icon-btn">⋮</div></div></div>
+    <div class="field-row"><span style="color:#c9cccf">⠿</span><span class="field-label">Delivery date</span><span class="badge badge-blue" style="font-size:10px">Date</span><div style="margin-left:auto;display:flex;gap:6px"><div class="icon-btn">✎</div><div class="icon-btn">⋮</div></div></div>
+  </div>
+
+  <div class="callout-arrow">↓ clicking ✎ on "Font style" slides up the drawer ↓</div>
+  <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#3d2b9e;margin-bottom:12px;padding:6px 12px;background:#f3f0ff;border-radius:8px;display:inline-block">
+    ② Drawer slides up — preview still visible above; editor below
+  </div>
+
+  <div class="drawer-scene">
+    <!-- Preview (top portion, compressed) -->
+    <div class="drawer-preview">
+      <div class="main-preview-header">
+        <span class="main-preview-title">Floral Engraving Ring</span>
+        <span style="color:rgba(255,255,255,0.4);font-size:12px">Preview stays visible ↑</span>
+      </div>
+      <div class="drawer-img-area">
+        <span class="drawer-product">💍</span>
+        <div class="drawer-overlay-text">Your message here</div>
+      </div>
+      <div class="drawer-fields">
+        <div class="inline-field"><div class="pf-label">Custom message</div><input class="pf-input" placeholder="e.g. Forever & Always…" /></div>
+        <div class="inline-field"><div class="pf-label" style="color:#e8b86d">Font style ✦ editing</div><select style="background:rgba(92,106,196,0.2);border:1px solid rgba(92,106,196,0.5);border-radius:6px;padding:6px 10px;color:#fff;font-size:12px;width:100%"><option>Script</option><option>Serif</option><option>Sans-serif</option></select></div>
+        <div class="inline-field"><div class="pf-label">Ink color</div><input class="pf-input" placeholder="Gold…" /></div>
+        <div class="inline-field"><div class="pf-label">Delivery date</div><input class="pf-input" placeholder="Select…" /></div>
+      </div>
+      <div class="drawer-price">
+        <span class="price-label">Estimated price</span>
+        <span class="price-val">$89.00</span>
+      </div>
+    </div>
+
+    <!-- Drawer panel sliding up -->
+    <div class="drawer-panel">
+      <div class="drawer-handle"></div>
+      <div class="drawer-header">
+        <span style="font-size:18px;color:#6d7175;cursor:pointer">↓</span>
+        <span class="drawer-title">Edit field: Font style</span>
+        <span class="badge badge-blue">Dropdown</span>
+        <button class="btn btn-primary" style="padding:6px 14px;font-size:12px">Save</button>
+        <button class="btn btn-outline" style="padding:6px 14px;font-size:12px">Cancel</button>
+      </div>
+      <div class="drawer-body">
+        <div class="form-group"><label class="form-label">Field label</label><input class="form-input" value="Font style" /></div>
+        <div class="form-group"><label class="form-label">Type</label><select style="width:100%;border:1px solid #c9cccf;border-radius:8px;padding:7px 10px;font-size:13px"><option>Dropdown</option><option>Buttons</option></select></div>
+        <div class="form-group"><label class="form-label">Help text</label><input class="form-input" placeholder="Optional hint for shoppers" /></div>
+        <div class="form-group"><label class="form-label">Required</label><select style="width:100%;border:1px solid #c9cccf;border-radius:8px;padding:7px 10px;font-size:13px"><option>Yes</option><option>No</option></select></div>
+      </div>
+      <div class="drawer-footer">
+        <button class="btn" style="color:#d72c0d;background:transparent;border:1px solid #fed3d1;font-size:12px">Delete field</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:12px">
+    <div class="annotation">
+      <strong>✦ Preview stays visible</strong>
+      The product image + all field inputs remain visible above the drawer. Shoppers can see changes as you configure options.
+    </div>
+    <div class="annotation annotation-purple">
+      <strong>✦ Drawer slides up</strong>
+      A panel slides up from the bottom (drag handle shows it's dismissible). Compact 2-column layout for the editor keeps it scannable.
+    </div>
+    <div class="annotation annotation-blue">
+      <strong>✦ Field highlighted in preview</strong>
+      The field being edited is highlighted in the live preview inputs with a gold label, linking editor to preview visually.
+    </div>
+  </div>
+</div>
+</body>
+</html>

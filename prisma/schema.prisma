@@ -37,33 +37,83 @@ model Session {
 }
 
 model ProductConfig {
-  id        String   @id @default(cuid())
-  shop      String
-  productId String
-  enabled   Boolean  @default(false)
-  published Boolean  @default(false)
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  shop           String
+  productId      String
+  enabled        Boolean  @default(false)
+  published      Boolean  @default(false)
+  previewEnabled Boolean  @default(false)
+  // SL-123: published snapshot of the storefront config (fields + conditions) and its
+  // version. The DB rows are the draft; the storefront serves this snapshot until the
+  // merchant clicks "Publish changes". Null until first publish.
+  publishedConfig  Json?
+  publishedVersion String?
+  updatedAt      DateTime @updatedAt
 
   @@unique([shop, productId])
 }
 
 model CustomizationField {
-  id              String   @id @default(cuid())
-  shop            String
-  productId       String
-  label           String
-  type            String   @default("text")
-  minChars        Int?
-  maxChars        Int?
-  allowedChars    String?
-  disallowedChars String?
-  allowSpaces     Boolean  @default(true)
-  countSpaces     Boolean  @default(false)
-  position        Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  shop             String
+  productId        String
+  label            String
+  type             String   @default("text")
+  minChars         Int?
+  maxChars         Int?
+  allowedChars     String?
+  disallowedChars  String?
+  allowSpaces      Boolean  @default(true)
+  countSpaces      Boolean  @default(false)
+  required         Boolean  @default(false)
+  position         Int      @default(0)
+  // SL-79: body text for text-block / image URL for image-static
+  helpText         String?
+  // SL-80: date field — reject dates in the past
+  dateFutureOnly   Boolean  @default(false)
+  // SL-81: JSON array of font names to offer (text/textarea fields only)
+  fontOptions      String?
+  // SL-82: JSON [{"label":"Gold","color":"#D4AF37"}] of text colors to offer
+  textColorOptions String?
+  // SL-97: JSON array of size strings e.g. ["12px","16px","24px"]
+  fontSizeOptions  String?
+  // SL-78: MIME filter for upload fields e.g. "image/*" or "*/*"
+  fileAccept       String?
+  // SL-91: preview text placement as % of image dimensions (null = auto-center)
+  previewX         Float?
+  previewY         Float?
+  previewW         Float?
+  previewH         Float?
+  // SL-100: rotation in degrees (0–359, null = 0)
+  previewRotation  Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  options          FieldOption[]
 
   @@index([shop, productId])
+}
+
+// A selectable choice for a choice-type field (dropdown, buttons, checkbox,
+// swatches, image-swatches). `priceDelta` is a flat amount added when the
+// option is chosen. label doubles as the stored/submitted value.
+model FieldOption {
+  id          String   @id @default(cuid())
+  fieldId     String
+  label       String
+  priceDelta  Float    @default(0)
+  swatchColor String?
+  imageUrl    String?
+  // SL-135: big product photo shown in the preview when this option is selected
+  // (distinct from imageUrl, which is the swatch thumbnail).
+  previewImageUrl String?
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  field      CustomizationField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@index([fieldId])
 }
 
 // fieldId = "" means product-level base price; fieldId = <CustomizationField.id> means per-field pricing
@@ -74,12 +124,112 @@ model PricingRule {
   fieldId      String
   basePrice    Float          @default(0)
   perCharPrice Float          @default(0)
+  mode         String         @default("per_char") // per_char | flat | percent
+  amount       Float          @default(0)          // flat $ or percent (0-100) for non-per_char modes
   charGroups   CharPriceGroup[]
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
   @@unique([shop, productId, fieldId])
   @@index([shop, productId])
+}
+
+// SL-85: show/hide a field based on another field's value.
+// fieldId is the dependent (hidden) field; triggerFieldId drives visibility.
+model FieldCondition {
+  id             String   @id @default(cuid())
+  shop           String
+  productId      String
+  fieldId        String
+  triggerFieldId String
+  operator       String   @default("equals")
+  value          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([shop, productId])
+}
+
+// SL-87: merchant-saved personalization templates.
+// shop = null is reserved for built-ins (kept as constants, not DB rows).
+// payload = JSON array of TemplateField objects (see app/utils/templates.ts).
+model Template {
+  id        String   @id @default(cuid())
+  shop      String
+  name      String
+  payload   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop])
+}
+
+// ── SL-86: Assets library ────────────────────────────────────────────────────
+// All assets are shop-scoped. Fields reference assets by copying their values
+// at insert time (copy-on-use) so editing an asset never alters live products.
+
+model FontAsset {
+  id        String   @id @default(cuid())
+  shop      String
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop])
+}
+
+model ColorSet {
+  id        String          @id @default(cuid())
+  shop      String
+  name      String
+  entries   ColorSetEntry[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([shop])
+}
+
+model ColorSetEntry {
+  id         String   @id @default(cuid())
+  colorSetId String
+  label      String
+  color      String
+  position   Int      @default(0)
+
+  colorSet   ColorSet @relation(fields: [colorSetId], references: [id], onDelete: Cascade)
+}
+
+model ImageAsset {
+  id        String   @id @default(cuid())
+  shop      String
+  name      String
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop])
+}
+
+model OptionSet {
+  id        String           @id @default(cuid())
+  shop      String
+  name      String
+  entries   OptionSetEntry[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([shop])
+}
+
+model OptionSetEntry {
+  id          String    @id @default(cuid())
+  optionSetId String
+  label       String
+  priceDelta  Float     @default(0)
+  position    Int       @default(0)
+
+  optionSet   OptionSet @relation(fields: [optionSetId], references: [id], onDelete: Cascade)
 }
 
 model CharPriceGroup {
