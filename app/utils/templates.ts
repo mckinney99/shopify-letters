@@ -15,6 +15,11 @@ export type TemplateField = {
   fontOptions: string | null;
   textColorOptions: string | null;
   fontSizeOptions: string | null;
+  // SL-147: merchant-locked style applied when the corresponding *Options
+  // picker above is empty — mutually exclusive with it per style.
+  defaultFont: string | null;
+  defaultTextColor: string | null;
+  defaultFontSize: string | null;
   fileAccept: string | null;
   options: Array<{
     label: string;
@@ -66,6 +71,9 @@ export const templateFieldDefaults: Omit<TemplateField, "label" | "type" | "opti
   fontOptions: null,
   textColorOptions: null,
   fontSizeOptions: null,
+  defaultFont: null,
+  defaultTextColor: null,
+  defaultFontSize: null,
   fileAccept: null,
 };
 

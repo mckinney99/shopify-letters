@@ -5,7 +5,8 @@ const baseField = {
   id: "f1", label: "Engraving", type: "text", required: true,
   minChars: 0, maxChars: 20, allowedChars: null, disallowedChars: null,
   allowSpaces: true, countSpaces: true, helpText: null, dateFutureOnly: false,
-  fontOptions: null, textColorOptions: null, fontSizeOptions: null, fileAccept: null,
+  fontOptions: null, textColorOptions: null, fontSizeOptions: null,
+  defaultFont: null, defaultTextColor: null, defaultFontSize: null, fileAccept: null,
   previewX: 10, previewY: 20, previewW: 30, previewH: 15, previewRotation: 45,
   options: [] as any[],
 };
@@ -29,6 +30,16 @@ describe("buildStorefrontFields", () => {
     expect(f.mode).toBe("per_char");
     expect(f.amount).toBe(0);
     expect(f.charGroups).toEqual([]);
+  });
+
+  it("carries the merchant-locked default style through untouched", () => {
+    const [f] = buildStorefrontFields(
+      [{ ...baseField, defaultFont: "Dancing Script", defaultTextColor: "#d4af37", defaultFontSize: "18px" }],
+      [],
+    );
+    expect(f.defaultFont).toBe("Dancing Script");
+    expect(f.defaultTextColor).toBe("#d4af37");
+    expect(f.defaultFontSize).toBe("18px");
   });
 });
 

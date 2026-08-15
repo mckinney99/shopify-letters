@@ -156,6 +156,9 @@ type FieldData = {
   fontOptions?: string | null;
   textColorOptions?: string | null;
   fontSizeOptions?: string | null;
+  defaultFont?: string | null;
+  defaultTextColor?: string | null;
+  defaultFontSize?: string | null;
   fileAccept?: string | null;
   previewRotation?: number | null;
 };
@@ -351,6 +354,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const fontOptions = (form.get("fontOptions") as string) || null;
     const textColorOptions = (form.get("textColorOptions") as string) || null;
     const fontSizeOptions = (form.get("fontSizeOptions") as string) || null;
+    const defaultFont = (form.get("defaultFont") as string) || null;
+    const defaultTextColor = (form.get("defaultTextColor") as string) || null;
+    const defaultFontSize = (form.get("defaultFontSize") as string) || null;
     const fileAccept = (form.get("fileAccept") as string) || null;
     const options = isChoiceType(type) ? parseOptions(form.get("options") as string) : [];
 
@@ -380,6 +386,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         fontOptions,
         textColorOptions,
         fontSizeOptions,
+        defaultFont,
+        defaultTextColor,
+        defaultFontSize,
         fileAccept,
         position: count,
         options: {
@@ -406,6 +415,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const fontOptions = (form.get("fontOptions") as string) || null;
     const textColorOptions = (form.get("textColorOptions") as string) || null;
     const fontSizeOptions = (form.get("fontSizeOptions") as string) || null;
+    const defaultFont = (form.get("defaultFont") as string) || null;
+    const defaultTextColor = (form.get("defaultTextColor") as string) || null;
+    const defaultFontSize = (form.get("defaultFontSize") as string) || null;
     const fileAccept = (form.get("fileAccept") as string) || null;
     const options = isChoiceType(type) ? parseOptions(form.get("options") as string) : [];
 
@@ -431,6 +443,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         fontOptions,
         textColorOptions,
         fontSizeOptions,
+        defaultFont,
+        defaultTextColor,
+        defaultFontSize,
         fileAccept,
       },
     });
@@ -631,6 +646,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           allowSpaces: f.allowSpaces, countSpaces: f.countSpaces,
           helpText: f.helpText, dateFutureOnly: f.dateFutureOnly,
           fontOptions: f.fontOptions, textColorOptions: f.textColorOptions, fontSizeOptions: f.fontSizeOptions,
+          defaultFont: f.defaultFont, defaultTextColor: f.defaultTextColor, defaultFontSize: f.defaultFontSize,
           fileAccept: f.fileAccept, position: existingCount + i,
         },
       });
@@ -663,6 +679,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       helpText: f.helpText, dateFutureOnly: f.dateFutureOnly,
       fontOptions: f.fontOptions, textColorOptions: f.textColorOptions,
       fontSizeOptions: f.fontSizeOptions ?? null,
+      defaultFont: f.defaultFont ?? null, defaultTextColor: f.defaultTextColor ?? null,
+      defaultFontSize: f.defaultFontSize ?? null,
       fileAccept: f.fileAccept,
       options: f.options.map((o) => ({
         label: o.label, priceDelta: o.priceDelta,
@@ -891,11 +909,20 @@ function FieldForm({
   const [fontSearch, setFontSearch] = useState("");
   const toggleFont = (f: string) =>
     setSelectedFonts((prev) => prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]);
+  // SL-147: locked default style, used instead of a picker when the merchant
+  // doesn't want to offer shopper choice. Mutually exclusive with the picker
+  // above — only shown/sent when the corresponding enable* is off.
+  const [defaultFont, setDefaultFont] = useState(field?.defaultFont ?? "");
+  const allFontChoices = [...BUILT_IN_FONTS, ...(assets?.fonts.map((f) => f.name) ?? [])].filter(
+    (f, i, arr) => arr.indexOf(f) === i
+  );
   // Text color chooser (SL-82) — stored as JSON array of {label, color}.
   const initialColors: { label: string; color: string }[] =
     field?.textColorOptions ? (JSON.parse(field.textColorOptions) as { label: string; color: string }[]) : [];
   const [enableColors, setEnableColors] = useState(initialColors.length > 0);
   const [textColors, setTextColors] = useState<{ label: string; color: string }[]>(initialColors);
+  const [defaultTextColor, setDefaultTextColor] = useState(field?.defaultTextColor ?? "");
+  const [defaultFontSize, setDefaultFontSize] = useState(field?.defaultFontSize ?? "");
   const addColor = () => setTextColors((prev) => [...prev, { label: "", color: "#000000" }]);
   const removeColor = (i: number) => setTextColors((prev) => prev.filter((_, idx) => idx !== i));
   const updateColor = (i: number, key: "label" | "color", val: string) =>
@@ -965,6 +992,9 @@ function FieldForm({
     fontOptionsValue !== (field?.fontOptions ?? "") ||
     textColorOptionsValue !== (field?.textColorOptions ?? "") ||
     fontSizeOptionsValue !== (field?.fontSizeOptions ?? "") ||
+    defaultFont !== (field?.defaultFont ?? "") ||
+    defaultTextColor !== (field?.defaultTextColor ?? "") ||
+    defaultFontSize !== (field?.defaultFontSize ?? "") ||
     checkboxPrice !== initialCheckboxPrice ||
     JSON.stringify(options) !== JSON.stringify(initialOptions);
   useEffect(() => { onDirtyChangeRef.current?.(dirty); }, [dirty]);
@@ -1007,6 +1037,9 @@ function FieldForm({
         <input type="hidden" name="fontOptions" value={fontOptionsValue} />
         <input type="hidden" name="textColorOptions" value={textColorOptionsValue} />
         <input type="hidden" name="fontSizeOptions" value={fontSizeOptionsValue} />
+        <input type="hidden" name="defaultFont" value={defaultFont} />
+        <input type="hidden" name="defaultTextColor" value={defaultTextColor} />
+        <input type="hidden" name="defaultFontSize" value={defaultFontSize} />
         <input type="hidden" name="options" value={JSON.stringify(optionsPayload)} />
         {fetcher.data?.error && <Banner tone="critical">{fetcher.data.error}</Banner>}
         <FormLayout>
@@ -1255,7 +1288,7 @@ function FieldForm({
                 label="Let shoppers choose a font"
                 helpText="Show a font picker beside this field"
                 checked={enableFonts}
-                onChange={(v) => { setEnableFonts(v); if (!v) setSelectedFonts([]); }}
+                onChange={(v) => { setEnableFonts(v); if (v) setDefaultFont(""); else setSelectedFonts([]); }}
               />
               {enableFonts && (
                 <BlockStack gap="200">
@@ -1273,11 +1306,7 @@ function FieldForm({
                   >
                     {(() => {
                       const q = fontSearch.toLowerCase();
-                      const allFonts = [
-                        ...BUILT_IN_FONTS,
-                        ...(assets?.fonts.map((f) => f.name) ?? []),
-                      ].filter((f, i, arr) => arr.indexOf(f) === i);
-                      const opts = allFonts.filter(
+                      const opts = allFontChoices.filter(
                         (f) => !selectedFonts.includes(f) && (!q || f.toLowerCase().includes(q))
                       );
                       return opts.length > 0 ? (
@@ -1300,12 +1329,20 @@ function FieldForm({
                   )}
                 </BlockStack>
               )}
+              {!enableFonts && (
+                <Select
+                  label={<LabelWithInfo text="Default font (optional)" info="Locks every order to this font — no picker shown to shoppers." />}
+                  options={[{ label: "No default (browser/theme default)", value: "" }, ...allFontChoices.map((f) => ({ label: f, value: f }))]}
+                  value={defaultFont}
+                  onChange={setDefaultFont}
+                />
+              )}
               {/* Text color chooser (SL-82) */}
               <Checkbox
                 label="Let shoppers choose a text color"
                 helpText="Show color swatches beside this field"
                 checked={enableColors}
-                onChange={(v) => { setEnableColors(v); if (!v) setTextColors([]); }}
+                onChange={(v) => { setEnableColors(v); if (v) setDefaultTextColor(""); else setTextColors([]); }}
               />
               {enableColors && (
                 <BlockStack gap="200">
@@ -1345,12 +1382,25 @@ function FieldForm({
                   <div><Button onClick={addColor}>Add color</Button></div>
                 </BlockStack>
               )}
+              {!enableColors && (
+                <InlineStack gap="200" blockAlign="center">
+                  <input
+                    type="color"
+                    value={defaultTextColor || "#000000"}
+                    onChange={(e) => setDefaultTextColor(e.target.value)}
+                    aria-label="Default text color"
+                    style={{ width: "2.25rem", height: "2.25rem", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", flexShrink: 0 }}
+                  />
+                  <LabelWithInfo text="Default text color (optional)" info="Locks every order to this color — no picker shown to shoppers." />
+                  {defaultTextColor && <Button variant="plain" onClick={() => setDefaultTextColor("")}>Clear</Button>}
+                </InlineStack>
+              )}
               {/* Font size picker (SL-97) */}
               <Checkbox
                 label="Let shoppers choose a font size"
                 helpText="Show size pills beside this field"
                 checked={enableSizes}
-                onChange={(v) => setEnableSizes(v)}
+                onChange={(v) => { setEnableSizes(v); if (v) setDefaultFontSize(""); }}
               />
               {enableSizes && (
                 <BlockStack gap="200">
@@ -1365,6 +1415,15 @@ function FieldForm({
                   ))}
                   <div><Button onClick={addSize}>Add size</Button></div>
                 </BlockStack>
+              )}
+              {!enableSizes && (
+                <TextField
+                  label={<LabelWithInfo text="Default font size (optional)" info="Locks every order to this size — no picker shown to shoppers." />}
+                  value={defaultFontSize}
+                  onChange={setDefaultFontSize}
+                  autoComplete="off"
+                  placeholder="e.g. 16px"
+                />
               )}
             </>
           )}
@@ -2011,8 +2070,10 @@ function LivePreviewPanel({
     const fonts = [
       ...new Set(
         fields.flatMap((f) => {
-          try { return f.fontOptions ? (JSON.parse(f.fontOptions) as string[]) : []; }
-          catch { return [] as string[]; }
+          let opts: string[];
+          try { opts = f.fontOptions ? (JSON.parse(f.fontOptions) as string[]) : []; }
+          catch { opts = []; }
+          return f.defaultFont ? [...opts, f.defaultFont] : opts;
         })
       ),
     ].filter(Boolean);
@@ -2061,9 +2122,18 @@ function LivePreviewPanel({
       let font = "";
       let color = "";
       let fontSize = "";
-      try { const fonts: string[] = f.fontOptions ? JSON.parse(f.fontOptions) : []; if (fonts.length) font = fonts[0]; } catch {}
-      try { const colors: { label: string; color: string }[] = f.textColorOptions ? JSON.parse(f.textColorOptions) : []; if (colors.length) color = colors[0].color; } catch {}
-      try { const sizes: string[] = f.fontSizeOptions ? JSON.parse(f.fontSizeOptions) : []; if (sizes.length) fontSize = sizes[0]; } catch {}
+      try {
+        const fonts: string[] = f.fontOptions ? JSON.parse(f.fontOptions) : [];
+        if (fonts.length) font = fonts[0]; else if (f.defaultFont) font = f.defaultFont;
+      } catch {}
+      try {
+        const colors: { label: string; color: string }[] = f.textColorOptions ? JSON.parse(f.textColorOptions) : [];
+        if (colors.length) color = colors[0].color; else if (f.defaultTextColor) color = f.defaultTextColor;
+      } catch {}
+      try {
+        const sizes: string[] = f.fontSizeOptions ? JSON.parse(f.fontSizeOptions) : [];
+        if (sizes.length) fontSize = sizes[0]; else if (f.defaultFontSize) fontSize = f.defaultFontSize;
+      } catch {}
       if (f.type === "swatches") {
         const sel = f.options.find((o) => o.label === (values[f.id] ?? ""));
         if (sel?.swatchColor) color = sel.swatchColor;

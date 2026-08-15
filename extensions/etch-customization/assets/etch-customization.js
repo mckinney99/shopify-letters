@@ -514,34 +514,49 @@
       wrapper.appendChild(hint);
       wrapper.appendChild(fieldError);
 
-      // Font chooser (SL-81)
+      // Font chooser (SL-81), or a merchant-locked default font with no picker (SL-147)
+      var fontPickerShown = false;
       if (field.fontOptions) {
         try {
           var fonts = JSON.parse(field.fontOptions);
           if (Array.isArray(fonts) && fonts.length > 0) {
             renderFontPicker(fonts, input, wrapper);
+            fontPickerShown = true;
           }
         } catch(e) {}
       }
+      if (!fontPickerShown && field.defaultFont) {
+        input.style.fontFamily = field.defaultFont;
+      }
 
-      // Text color chooser (SL-82)
+      // Text color chooser (SL-82), or a merchant-locked default color (SL-147)
+      var colorPickerShown = false;
       if (field.textColorOptions) {
         try {
           var colors = JSON.parse(field.textColorOptions);
           if (Array.isArray(colors) && colors.length > 0) {
             renderColorPicker(colors, input, wrapper);
+            colorPickerShown = true;
           }
         } catch(e) {}
       }
+      if (!colorPickerShown && field.defaultTextColor) {
+        input.style.color = field.defaultTextColor;
+      }
 
-      // Font size picker (SL-97)
+      // Font size picker (SL-97), or a merchant-locked default size (SL-147)
+      var sizePickerShown = false;
       if (field.fontSizeOptions) {
         try {
           var sizes = JSON.parse(field.fontSizeOptions);
           if (Array.isArray(sizes) && sizes.length > 0) {
             renderFontSizePicker(sizes, input, wrapper, formTarget, field);
+            sizePickerShown = true;
           }
         } catch(e) {}
+      }
+      if (!sizePickerShown && field.defaultFontSize) {
+        input.style.fontSize = field.defaultFontSize;
       }
 
       fieldsEl.appendChild(wrapper);
@@ -1459,9 +1474,30 @@
           if (rect.width > 0 && rect.height > 0) visible = el;
         }
       }
-      return active || visible || els[0];
+      if (active || visible) return active || visible || els[0];
     }
-    return null;
+    // None of the known theme selectors matched — fall back to the largest
+    // visible <img> on the page (outside header/footer/nav chrome), on the
+    // assumption the product photo is the dominant image on a PDP. Keeps the
+    // text overlay working on themes we don't have a selector for yet.
+    return findLargestVisibleImage();
+  }
+
+  function findLargestVisibleImage() {
+    var imgs = document.querySelectorAll('img');
+    var best = null;
+    var bestArea = 0;
+    for (var i = 0; i < imgs.length; i++) {
+      var el = imgs[i];
+      if (el.closest('header, footer, nav')) continue;
+      var rect = el.getBoundingClientRect();
+      var area = rect.width * rect.height;
+      if (area > bestArea && rect.width > 0 && rect.height > 0) {
+        bestArea = area;
+        best = el;
+      }
+    }
+    return best;
   }
 
   // Overlays the shopper's typed text on the product image in real time.
@@ -1471,20 +1507,10 @@
     var textFields = fields.filter(function(f) { return TEXT_TYPES.indexOf(f.type) !== -1; });
     if (textFields.length === 0) return;
 
-    // Find the product's featured image; try common selectors across popular themes.
-    var SELECTORS = [
-      '.product__media--featured img',
-      '.product__media img',
-      '.product-single__photo img',
-      '.product-featured-media img',
-      '[data-product-featured-image]',
-      '.product-image img',
-    ];
-    var productImg = null;
-    for (var si = 0; si < SELECTORS.length; si++) {
-      productImg = document.querySelector(SELECTORS[si]);
-      if (productImg) break;
-    }
+    // Find the product's featured image — shares the same lookup (including the
+    // largest-visible-image fallback) as the option-preview-image swap above,
+    // so both features find the image on the same set of themes.
+    var productImg = findEtchProductImage();
     if (!productImg) return;
 
     var imgContainer = productImg.parentElement;
