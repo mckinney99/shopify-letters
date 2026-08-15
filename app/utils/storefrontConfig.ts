@@ -22,6 +22,10 @@ export type StorefrontFieldRow = {
   fontOptions: unknown;
   textColorOptions: unknown;
   fontSizeOptions: unknown;
+  // SL-147: merchant-locked style applied when there's no picker to choose from.
+  defaultFont: string | null;
+  defaultTextColor: string | null;
+  defaultFontSize: string | null;
   fileAccept: string | null;
   previewX: number | null;
   previewY: number | null;
@@ -70,6 +74,9 @@ export function buildStorefrontFields(dbFields: StorefrontFieldRow[], pricingRul
     fontOptions: f.fontOptions,
     textColorOptions: f.textColorOptions,
     fontSizeOptions: f.fontSizeOptions,
+    defaultFont: f.defaultFont,
+    defaultTextColor: f.defaultTextColor,
+    defaultFontSize: f.defaultFontSize,
     fileAccept: f.fileAccept,
     perCharPrice: ruleByFieldId[f.id]?.perCharPrice ?? null,
     mode: ruleByFieldId[f.id]?.mode ?? "per_char",

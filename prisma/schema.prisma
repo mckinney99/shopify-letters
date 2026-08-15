@@ -77,6 +77,11 @@ model CustomizationField {
   textColorOptions String?
   // SL-97: JSON array of size strings e.g. ["12px","16px","24px"]
   fontSizeOptions  String?
+  // SL-146: merchant-locked style when no picker is offered to the shopper
+  // (mutually exclusive with the corresponding *Options picker above).
+  defaultFont      String?
+  defaultTextColor String?
+  defaultFontSize  String?
   // SL-78: MIME filter for upload fields e.g. "image/*" or "*/*"
   fileAccept       String?
   // SL-91: preview text placement as % of image dimensions (null = auto-center)
