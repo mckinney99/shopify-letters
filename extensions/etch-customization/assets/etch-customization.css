@@ -29,8 +29,10 @@
   line-height: 1.5;
   /* Inherit theme font so it blends with Dawn and other themes */
   font-family: inherit;
-  color: inherit;
-  background: transparent;
+  /* Fixed (not inherited) so the field stays readable regardless of the
+     theme's ambient text color — WCAG AA contrast, not a theme accent. */
+  color: #1a1a1a;
+  background: #fff;
 }
 
 .etch-customization__input:focus {
@@ -88,8 +90,8 @@
   border-radius: 4px;
   font-size: 1rem;
   font-family: inherit;
-  color: inherit;
-  background: transparent;
+  color: #1a1a1a;
+  background: #fff;
   cursor: pointer;
 }
 
@@ -227,9 +229,9 @@
   border: 1px solid rgba(0, 0, 0, 0.3);
   border-radius: 999px;
   font-size: 1rem;
-  background: transparent;
+  background: #fff;
   cursor: pointer;
-  color: inherit;
+  color: #1a1a1a;
 }
 
 .etch-customization__font-pill.is-selected {
