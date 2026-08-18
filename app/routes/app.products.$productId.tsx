@@ -25,6 +25,7 @@ import {
   DropZone,
   Tooltip,
   Icon,
+  Collapsible,
 } from "@shopify/polaris";
 import { InfoIcon } from "@shopify/polaris-icons";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -881,6 +882,8 @@ function FieldForm({
   onDirtyChange,
   assets,
   initialType,
+  previewEnabled,
+  onTogglePreview,
 }: {
   field?: FieldData;
   actionType: "create" | "update";
@@ -888,6 +891,8 @@ function FieldForm({
   onDirtyChange?: (dirty: boolean) => void;
   assets?: AssetLibrary;
   initialType?: string;
+  previewEnabled?: boolean;
+  onTogglePreview?: (enabled: boolean) => void;
 }) {
   const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const [label, setLabel] = useState(field?.label ?? "");
@@ -923,6 +928,9 @@ function FieldForm({
   const [textColors, setTextColors] = useState<{ label: string; color: string }[]>(initialColors);
   const [defaultTextColor, setDefaultTextColor] = useState(field?.defaultTextColor ?? "");
   const [defaultFontSize, setDefaultFontSize] = useState(field?.defaultFontSize ?? "");
+  const [showDefaults, setShowDefaults] = useState(
+    Boolean(field?.defaultFont || field?.defaultTextColor || field?.defaultFontSize)
+  );
   const addColor = () => setTextColors((prev) => [...prev, { label: "", color: "#000000" }]);
   const removeColor = (i: number) => setTextColors((prev) => prev.filter((_, idx) => idx !== i));
   const updateColor = (i: number, key: "label" | "color", val: string) =>
@@ -1329,14 +1337,6 @@ function FieldForm({
                   )}
                 </BlockStack>
               )}
-              {!enableFonts && (
-                <Select
-                  label={<LabelWithInfo text="Default font (optional)" info="Locks every order to this font — no picker shown to shoppers." />}
-                  options={[{ label: "No default (browser/theme default)", value: "" }, ...allFontChoices.map((f) => ({ label: f, value: f }))]}
-                  value={defaultFont}
-                  onChange={setDefaultFont}
-                />
-              )}
               {/* Text color chooser (SL-82) */}
               <Checkbox
                 label="Let shoppers choose a text color"
@@ -1382,19 +1382,6 @@ function FieldForm({
                   <div><Button onClick={addColor}>Add color</Button></div>
                 </BlockStack>
               )}
-              {!enableColors && (
-                <InlineStack gap="200" blockAlign="center">
-                  <input
-                    type="color"
-                    value={defaultTextColor || "#000000"}
-                    onChange={(e) => setDefaultTextColor(e.target.value)}
-                    aria-label="Default text color"
-                    style={{ width: "2.25rem", height: "2.25rem", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", flexShrink: 0 }}
-                  />
-                  <LabelWithInfo text="Default text color (optional)" info="Locks every order to this color — no picker shown to shoppers." />
-                  {defaultTextColor && <Button variant="plain" onClick={() => setDefaultTextColor("")}>Clear</Button>}
-                </InlineStack>
-              )}
               {/* Font size picker (SL-97) */}
               <Checkbox
                 label="Let shoppers choose a font size"
@@ -1416,14 +1403,72 @@ function FieldForm({
                   <div><Button onClick={addSize}>Add size</Button></div>
                 </BlockStack>
               )}
-              {!enableSizes && (
-                <TextField
-                  label={<LabelWithInfo text="Default font size (optional)" info="Locks every order to this size — no picker shown to shoppers." />}
-                  value={defaultFontSize}
-                  onChange={setDefaultFontSize}
-                  autoComplete="off"
-                  placeholder="e.g. 16px"
-                />
+
+              {/* SL-138/SL-148: the overlay toggle applies to the whole product (there's
+                  only ever one live overlay), but lives here in the field editor —
+                  next to the picker/default controls it actually affects — rather than
+                  in the Live Preview panel, which only shows what shoppers see. */}
+              {onTogglePreview && (
+                <div style={{ borderTop: "1px solid #f1f2f4", paddingTop: "12px" }}>
+                  <Checkbox
+                    label="Show text overlay on storefront"
+                    helpText="Customers see the overlay live as they type. Applies to the whole product."
+                    checked={previewEnabled ?? false}
+                    onChange={onTogglePreview}
+                  />
+                </div>
+              )}
+
+              {/* SL-148: the three merchant-locked defaults, decluttered into their
+                  own disclosure — only relevant once a picker above is left off. */}
+              {(!enableFonts || !enableColors || !enableSizes) && (
+                <div style={{ borderTop: "1px solid #f1f2f4", paddingTop: "12px" }}>
+                  <Button
+                    variant="tertiary"
+                    disclosure={showDefaults ? "up" : "down"}
+                    onClick={() => setShowDefaults((v) => !v)}
+                  >
+                    Set a default
+                  </Button>
+                  <Collapsible open={showDefaults} id="etch-field-defaults">
+                    <Box paddingBlockStart="300">
+                      <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                        <BlockStack gap="300">
+                          {!enableFonts && (
+                            <Select
+                              label={<LabelWithInfo text="Default font (optional)" info="Locks every order to this font — no picker shown to shoppers." />}
+                              options={[{ label: "No default (browser/theme default)", value: "" }, ...allFontChoices.map((f) => ({ label: f, value: f }))]}
+                              value={defaultFont}
+                              onChange={setDefaultFont}
+                            />
+                          )}
+                          {!enableColors && (
+                            <InlineStack gap="200" blockAlign="center">
+                              <input
+                                type="color"
+                                value={defaultTextColor || "#000000"}
+                                onChange={(e) => setDefaultTextColor(e.target.value)}
+                                aria-label="Default text color"
+                                style={{ width: "2.25rem", height: "2.25rem", padding: "2px", border: "1px solid #ccc", borderRadius: "4px", cursor: "pointer", flexShrink: 0 }}
+                              />
+                              <LabelWithInfo text="Default text color (optional)" info="Locks every order to this color — no picker shown to shoppers." />
+                              {defaultTextColor && <Button variant="plain" onClick={() => setDefaultTextColor("")}>Clear</Button>}
+                            </InlineStack>
+                          )}
+                          {!enableSizes && (
+                            <TextField
+                              label={<LabelWithInfo text="Default font size (optional)" info="Locks every order to this size — no picker shown to shoppers." />}
+                              value={defaultFontSize}
+                              onChange={setDefaultFontSize}
+                              autoComplete="off"
+                              placeholder="e.g. 16px"
+                            />
+                          )}
+                        </BlockStack>
+                      </Box>
+                    </Box>
+                  </Collapsible>
+                </div>
               )}
             </>
           )}
@@ -2044,8 +2089,6 @@ function LivePreviewPanel({
   variantPrices,
   productImageUrl,
   productTitle,
-  previewEnabled,
-  onTogglePreview,
   conditions,
   onCollapse,
 }: {
@@ -2054,8 +2097,6 @@ function LivePreviewPanel({
   variantPrices: number[];
   productImageUrl: string | null;
   productTitle: string;
-  previewEnabled: boolean;
-  onTogglePreview: (enabled: boolean) => void;
   conditions: FieldConditionData[];
   onCollapse?: () => void;
 }) {
@@ -2213,17 +2254,6 @@ function LivePreviewPanel({
         <div style={{ background: "#303030", color: "white", textAlign: "center", padding: "10px 16px", borderRadius: "6px", fontSize: "13px", fontWeight: 600, userSelect: "none", marginBottom: "12px" }}>
           Add to cart (preview only)
         </div>
-
-        {textFields.length > 0 && (
-          <div style={{ borderTop: "1px solid #f1f2f4", paddingTop: "10px" }}>
-            <Checkbox
-              label="Show text overlay on storefront"
-              helpText="Customers see the overlay live as they type"
-              checked={previewEnabled}
-              onChange={onTogglePreview}
-            />
-          </div>
-        )}
       </div>
     </div>
   );
@@ -2759,6 +2789,11 @@ export default function ProductDetailPage() {
     previewFetcher.state !== "idle"
       ? previewFetcher.formData?.get("previewEnabled") === "true"
       : previewEnabled;
+  const handleTogglePreview = (checked: boolean) =>
+    previewFetcher.submit(
+      { _action: "toggle_preview", previewEnabled: String(checked) },
+      { method: "post" }
+    );
 
   const tokenFetcher = useFetcher<{ token?: string; error?: string }>();
   useEffect(() => {
@@ -2964,7 +2999,7 @@ export default function ProductDetailPage() {
                 <Text as="span" variant="bodySm" tone="subdued">Editing: <b>{editingField.label}</b></Text>
               </InlineStack>
               <Card>
-                <FieldForm field={editingField} actionType="update" onClose={handleEditClose} assets={assets} onDirtyChange={setFieldEditorDirty} />
+                <FieldForm field={editingField} actionType="update" onClose={handleEditClose} assets={assets} onDirtyChange={setFieldEditorDirty} previewEnabled={optimisticPreview} onTogglePreview={handleTogglePreview} />
               </Card>
               <FieldConditionEditor field={editingField} allFields={fields} conditions={conditions} />
               {(editingField.type === "text" || editingField.type === "textarea") && (
@@ -3005,7 +3040,7 @@ export default function ProductDetailPage() {
                       <Box padding="400">
                         <BlockStack gap="300">
                           <Text as="h3" variant="headingSm">New field</Text>
-                          <FieldForm actionType="create" onClose={handleAddClose} assets={assets} initialType={pickedType ?? undefined} onDirtyChange={setFieldEditorDirty} />
+                          <FieldForm actionType="create" onClose={handleAddClose} assets={assets} initialType={pickedType ?? undefined} onDirtyChange={setFieldEditorDirty} previewEnabled={optimisticPreview} onTogglePreview={handleTogglePreview} />
                         </BlockStack>
                       </Box>
                     )}
@@ -3103,15 +3138,8 @@ export default function ProductDetailPage() {
               variantPrices={variantPrices}
               productImageUrl={productImageUrl}
               productTitle={product.title}
-              previewEnabled={optimisticPreview}
               conditions={conditions}
               onCollapse={isNarrow ? undefined : togglePreviewCollapsed}
-              onTogglePreview={(checked) =>
-                previewFetcher.submit(
-                  { _action: "toggle_preview", previewEnabled: String(checked) },
-                  { method: "post" }
-                )
-              }
             />
           </div>
         )}
