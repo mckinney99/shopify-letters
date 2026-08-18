@@ -541,7 +541,9 @@
         } catch(e) {}
       }
       if (!colorPickerShown && field.defaultTextColor) {
-        input.style.color = field.defaultTextColor;
+        // Tracked separately from the input's own (always-readable) text color —
+        // this is the color applied to the product/overlay, not the field itself.
+        input.dataset.etchColor = field.defaultTextColor;
       }
 
       // Font size picker (SL-97), or a merchant-locked default size (SL-147)
@@ -1224,7 +1226,9 @@
       btn.addEventListener('click', function () {
         Array.prototype.forEach.call(row.children, function(b) { b.classList.remove('is-selected'); });
         btn.classList.add('is-selected');
-        textInput.style.color = c.color;
+        // Tracked separately from the input's own (always-readable) text color —
+        // this is the color applied to the product/overlay, not the field itself.
+        textInput.dataset.etchColor = c.color;
       });
       row.appendChild(btn);
     });
@@ -1568,11 +1572,12 @@
         var text = el ? el.value.trim() : '';
         var span = getOrCreateSpan(field);
         span.textContent = text;
-        // Mirror the shopper's chosen font and color — set by font/color pickers
-        // directly on the input element's inline style.
+        // Mirror the shopper's chosen font and color onto the overlay. Color is
+        // tracked in a data attribute (not the input's own style.color) so the
+        // field itself always stays readable, even when white/light is chosen.
         if (el) {
           span.style.fontFamily = el.style.fontFamily || 'inherit';
-          var chosenColor = el.style.color;
+          var chosenColor = el.dataset.etchColor || '';
           span.style.color = chosenColor || '#fff';
           if (el.style.fontSize) span.style.fontSize = el.style.fontSize;
           // Reduce shadow contrast when the color is light (non-default)
